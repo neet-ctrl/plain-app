@@ -198,16 +198,20 @@ val androidWebOut = file("src/main/resources/web")
 val buildWebPanel = tasks.register("buildWebPanel") {
     group = "build"
     description = "Run yarn build inside plain-web so the panel bundle is up to date."
+    // Capture script-level vals into task-local vals so Gradle's configuration cache
+    // does not need to serialize the surrounding Script object reference.
+    val localWebPanelDir = webPanelDir
+    val localWebPanelDist = webPanelDist
     inputs.files(
-        fileTree(webPanelDir) {
+        fileTree(localWebPanelDir) {
             include("src/**", "public/**", "package.json", "yarn.lock", "vite.config.ts", "tsconfig.json", "index.html")
             exclude("node_modules/**", "dist/**", ".yarn/**", ".vite/**")
         }
     )
-    outputs.dir(webPanelDist)
+    outputs.dir(localWebPanelDist)
     doLast {
-        if (!webPanelDir.exists()) {
-            println("[buildWebPanel] plain-web not found at ${webPanelDir.absolutePath} — skipping.")
+        if (!localWebPanelDir.exists()) {
+            println("[buildWebPanel] plain-web not found at ${localWebPanelDir.absolutePath} — skipping.")
             return@doLast
         }
         val isWindows = System.getProperty("os.name").lowercase().contains("win")
@@ -219,7 +223,7 @@ val buildWebPanel = tasks.register("buildWebPanel") {
         candidates.forEach { cmd ->
             println("[buildWebPanel] running: ${cmd.joinToString(" ")}")
             val proc = ProcessBuilder(cmd)
-                .directory(webPanelDir)
+                .directory(localWebPanelDir)
                 .redirectErrorStream(true)
                 .start()
             proc.inputStream.bufferedReader().forEachLine { println("  $it") }
@@ -243,24 +247,25 @@ val syncWebPanel = tasks.register<Sync>("syncWebPanel") {
 androidComponents {
     onVariants { variant ->
         // Ensure cloudflared is downloaded before native libs are merged.
-        afterEvaluate {
-            tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }
-                .configureEach { dependsOn(downloadCloudflared) }
-            tasks.matching { it.name.startsWith("merge") && it.name.endsWith("NativeLibs") }
-                .configureEach { dependsOn(downloadCloudflared) }
+        // Use string task names instead of TaskProvider references so the
+        // configuration cache can serialize this lambda without capturing the
+        // surrounding Script object (which is a disallowed type).
+        tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }
+            .configureEach { dependsOn("downloadCloudflared") }
+        tasks.matching { it.name.startsWith("merge") && it.name.endsWith("NativeLibs") }
+            .configureEach { dependsOn("downloadCloudflared") }
 
-            // Wire the web build/sync into Android's resource pipeline so every APK
-            // assembly automatically rebuilds the web panel and ships the fresh bundle.
-            // Allow opting out with -PskipWebBuild=true (e.g. for fast iteration when
-            // only Kotlin changed and the dist is already current).
-            val skipWeb = (project.findProperty("skipWebBuild") as String?)?.toBoolean() == true
-            if (!skipWeb) {
-                tasks.matching {
-                    val n = it.name
-                    n.startsWith("merge") && (n.endsWith("Resources") || n.endsWith("Assets") || n.endsWith("JavaResource"))
-                }.configureEach { dependsOn(syncWebPanel) }
-                tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(syncWebPanel) }
-            }
+        // Wire the web build/sync into Android's resource pipeline so every APK
+        // assembly automatically rebuilds the web panel and ships the fresh bundle.
+        // Allow opting out with -PskipWebBuild=true (e.g. for fast iteration when
+        // only Kotlin changed and the dist is already current).
+        val skipWeb = (project.findProperty("skipWebBuild") as String?)?.toBoolean() == true
+        if (!skipWeb) {
+            tasks.matching {
+                val n = it.name
+                n.startsWith("merge") && (n.endsWith("Resources") || n.endsWith("Assets") || n.endsWith("JavaResource"))
+            }.configureEach { dependsOn("syncWebPanel") }
+            tasks.matching { it.name == "preBuild" }.configureEach { dependsOn("syncWebPanel") }
         }
     }
 }
