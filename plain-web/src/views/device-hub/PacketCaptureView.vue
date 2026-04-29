@@ -59,6 +59,7 @@
           <strong class="host">{{ e.host }}<span class="port" v-if="e.port">:{{ e.port }}</span></strong>
           <div class="meta">
             <span class="ts">{{ formatTime(e.ts) }}</span>
+            <span v-if="e.resolvedIp" class="ip"><i-lucide:globe /> {{ e.resolvedIp }}</span>
             <span v-if="e.appLabel" class="app"><i-lucide:box /> {{ e.appLabel }}</span>
             <span v-if="e.sizeBytes > 0" class="size">{{ e.sizeBytes }} B</span>
           </div>
@@ -87,7 +88,7 @@ import { setPacketCaptureEnabledGQL, clearPacketEntriesGQL } from '@/lib/api/mut
 
 const { t } = useI18n()
 interface IState { supported: boolean; enabled: boolean; running: boolean; totalEntries: number; needsConsent: boolean }
-interface IEntry { id: string; ts: number; host: string; port: number; protocol: string; appPackage: string; appLabel: string; sizeBytes: number }
+interface IEntry { id: string; ts: number; host: string; port: number; protocol: string; appPackage: string; appLabel: string; sizeBytes: number; resolvedIp: string }
 
 const state = ref<IState | null>(null)
 const entries = ref<IEntry[]>([])

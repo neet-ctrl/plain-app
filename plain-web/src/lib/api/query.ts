@@ -1015,7 +1015,7 @@ export const packetCaptureStateGQL = `
 export const packetEntriesGQL = `
   query packetEntries($offset: Int!, $limit: Int!, $host: String!) {
     packetEntries(offset: $offset, limit: $limit, host: $host) {
-      id ts host port protocol appPackage appLabel sizeBytes
+      id ts host port protocol appPackage appLabel sizeBytes resolvedIp
     }
   }
 `

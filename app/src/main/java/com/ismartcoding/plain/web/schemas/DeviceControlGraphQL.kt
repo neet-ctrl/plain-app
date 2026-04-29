@@ -136,6 +136,7 @@ data class PacketEntryModel(
     val appPackage: String,
     val appLabel: String,
     val sizeBytes: Int,
+    val resolvedIp: String,
 )
 
 @Serializable
@@ -320,6 +321,7 @@ fun SchemaBuilder.addDeviceControlSchema() {
                     id = it.id, ts = it.ts, host = it.host, port = it.port,
                     protocol = it.protocol, appPackage = it.appPackage,
                     appLabel = it.appLabel, sizeBytes = it.sizeBytes,
+                    resolvedIp = it.resolvedIp,
                 )
             }
         }

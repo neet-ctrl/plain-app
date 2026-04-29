@@ -154,21 +154,12 @@ class PacketCaptureVpnService : VpnService() {
 
         // Parse the question section (we only need the first QNAME).
         val qname = parseDnsQname(buf, payloadStart) ?: return
-        if (qname.isNotBlank()) {
-            try {
-                PacketCaptureHelper.append(
-                    host = qname,
-                    port = 0,
-                    protocol = "dns",
-                    appPackage = "",
-                    appLabel = "",
-                    sizeBytes = payloadLen,
-                )
-            } catch (_: Throwable) {}
-        }
 
         // Forward to a real upstream and write the response back into the TUN.
+        // We log the entry only after we have the resolved IP so the UI can
+        // show "host -> ip".
         scope.launch {
+            var resolvedIp = ""
             try {
                 val payload = buf.copyOfRange(payloadStart, payloadStart + payloadLen)
                 val sock = DatagramSocket()
@@ -181,6 +172,7 @@ class PacketCaptureVpnService : VpnService() {
                     val rp = DatagramPacket(resp, resp.size)
                     sock.receive(rp)
                     val respLen = rp.length
+                    resolvedIp = parseFirstAnswerIp(resp, respLen)
                     val outPkt = buildResponseIpUdp(buf, ihl, srcPort, dstPort, dstIp, resp, respLen)
                     if (outPkt != null) {
                         try { output.write(outPkt) } catch (_: Throwable) {}
@@ -191,7 +183,79 @@ class PacketCaptureVpnService : VpnService() {
             } catch (_: Throwable) {
                 // Network down / upstream timeout — silently drop.
             }
+            if (qname.isNotBlank()) {
+                try {
+                    PacketCaptureHelper.append(
+                        host = qname,
+                        port = 0,
+                        protocol = "dns",
+                        appPackage = "",
+                        appLabel = "",
+                        sizeBytes = payloadLen,
+                        resolvedIp = resolvedIp,
+                    )
+                } catch (_: Throwable) {}
+            }
         }
+    }
+
+    /**
+     * Parse a DNS response and return the first A (IPv4) or AAAA (IPv6) record's
+     * address as a printable string. Returns "" if none found.
+     */
+    private fun parseFirstAnswerIp(buf: ByteArray, len: Int): String {
+        if (len < 12) return ""
+        try {
+            val ancount = ((buf[6].toInt() and 0xff) shl 8) or (buf[7].toInt() and 0xff)
+            if (ancount <= 0) return ""
+            // Skip header
+            var i = 12
+            // Skip questions: QNAME + QTYPE(2) + QCLASS(2)
+            val qdcount = ((buf[4].toInt() and 0xff) shl 8) or (buf[5].toInt() and 0xff)
+            repeat(qdcount) {
+                i = skipName(buf, i)
+                i += 4
+                if (i > len) return ""
+            }
+            // Walk answers
+            repeat(ancount) {
+                if (i >= len) return ""
+                i = skipName(buf, i)
+                if (i + 10 > len) return ""
+                val type = ((buf[i].toInt() and 0xff) shl 8) or (buf[i + 1].toInt() and 0xff)
+                // class(2) + ttl(4) skipped
+                val rdlen = ((buf[i + 8].toInt() and 0xff) shl 8) or (buf[i + 9].toInt() and 0xff)
+                val rdStart = i + 10
+                if (rdStart + rdlen > len) return ""
+                if (type == 1 && rdlen == 4) {
+                    return "${buf[rdStart].toInt() and 0xff}.${buf[rdStart + 1].toInt() and 0xff}." +
+                        "${buf[rdStart + 2].toInt() and 0xff}.${buf[rdStart + 3].toInt() and 0xff}"
+                }
+                if (type == 28 && rdlen == 16) {
+                    val sb = StringBuilder()
+                    for (k in 0 until 8) {
+                        if (k > 0) sb.append(":")
+                        val hi = buf[rdStart + k * 2].toInt() and 0xff
+                        val lo = buf[rdStart + k * 2 + 1].toInt() and 0xff
+                        sb.append(((hi shl 8) or lo).toString(16))
+                    }
+                    return sb.toString()
+                }
+                i = rdStart + rdlen
+            }
+        } catch (_: Throwable) {}
+        return ""
+    }
+
+    private fun skipName(buf: ByteArray, start: Int): Int {
+        var i = start
+        while (i < buf.size) {
+            val len = buf[i].toInt() and 0xff
+            if (len == 0) return i + 1
+            if (len and 0xc0 == 0xc0) return i + 2 // pointer
+            i += 1 + len
+        }
+        return i
     }
 
     private fun parseDnsQname(buf: ByteArray, payloadStart: Int): String? {

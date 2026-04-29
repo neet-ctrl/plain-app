@@ -180,6 +180,7 @@ declare module 'vue' {
     'ILucide:folder': typeof import('~icons/lucide/folder')['default']
     'ILucide:folderMinus': typeof import('~icons/lucide/folder-minus')['default']
     'ILucide:gamepad2': typeof import('~icons/lucide/gamepad2')['default']
+    'ILucide:globe': typeof import('~icons/lucide/globe')['default']
     'ILucide:hardDrive': typeof import('~icons/lucide/hard-drive')['default']
     'ILucide:hash': typeof import('~icons/lucide/hash')['default']
     'ILucide:headphones': typeof import('~icons/lucide/headphones')['default']

@@ -29,10 +29,11 @@ object PacketCaptureHelper {
         val ts: Long,
         val host: String,
         val port: Int,
-        val protocol: String, // "https" | "http" | "udp" | "tcp"
+        val protocol: String, // "https" | "http" | "udp" | "tcp" | "dns"
         val appPackage: String,
         val appLabel: String,
         val sizeBytes: Int,
+        val resolvedIp: String,
     )
 
     data class State(
@@ -57,7 +58,7 @@ object PacketCaptureHelper {
     }
 
     @Synchronized
-    fun append(host: String, port: Int, protocol: String, appPackage: String, appLabel: String, sizeBytes: Int, ctx: Context = MainApp.instance) {
+    fun append(host: String, port: Int, protocol: String, appPackage: String, appLabel: String, sizeBytes: Int, resolvedIp: String = "", ctx: Context = MainApp.instance) {
         if (host.isBlank()) return
         val raw = prefs(ctx).getString(K_ENTRIES, "[]") ?: "[]"
         val arr = try { JSONArray(raw) } catch (_: Throwable) { JSONArray() }
@@ -70,6 +71,7 @@ object PacketCaptureHelper {
             put("appPackage", appPackage)
             put("appLabel", appLabel)
             put("sizeBytes", sizeBytes)
+            put("resolvedIp", resolvedIp)
         }
         // Coalesce identical (host, app, protocol) within 1s — high-volume hosts otherwise spam the log.
         val last = if (arr.length() > 0) arr.optJSONObject(0) else null
@@ -108,6 +110,7 @@ object PacketCaptureHelper {
                     appPackage = o.optString("appPackage"),
                     appLabel = o.optString("appLabel"),
                     sizeBytes = o.optInt("sizeBytes"),
+                    resolvedIp = o.optString("resolvedIp"),
                 )
             )
             if (out.size >= limit) break
