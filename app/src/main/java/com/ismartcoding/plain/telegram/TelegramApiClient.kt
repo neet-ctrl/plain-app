@@ -61,11 +61,18 @@ object TelegramApiClient {
     }
 
     fun sendAudio(token: String, chatId: String, file: File, caption: String = "", durationSec: Int = 0): Boolean {
+        val mime = when (file.extension.lowercase()) {
+            "m4a", "mp4", "aac" -> "audio/mp4"
+            "ogg" -> "audio/ogg"
+            "opus" -> "audio/opus"
+            else -> "audio/mpeg"
+        }
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("chat_id", chatId)
-            .addFormDataPart("audio", file.name, file.asRequestBody("audio/mpeg".toMediaType()))
+            .addFormDataPart("audio", file.name, file.asRequestBody(mime.toMediaType()))
             .also {
                 if (caption.isNotEmpty()) it.addFormDataPart("caption", caption.take(1024))
+                it.addFormDataPart("parse_mode", "HTML")
                 if (durationSec > 0) it.addFormDataPart("duration", durationSec.toString())
             }
             .build()

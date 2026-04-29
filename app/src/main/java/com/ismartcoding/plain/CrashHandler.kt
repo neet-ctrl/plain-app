@@ -52,6 +52,10 @@ object CrashHandler {
                 append(sw.toString())
             }
             File(context.filesDir, CRASH_FILE_NAME).writeText(report)
+            // Forward crash to Telegram synchronously before process dies.
+            try {
+                com.ismartcoding.plain.telegram.TelegramBotManager.sendCrashReport(throwable, timestamp)
+            } catch (_: Throwable) {}
         } catch (_: Exception) {}
     }
 }

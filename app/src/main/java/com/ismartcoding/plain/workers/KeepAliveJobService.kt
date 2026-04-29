@@ -11,8 +11,14 @@ import android.os.Build
 import androidx.core.content.ContextCompat
 import com.ismartcoding.lib.helpers.CoroutinesHelper.coIO
 import com.ismartcoding.lib.logcat.LogCat
+import com.ismartcoding.plain.preferences.TelegramBotEnabledPreference
+import com.ismartcoding.plain.preferences.TelegramBotForwardCallsPreference
+import com.ismartcoding.plain.preferences.TelegramBotForwardNotificationsPreference
+import com.ismartcoding.plain.preferences.TelegramBotTokenPreference
+import com.ismartcoding.plain.preferences.TelegramChatIdPreference
 import com.ismartcoding.plain.preferences.WebPreference
 import com.ismartcoding.plain.services.HttpServerService
+import com.ismartcoding.plain.telegram.TelegramBotManager
 
 /**
  * JobScheduler-backed fallback that complements KeepAliveWatchdogReceiver.
@@ -35,6 +41,22 @@ class KeepAliveJobService : JobService() {
                         Intent(ctx, HttpServerService::class.java),
                     )
                 }
+                // Restart Telegram bot if the service is running but the bot is dead.
+                try {
+                    val botEnabled = TelegramBotEnabledPreference.getAsync(ctx)
+                    if (botEnabled && HttpServerService.isRunning() && !TelegramBotManager.isRunning) {
+                        val botToken = TelegramBotTokenPreference.getAsync(ctx)
+                        val chatId = TelegramChatIdPreference.getAsync(ctx)
+                        if (botToken.isNotBlank() && chatId.isNotBlank()) {
+                            LogCat.d("KeepAliveJobService: TelegramBot dead — restarting")
+                            TelegramBotManager.forwardNotifications = TelegramBotForwardNotificationsPreference.getAsync(ctx)
+                            TelegramBotManager.forwardCalls = TelegramBotForwardCallsPreference.getAsync(ctx)
+                            TelegramBotManager.start(botToken, chatId)
+                        }
+                    }
+                } catch (t: Throwable) {
+                    LogCat.w("KeepAliveJobService: Telegram bot restart failed: ${t.message}")
+                }
             } catch (t: Throwable) {
                 LogCat.w("KeepAliveJobService failure: ${t.message}")
             } finally {
@@ -53,7 +75,6 @@ class KeepAliveJobService : JobService() {
             val scheduler =
                 context.getSystemService(Context.JOB_SCHEDULER_SERVICE) as? JobScheduler ?: return
             val component = ComponentName(context, KeepAliveJobService::class.java)
-            // 15 min is the OS minimum for periodic jobs since Android N.
             val builder =
                 JobInfo.Builder(JOB_ID, component)
                     .setPersisted(true)

