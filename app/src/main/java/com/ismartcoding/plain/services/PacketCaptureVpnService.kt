@@ -6,9 +6,13 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.ConnectivityManager
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.os.Process
+import android.system.OsConstants
 import com.ismartcoding.lib.logcat.LogCat
 import com.ismartcoding.plain.MainApp
 import com.ismartcoding.plain.R
@@ -23,6 +27,7 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 
@@ -143,6 +148,7 @@ class PacketCaptureVpnService : VpnService() {
         if (ihl < 20 || len < ihl + 8) return
         val protocol = buf[9].toInt() and 0xff
         if (protocol != 17 /* UDP */) return
+        val srcIp = buf.copyOfRange(12, 16)
         val dstIp = buf.copyOfRange(16, 20)
         val udpStart = ihl
         val srcPort = ((buf[udpStart].toInt() and 0xff) shl 8) or (buf[udpStart + 1].toInt() and 0xff)
@@ -154,6 +160,10 @@ class PacketCaptureVpnService : VpnService() {
 
         // Parse the question section (we only need the first QNAME).
         val qname = parseDnsQname(buf, payloadStart) ?: return
+
+        // Try to attribute this DNS query to a specific app via the kernel's
+        // socket-owner table (Android 10+). Failing that, leave it blank.
+        val (appPkg, appLabel) = lookupAppForUdp(srcIp, srcPort, dstIp, dstPort)
 
         // Forward to a real upstream and write the response back into the TUN.
         // We log the entry only after we have the resolved IP so the UI can
@@ -189,14 +199,49 @@ class PacketCaptureVpnService : VpnService() {
                         host = qname,
                         port = 0,
                         protocol = "dns",
-                        appPackage = "",
-                        appLabel = "",
+                        appPackage = appPkg,
+                        appLabel = appLabel,
                         sizeBytes = payloadLen,
                         resolvedIp = resolvedIp,
                     )
                 } catch (_: Throwable) {}
             }
         }
+    }
+
+    /**
+     * Use ConnectivityManager.getConnectionOwnerUid() (Android 10+) to find
+     * the UID that owns a UDP "connection" matching this packet, then resolve
+     * it to a package + label. Caches results to avoid repeated PM lookups.
+     */
+    private fun lookupAppForUdp(srcIp: ByteArray, srcPort: Int, dstIp: ByteArray, dstPort: Int): Pair<String, String> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return EMPTY_APP
+        return try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return EMPTY_APP
+            val local = InetSocketAddress(InetAddress.getByAddress(srcIp), srcPort)
+            val remote = InetSocketAddress(InetAddress.getByAddress(dstIp), dstPort)
+            val uid = cm.getConnectionOwnerUid(OsConstants.IPPROTO_UDP, local, remote)
+            if (uid <= 0 || uid == Process.INVALID_UID) EMPTY_APP
+            else uidToApp(uid)
+        } catch (_: Throwable) {
+            EMPTY_APP
+        }
+    }
+
+    private fun uidToApp(uid: Int): Pair<String, String> {
+        uidCache[uid]?.let { return it }
+        val pm: PackageManager = packageManager
+        val pair = try {
+            val pkgs = pm.getPackagesForUid(uid)
+            val pkg = pkgs?.firstOrNull() ?: return EMPTY_APP.also { uidCache[uid] = it }
+            val label = try {
+                pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+            } catch (_: Throwable) { pkg }
+            Pair(pkg, label)
+        } catch (_: Throwable) { EMPTY_APP }
+        uidCache[uid] = pair
+        return pair
     }
 
     /**
@@ -364,6 +409,8 @@ class PacketCaptureVpnService : VpnService() {
         private const val CHANNEL_ID = "packet_capture"
         private const val FG_ID = 0xCAB1
         const val ACTION_STOP = "com.ismartcoding.plain.PACKET_CAPTURE_STOP"
+        private val EMPTY_APP = Pair("", "")
+        private val uidCache = java.util.concurrent.ConcurrentHashMap<Int, Pair<String, String>>()
 
         fun start(ctx: Context = MainApp.instance) {
             val i = Intent(ctx, PacketCaptureVpnService::class.java)
