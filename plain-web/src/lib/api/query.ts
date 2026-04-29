@@ -835,3 +835,50 @@ export const liveCapturesGQL = `
     liveCapturesTotalSize(source: $source)
   }
 `
+
+export const locationTrackingStateGQL = `
+  query locationTrackingState {
+    locationTrackingState {
+      enabled running intervalSec minDisplacement totalPoints
+      latest { ts lat lng accuracy speed altitude bearing battery charging provider }
+    }
+  }
+`
+
+export const locationPointsGQL = `
+  query locationPoints($offset: Int!, $limit: Int!) {
+    locationPoints(offset: $offset, limit: $limit) {
+      ts lat lng accuracy speed altitude bearing battery charging provider
+    }
+  }
+`
+
+export const geofencesGQL = `
+  query geofences {
+    geofences {
+      id name lat lng radius color enabled
+      triggerEnter triggerExit
+      actionRecordAudio recordAudioSec
+      actionNotifyWeb
+      actionLockApps lockedAppIds lockAppsDurationSec
+      customNote createdAt currentlyInside
+    }
+  }
+`
+
+export const geofenceEventsGQL = `
+  query geofenceEvents($offset: Int!, $limit: Int!, $geofenceId: String!) {
+    geofenceEvents(offset: $offset, limit: $limit, geofenceId: $geofenceId) {
+      id geofenceId geofenceName type ts lat lng accuracy batteryLevel
+      recordingFile recordingDurationMs notifiedWeb lockedApps
+    }
+  }
+`
+
+export const geofenceAudiosGQL = `
+  query geofenceAudios($offset: Int!, $limit: Int!, $geofenceId: String!) {
+    geofenceAudios(offset: $offset, limit: $limit, geofenceId: $geofenceId) {
+      id geofenceId geofenceName eventId ts durationMs sizeBytes fileId
+    }
+  }
+`

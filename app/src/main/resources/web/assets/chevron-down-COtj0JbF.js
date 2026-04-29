@@ -1,1 +1,0 @@
-import{m as o,c as n,o as t,a as r}from"./index-CBeLeay-.js";const s={viewBox:"0 0 24 24",width:"1.2em",height:"1.2em"};function l(a,e){return t(),n("svg",s,e[0]||(e[0]=[r("path",{fill:"none",stroke:"currentColor","stroke-linecap":"round","stroke-linejoin":"round","stroke-width":"2",d:"m6 9l6 6l6-6"},null,-1)]))}const c=o({name:"lucide-chevron-down",render:l});export{c as _};

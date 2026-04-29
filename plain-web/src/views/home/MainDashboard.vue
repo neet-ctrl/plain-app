@@ -79,6 +79,10 @@
       <template #icon><i-lucide:headphones /></template>
     </FeatureCard>
 
+    <FeatureCard to="/tracking-hub" :title="$t('page_title.tracking_hub')">
+      <template #icon><i-lucide:radar /></template>
+    </FeatureCard>
+
     <FeatureCard to="/call-recordings" :title="$t('call_recordings')">
       <template #icon><i-lucide:phone-call /></template>
     </FeatureCard>

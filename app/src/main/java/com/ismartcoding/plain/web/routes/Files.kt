@@ -81,6 +81,24 @@ fun Route.addFiles() {
                 } else {
                     call.respond(HttpStatusCode.NotFound)
                 }
+            } else if (path.startsWith("geofence_audio://")) {
+                val audioId = path.substring(17)
+                val a = com.ismartcoding.plain.helpers.GeofencingHelper.getAudio(audioId)
+                if (a == null) {
+                    call.respond(HttpStatusCode.NotFound)
+                    return@get
+                }
+                val f = File(a.absPath)
+                if (!f.exists()) {
+                    call.respond(HttpStatusCode.NotFound)
+                    return@get
+                }
+                call.response.header("Access-Control-Expose-Headers", "Content-Disposition")
+                call.response.header(
+                    "Content-Disposition",
+                    "inline; filename=\"${f.name}\""
+                )
+                call.respond(LocalFileContent(f, ContentType.parse("audio/mp4")))
             } else if (path.startsWith("pkgicon://")) {
                 val packageName = path.substring(10)
                 val bitmap = PackageHelper.getIcon(packageName)

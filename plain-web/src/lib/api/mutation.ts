@@ -941,3 +941,41 @@ export const deleteAllLiveCapturesGQL = `
     deleteAllLiveCaptures(source: $source)
   }
 `
+
+export const setLocationTrackingEnabledGQL = `
+  mutation setLocationTrackingEnabled($enabled: Boolean!) {
+    setLocationTrackingEnabled(enabled: $enabled)
+  }
+`
+export const setLocationTrackingIntervalGQL = `
+  mutation setLocationTrackingInterval($seconds: Int!, $minDisplacement: Int!) {
+    setLocationTrackingInterval(seconds: $seconds, minDisplacement: $minDisplacement)
+  }
+`
+export const clearLocationHistoryGQL = `
+  mutation clearLocationHistory {
+    clearLocationHistory
+  }
+`
+export const saveGeofenceGQL = `
+  mutation saveGeofence($input: TrackingFenceInput!) {
+    saveGeofence(input: $input) {
+      id name lat lng radius color enabled
+      triggerEnter triggerExit
+      actionRecordAudio recordAudioSec
+      actionNotifyWeb
+      actionLockApps lockedAppIds lockAppsDurationSec
+      customNote createdAt currentlyInside
+    }
+  }
+`
+export const deleteGeofenceGQL = `
+  mutation deleteGeofence($id: String!) {
+    deleteGeofence(id: $id)
+  }
+`
+export const deleteGeofenceAudioGQL = `
+  mutation deleteGeofenceAudio($id: String!) {
+    deleteGeofenceAudio(id: $id)
+  }
+`

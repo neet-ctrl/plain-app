@@ -15,6 +15,8 @@ import com.ismartcoding.plain.preferences.WebPreference
 import com.ismartcoding.plain.services.CloudflareTunnelManager
 import com.ismartcoding.plain.services.HttpServerService
 import com.ismartcoding.plain.services.KeepAliveVpnService
+import com.ismartcoding.plain.services.LocationTrackingService
+import com.ismartcoding.plain.helpers.LocationTrackingHelper
 
 /**
  * Re-arm everything after device reboot.
@@ -54,6 +56,9 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 }
                 if (KeepAliveWatchdogEnabledPreference.getAsync(app)) {
                     KeepAliveWatchdogReceiver.schedule(app)
+                }
+                if (LocationTrackingHelper.isEnabled(app)) {
+                    try { LocationTrackingService.start(app) } catch (_: Throwable) {}
                 }
             } finally {
                 pending.finish()

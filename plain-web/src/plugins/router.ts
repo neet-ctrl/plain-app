@@ -207,6 +207,21 @@ const router = createRouter({
           meta: { group: 'talk_mode' },
         },
         {
+          path: 'tracking-hub',
+          component: () => import('@/views/tracking-hub/TrackingHubView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
+          path: 'tracking-hub/live-location',
+          component: () => import('@/views/tracking-hub/LiveLocationView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
+          path: 'tracking-hub/geofencing',
+          component: () => import('@/views/tracking-hub/GeofencingView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
           path: 'app-settings',
           component: () => import('@/views/app-settings/AppSettingsView.vue'),
           meta: { group: 'app_settings' },

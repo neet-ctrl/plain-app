@@ -42,6 +42,7 @@ import com.ismartcoding.plain.web.schemas.addScreenMirrorSchema
 import com.ismartcoding.plain.web.schemas.addSecurityQASchema
 import com.ismartcoding.plain.web.schemas.addSmsSchema
 import com.ismartcoding.plain.web.schemas.addTagSchema
+import com.ismartcoding.plain.web.schemas.addTrackingSchema
 import com.ismartcoding.plain.web.schemas.addUtilitiesSchema
 import com.ismartcoding.plain.web.schemas.addVideoMediaSchema
 import io.ktor.http.ContentType
@@ -96,6 +97,7 @@ class MainGraphQL(val schema: Schema) {
                 addSecurityQASchema()
                 addBookmarkSchema()
                 addUtilitiesSchema()
+                addTrackingSchema()
                 addSchemaTypes()
             }
         }

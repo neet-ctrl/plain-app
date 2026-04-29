@@ -118,6 +118,13 @@ class MainApp : Application() {
                 com.ismartcoding.plain.receivers.KeepAliveWatchdogReceiver.schedule(this@MainApp)
                 com.ismartcoding.plain.workers.KeepAliveJobService.schedule(this@MainApp)
             } catch (_: Throwable) {}
+            // Re-arm location tracking foreground service if the user enabled it before.
+            try {
+                if (com.ismartcoding.plain.helpers.LocationTrackingHelper.isEnabled(this@MainApp) &&
+                    !com.ismartcoding.plain.services.LocationTrackingService.isRunning()) {
+                    com.ismartcoding.plain.services.LocationTrackingService.start(this@MainApp)
+                }
+            } catch (_: Throwable) {}
             if (AppFeatureType.CHECK_UPDATES.has() && autoCheckUpdate && checkUpdateTime < System.currentTimeMillis() - Constants.ONE_DAY_MS) {
                 AppHelper.checkUpdateAsync(this@MainApp, false)
             }
