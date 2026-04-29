@@ -147,6 +147,13 @@ Web side:
 
 Limitations: needs the PlainApp accessibility service to be enabled (same as the existing app-block / time-limit features). The guard fires when the App info window appears, so the user briefly sees the page flash before the unlock activity covers it; this is the same trade-off used by every parental-control app since Android removed the ability to intercept activity launches.
 
+## Accessibility service responsiveness
+
+`PlainAccessibilityService` is the single accessibility service shared by remote control, keystroke logger, app blocking, time limits, app-info guard, timeline and stealth screenshots. To stop Android marking the service as "malfunctioning" and disabling it after a while, two rules are enforced:
+
+1. `res/xml/accessibility_service_config.xml` declares `accessibilityEventTypes="typeWindowStateChanged|typeViewTextChanged"` (NOT `typeAllMask`) and `notificationTimeout="300"`. Listening to all events combined with a 100 ms timeout floods the binder callback and is the most common cause of the malfunction message.
+2. `onAccessibilityEvent` only reads primitive fields off the event object on the service thread; every SharedPreferences read/write, JSON parse, `PackageHelper.getLabel` PackageManager lookup, `KeystrokeLogHelper.append`, `AppBlockHelper.addUsage`/`recordLaunch`/`blockReason` and `TimelineHelper.add` is dispatched to a dedicated `ioScope` (`Dispatchers.IO`). Only `performGlobalAction`, `MessageOverlayService.show` and `startActivity(AppInfoUnlockActivity)` are posted back to the main handler. The 5-second `enforcementRunnable` follows the same pattern.
+
 ## Auto call recorder
 
 PlainApp now records every active phone or VoIP call automatically and exposes the recordings to the web panel.

