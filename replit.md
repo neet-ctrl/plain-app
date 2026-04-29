@@ -72,6 +72,14 @@ cd plain-web && corepack enable && corepack yarn install && corepack yarn build
 rm -rf ../app/src/main/resources/web/* && cp -r dist/* ../app/src/main/resources/web/
 ```
 
+> The previous automatic Gradle task (`buildWebPanel` / `syncWebPanel`) that rebuilt
+> the web panel during every APK build has been **removed** because it kept failing
+> on CI (yarn `--immutable` lockfile errors and configuration-cache script-reference
+> issues) and blocked APK builds. The web bundle is now built **manually** with the
+> commands above and the resulting `app/src/main/resources/web/` is committed to git
+> and shipped as-is by the APK. The two GitHub Actions workflows
+> (`debugapk.yml`, `releaseapk.yml`) no longer install Node.js / Corepack / Yarn.
+
 ## Hide launcher icon — full disappearance + ghost-icon refresh
 
 Hiding the launcher icon is done by disabling the `LauncherAlias` activity-alias declared in `AndroidManifest.xml`. The actual `MainActivity` only carries `MAIN` (no `LAUNCHER`) and a separate `LEANBACK_LAUNCHER` filter for Android TV, so disabling the alias is enough to take PlainApp out of phone launchers.

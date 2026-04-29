@@ -187,62 +187,12 @@ val downloadCloudflared = tasks.register("downloadCloudflared") {
     }
 }
 
-// Build the Vue/Vite web panel (plain-web) and copy the bundle into
-// app/src/main/resources/web/ so the in-APK HTTP server can serve it.
-// This means an APK build is always shipping the latest web UI without anyone
-// having to remember `yarn build && cp -r dist/* ../app/src/main/resources/web`.
-val webPanelDir = rootProject.file("plain-web")
-val webPanelDist = File(webPanelDir, "dist")
-val androidWebOut = file("src/main/resources/web")
-
-val buildWebPanel = tasks.register("buildWebPanel") {
-    group = "build"
-    description = "Run yarn build inside plain-web so the panel bundle is up to date."
-    // Capture script-level vals into task-local vals so Gradle's configuration cache
-    // does not need to serialize the surrounding Script object reference.
-    val localWebPanelDir = webPanelDir
-    val localWebPanelDist = webPanelDist
-    inputs.files(
-        fileTree(localWebPanelDir) {
-            include("src/**", "public/**", "package.json", "yarn.lock", "vite.config.ts", "tsconfig.json", "index.html")
-            exclude("node_modules/**", "dist/**", ".yarn/**", ".vite/**")
-        }
-    )
-    outputs.dir(localWebPanelDist)
-    doLast {
-        if (!localWebPanelDir.exists()) {
-            println("[buildWebPanel] plain-web not found at ${localWebPanelDir.absolutePath} — skipping.")
-            return@doLast
-        }
-        val isWindows = System.getProperty("os.name").lowercase().contains("win")
-        // Prefer corepack/yarn 4 (matches packageManager field). Fallback to npx yarn.
-        val candidates = listOf(
-            listOf(if (isWindows) "yarn.cmd" else "yarn", "install", "--immutable"),
-            listOf(if (isWindows) "yarn.cmd" else "yarn", "build"),
-        )
-        candidates.forEach { cmd ->
-            println("[buildWebPanel] running: ${cmd.joinToString(" ")}")
-            val proc = ProcessBuilder(cmd)
-                .directory(localWebPanelDir)
-                .redirectErrorStream(true)
-                .start()
-            proc.inputStream.bufferedReader().forEachLine { println("  $it") }
-            val code = proc.waitFor()
-            if (code != 0) {
-                throw GradleException("[buildWebPanel] '${cmd.joinToString(" ")}' exited with $code")
-            }
-        }
-    }
-}
-
-val syncWebPanel = tasks.register<Sync>("syncWebPanel") {
-    group = "build"
-    description = "Copy plain-web/dist into app/src/main/resources/web so the APK ships it."
-    dependsOn(buildWebPanel)
-    from(webPanelDist)
-    into(androidWebOut)
-    // Sync removes stale files automatically.
-}
+// Web panel (plain-web) is built manually:
+//   cd plain-web && corepack enable && corepack yarn install && corepack yarn build
+//   rm -rf ../app/src/main/resources/web/* && cp -r dist/* ../app/src/main/resources/web/
+// The pre-built bundle is committed into app/src/main/resources/web/ and shipped
+// as-is by the APK. The previous automatic Gradle task was removed because it
+// kept failing on CI (immutable-lockfile / yarn issues) and blocked APK builds.
 
 androidComponents {
     onVariants { variant ->
@@ -254,19 +204,6 @@ androidComponents {
             .configureEach { dependsOn("downloadCloudflared") }
         tasks.matching { it.name.startsWith("merge") && it.name.endsWith("NativeLibs") }
             .configureEach { dependsOn("downloadCloudflared") }
-
-        // Wire the web build/sync into Android's resource pipeline so every APK
-        // assembly automatically rebuilds the web panel and ships the fresh bundle.
-        // Allow opting out with -PskipWebBuild=true (e.g. for fast iteration when
-        // only Kotlin changed and the dist is already current).
-        val skipWeb = (project.findProperty("skipWebBuild") as String?)?.toBoolean() == true
-        if (!skipWeb) {
-            tasks.matching {
-                val n = it.name
-                n.startsWith("merge") && (n.endsWith("Resources") || n.endsWith("Assets") || n.endsWith("JavaResource"))
-            }.configureEach { dependsOn("syncWebPanel") }
-            tasks.matching { it.name == "preBuild" }.configureEach { dependsOn("syncWebPanel") }
-        }
     }
 }
 
