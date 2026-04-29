@@ -327,7 +327,13 @@ class LocationTrackingService : Service(), LocationListener {
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .build()
         try {
-            val type = if (Build.VERSION.SDK_INT >= 30) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
+            val type = when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                Build.VERSION.SDK_INT >= 30 ->
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                else -> 0
+            }
             ServiceCompat.startForeground(this, NOTIF_ID, notif, type)
         } catch (e: Throwable) {
             LogCat.e("LocationTrackingService startForeground failed: ${e.message}", e)

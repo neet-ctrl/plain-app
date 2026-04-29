@@ -366,7 +366,7 @@ async function saveFence() {
   if (!editingDraft.name.trim()) return
   try {
     const input = {
-      id: editingDraft.id || null,
+      id: editingDraft.id || '',
       name: editingDraft.name.trim(),
       lat: editingDraft.lat,
       lng: editingDraft.lng,

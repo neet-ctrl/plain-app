@@ -1,9 +1,12 @@
 package com.ismartcoding.plain.features
 
+import android.app.AppOpsManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Process
 import android.provider.Settings
 import android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM
 import androidx.activity.result.ActivityResultLauncher
@@ -58,6 +61,10 @@ enum class Permission {
     VIBRATE,
     WRITE_SETTINGS,
     ACCESS_FINE_LOCATION,
+    ACCESS_BACKGROUND_LOCATION,
+    BLUETOOTH_CONNECT,
+    BLUETOOTH_SCAN,
+    PACKAGE_USAGE_STATS,
     ACCESSIBILITY_SERVICE,
     NONE
     ;
@@ -122,6 +129,35 @@ enum class Permission {
                 val enabledListeners =
                     Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
                 return enabledListeners?.contains(componentName.flattenToString()) == true
+            }
+
+            this == PACKAGE_USAGE_STATS -> {
+                val ops = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+                val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
+                } else {
+                    @Suppress("DEPRECATION")
+                    ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
+                }
+                return mode == AppOpsManager.MODE_ALLOWED
+            }
+
+            this == BLUETOOTH_CONNECT -> {
+                return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    context.hasPermission("android.permission.BLUETOOTH_CONNECT")
+                } else true
+            }
+
+            this == BLUETOOTH_SCAN -> {
+                return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    context.hasPermission("android.permission.BLUETOOTH_SCAN")
+                } else true
+            }
+
+            this == ACCESS_BACKGROUND_LOCATION -> {
+                return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    context.hasPermission("android.permission.ACCESS_BACKGROUND_LOCATION")
+                } else true
             }
 
             else -> context.hasPermission(this.toSysPermission())
@@ -260,6 +296,26 @@ enum class Permission {
                     )
                 }
             }
+        } else if (this == PACKAGE_USAGE_STATS) {
+            val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                intentLauncher?.launch(intent)
+            } catch (e: Exception) {
+                DialogHelper.showMessage("Cannot open Usage Access settings.")
+            }
+        } else if (this == ACCESS_BACKGROUND_LOCATION) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                launcher?.launch("android.permission.ACCESS_BACKGROUND_LOCATION")
+            }
+        } else if (this == BLUETOOTH_CONNECT) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                launcher?.launch("android.permission.BLUETOOTH_CONNECT")
+            }
+        } else if (this == BLUETOOTH_SCAN) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                launcher?.launch("android.permission.BLUETOOTH_SCAN")
+            }
         } else {
             launcher?.launch(this.toSysPermission())
         }
@@ -358,10 +414,32 @@ object Permissions {
             PermissionItem.create(context, R.drawable.gauge, Permission.WRITE_SETTINGS)
         )
         list.add(
+            PermissionItem.create(context, R.drawable.smartphone, Permission.POST_NOTIFICATIONS)
+        )
+        list.add(
             PermissionItem.create(context, R.drawable.smartphone, Permission.ACCESS_FINE_LOCATION)
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            list.add(
+                PermissionItem.create(context, R.drawable.smartphone, Permission.ACCESS_BACKGROUND_LOCATION)
+            )
+        }
+        list.add(
+            PermissionItem.create(context, R.drawable.lock, Permission.NOTIFICATION_LISTENER)
         )
         list.add(
             PermissionItem.create(context, R.drawable.lock, Permission.ACCESSIBILITY_SERVICE)
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            list.add(
+                PermissionItem.create(
+                    context, R.drawable.smartphone, Permission.BLUETOOTH_CONNECT,
+                    setOf(Permission.BLUETOOTH_CONNECT, Permission.BLUETOOTH_SCAN),
+                )
+            )
+        }
+        list.add(
+            PermissionItem.create(context, R.drawable.gauge, Permission.PACKAGE_USAGE_STATS)
         )
         return list
     }
@@ -386,6 +464,9 @@ object Permissions {
             Permission.READ_PHONE_NUMBERS,
             Permission.SCHEDULE_EXACT_ALARM,
             Permission.ACCESS_FINE_LOCATION,
+            Permission.ACCESS_BACKGROUND_LOCATION,
+            Permission.BLUETOOTH_CONNECT,
+            Permission.BLUETOOTH_SCAN,
         ).forEach { permission ->
             launcherMap[permission] =
                 activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -403,6 +484,7 @@ object Permissions {
             Permission.SCHEDULE_EXACT_ALARM,
             Permission.WRITE_SETTINGS,
             Permission.ACCESSIBILITY_SERVICE,
+            Permission.PACKAGE_USAGE_STATS,
         ).forEach { permission ->
             intentLauncherMap[permission] =
                 activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {

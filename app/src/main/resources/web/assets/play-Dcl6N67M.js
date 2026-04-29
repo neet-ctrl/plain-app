@@ -1,1 +1,0 @@
-import{m as o,c as n,o as t,a as r}from"./index-C4H4bIur.js";const l={viewBox:"0 0 24 24",width:"1.2em",height:"1.2em"};function s(a,e){return t(),n("svg",l,e[0]||(e[0]=[r("path",{fill:"none",stroke:"currentColor","stroke-linecap":"round","stroke-linejoin":"round","stroke-width":"2",d:"m6 3l14 9l-14 9z"},null,-1)]))}const c=o({name:"lucide-play",render:s});export{c as _};

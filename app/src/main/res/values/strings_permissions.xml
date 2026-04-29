@@ -5,6 +5,17 @@
     <string name="permissions">Permissions</string>
     <string name="show_notification">Show notification</string>
     <string name="feature_WRITE_EXTERNAL_STORAGE">Manage files</string>
+    <string name="feature_CAMERA">Camera</string>
+    <string name="feature_RECORD_AUDIO">Microphone / record audio</string>
+    <string name="feature_SYSTEM_ALERT_WINDOW">Display over other apps</string>
+    <string name="feature_WRITE_SETTINGS">Modify system settings</string>
+    <string name="feature_ACCESS_FINE_LOCATION">Precise location</string>
+    <string name="feature_ACCESS_BACKGROUND_LOCATION">Background location (for geofencing)</string>
+    <string name="feature_ACCESSIBILITY_SERVICE">Accessibility service</string>
+    <string name="feature_POST_NOTIFICATIONS">Post notifications</string>
+    <string name="feature_BLUETOOTH_CONNECT">Bluetooth (scan &amp; connect)</string>
+    <string name="feature_BLUETOOTH_SCAN">Bluetooth scan</string>
+    <string name="feature_PACKAGE_USAGE_STATS">App usage access (network stats)</string>
     <string name="feature_READ_SMS">Read messages</string>
     <string name="feature_SEND_SMS">Send messages</string>
     <string name="feature_WRITE_CALL_LOG">Manage call log</string>

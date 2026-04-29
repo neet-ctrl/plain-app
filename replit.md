@@ -229,3 +229,28 @@ A full Telegram Bot runs alongside the web server using long-polling (OkHttp), p
 - **Bot internal heartbeat**: `TelegramBotManager.start()` launches a `heartbeatJob` coroutine that checks every 30 seconds if `pollJob?.isActive != true` and silently restarts the poll loop if it died.
 - **Watchdog bot health check**: `KeepAliveWatchdogReceiver` (every ~60s) and `KeepAliveJobService` (every ~15min) both check if the Telegram bot is dead while the HTTP service is running — if so they restart the bot immediately using credentials from DataStore.
 - **Always-on guarantee**: Boot → `BootCompletedReceiver` starts `HttpServerService` → bot starts. If killed: AlarmManager watchdog restarts within 60s. If in deep Doze: JobScheduler fallback restarts within 15min. Bot poll job dying is self-healed within 30s by heartbeat.
+
+## Bug Fixes & Permission Updates (April 2026)
+
+### Geofencing not saving — root cause fixed
+- **File**: `plain-web/src/views/tracking-hub/GeofencingView.vue` line 372
+- **Cause**: `id: editingDraft.id || null` — JavaScript sent `null` for new fences, kGraphQL rejected a null value for the non-nullable `String id` field in `TrackingFenceInput`, mutation silently failed.
+- **Fix**: Changed to `id: editingDraft.id || ''` — sends empty string so the backend correctly creates a new fence with a generated UUID.
+
+### Geofence audio stays in Tracking Hub
+- Audio recordings triggered by geofences are stored in `filesDir/.PlainPrivate/GeofenceAudio` and served via the `geofence_audio://` URL scheme in `Files.kt`.
+- The Tracking Hub's Geofencing view shows events and audio in its own side panel tabs — they never appear in other media sections. ✅
+
+### New permissions added to web settings page
+- **`POST_NOTIFICATIONS`** — needed for local notifications/alerts
+- **`ACCESS_BACKGROUND_LOCATION`** (Android 10+) — required for geofencing to work when app is in background; must be requested separately after `ACCESS_FINE_LOCATION`
+- **`NOTIFICATION_LISTENER`** — needed for the Telegram notification forwarding feature
+- **`BLUETOOTH_CONNECT` + `BLUETOOTH_SCAN`** (Android 12+) — needed for Device Control Hub Bluetooth scanning
+- **`PACKAGE_USAGE_STATS`** — special permission (via Settings > Apps > Special Access > Usage Access) required for per-app network usage stats in Device Control Hub
+- All new permissions added to: enum, `can()`, `request()`, `getWebList()`, `init()` launchers
+- 12 new string resources added to `strings_permissions.xml`
+
+### Geofence audio on Android 14 (API 34) fixed
+- **Manifest**: `LocationTrackingService` foreground service type updated to `location|microphone`
+- **Service**: `startForeground()` now uses combined `FOREGROUND_SERVICE_TYPE_LOCATION | FOREGROUND_SERVICE_TYPE_MICROPHONE` on Android 14+ (`UPSIDE_DOWN_CAKE`) so `MediaRecorder` can access the mic from within the tracking service
+- **Web panel rebuilt**: Vue source changes compiled and deployed to `app/src/main/resources/web/`
