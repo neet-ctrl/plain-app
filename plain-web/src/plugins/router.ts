@@ -267,6 +267,11 @@ const router = createRouter({
           meta: { group: 'device_hub' },
         },
         {
+          path: 'device-hub/automation',
+          component: () => import('@/views/device-hub/AutomationView.vue'),
+          meta: { group: 'device_hub' },
+        },
+        {
           path: 'app-settings',
           component: () => import('@/views/app-settings/AppSettingsView.vue'),
           meta: { group: 'app_settings' },

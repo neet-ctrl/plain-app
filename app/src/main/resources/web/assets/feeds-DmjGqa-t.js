@@ -1,0 +1,1 @@
+import{ai as d,aF as s,aj as o}from"./index-C4H4bIur.js";const i=e=>({viewAll:()=>{s(e,"/feeds")},viewFeed:a=>{const u=d([{name:"feed_id",op:"",value:a.id}]);s(e,`/feeds?q=${o(u)}`)},viewToday:()=>{const a=d([{name:"today",op:"",value:"true"}]);s(e,`/feeds?q=${o(a)}`)}});export{i as u};

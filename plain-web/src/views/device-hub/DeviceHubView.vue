@@ -127,6 +127,28 @@
         </div>
         <i-lucide:arrow-right class="card-chev" />
       </router-link>
+
+      <router-link to="/device-hub/automation" class="hub-card auto-card">
+        <div class="card-icon-wrap">
+          <i-lucide:zap class="card-icon" />
+          <span v-if="autoState?.enabled && autoState?.activeCount > 0" class="status-dot live" />
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">{{ $t('hub_automation_title') }}</h3>
+          <p class="card-desc">{{ $t('hub_automation_desc') }}</p>
+          <div class="card-meta">
+            <span class="chip" :class="{ on: autoState?.enabled }">
+              <i-lucide:circle-dot v-if="autoState?.enabled" />
+              <i-lucide:circle v-else />
+              {{ autoState?.enabled ? $t('on') : $t('off') }}
+            </span>
+            <span v-if="autoState" class="chip neutral">
+              <i-lucide:list-checks /> {{ autoState.activeCount }} / {{ autoState.ruleCount }} {{ $t('automation_active') }}
+            </span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
     </div>
   </div>
 </template>
@@ -136,6 +158,7 @@ import { ref, onMounted } from 'vue'
 import { gqlFetch } from '@/lib/api/gql-client'
 import {
   networkUsageGQL, wifiStateGQL, bluetoothStateGQL, batteryHistoryGQL, packetCaptureStateGQL,
+  automationStateGQL,
 } from '@/lib/api/query'
 
 const netState = ref<any>(null)
@@ -143,6 +166,7 @@ const wifiState = ref<any>(null)
 const btState = ref<any>(null)
 const batState = ref<any>(null)
 const pktState = ref<any>(null)
+const autoState = ref<any>(null)
 
 function formatBytes(n: number): string {
   if (n < 1024) return n + ' B'
@@ -152,18 +176,20 @@ function formatBytes(n: number): string {
 }
 
 async function loadAll() {
-  const [n, w, b, bat, p] = await Promise.allSettled([
+  const [n, w, b, bat, p, a] = await Promise.allSettled([
     gqlFetch(networkUsageGQL, { windowDays: 7 }),
     gqlFetch(wifiStateGQL, {}),
     gqlFetch(bluetoothStateGQL, {}),
     gqlFetch(batteryHistoryGQL, { days: 1 }),
     gqlFetch(packetCaptureStateGQL, {}),
+    gqlFetch(automationStateGQL, {}),
   ])
   if (n.status === 'fulfilled' && !n.value.errors) netState.value = (n.value as any).data.networkUsage
   if (w.status === 'fulfilled' && !w.value.errors) wifiState.value = (w.value as any).data.wifiState
   if (b.status === 'fulfilled' && !b.value.errors) btState.value = (b.value as any).data.bluetoothState
   if (bat.status === 'fulfilled' && !bat.value.errors) batState.value = (bat.value as any).data.batteryHistory
   if (p.status === 'fulfilled' && !p.value.errors) pktState.value = (p.value as any).data.packetCaptureState
+  if (a.status === 'fulfilled' && !a.value.errors) autoState.value = (a.value as any).data.automationState
 }
 
 onMounted(() => { loadAll() })
@@ -205,6 +231,7 @@ onMounted(() => { loadAll() })
 .bt-card     { --accent: #6366f1; }
 .bat-card    { --accent: #f97316; }
 .pkt-card    { --accent: #ec4899; }
+.auto-card   { --accent: #f59e0b; }
 
 .card-icon-wrap {
   position: relative; flex-shrink: 0;

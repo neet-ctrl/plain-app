@@ -60,6 +60,20 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 if (LocationTrackingHelper.isEnabled(app)) {
                     try { LocationTrackingService.start(app) } catch (_: Throwable) {}
                 }
+                // Re-arm scheduled automation rules (time-of-day, scheduled_once).
+                try {
+                    com.ismartcoding.plain.helpers.AutomationScheduler.scheduleAll(app)
+                } catch (_: Throwable) {}
+                // Fire any "boot_completed" automation rules.
+                try {
+                    com.ismartcoding.plain.helpers.AutomationHelper.list(app)
+                        .filter { it.enabled && it.trigger.type == "boot_completed" }
+                        .forEach {
+                            com.ismartcoding.plain.helpers.AutomationActionRunner.trigger(
+                                ruleId = it.id, source = "boot", ctx = app,
+                            )
+                        }
+                } catch (_: Throwable) {}
             } finally {
                 pending.finish()
             }

@@ -1019,3 +1019,55 @@ export const packetEntriesGQL = `
     }
   }
 `
+
+// Automation
+export const automationStateGQL = `
+  query automationState {
+    automationState { enabled ruleCount activeCount nextScheduledMs }
+  }
+`
+
+const ruleFields = `
+  id name enabled kind cooldownMs lastRunMs createdMs updatedMs
+  trigger { type params { key value } }
+  conditions { type params { key value } }
+  actions { type params { key value } }
+`
+
+export const automationRulesGQL = `
+  query automationRules { automationRules { ${ruleFields} } }
+`
+
+export const automationRunsGQL = `
+  query automationRuns($limit: Int!) {
+    automationRuns(limit: $limit) { id ruleId ruleName ts ok source log }
+  }
+`
+
+export const upsertAutomationRuleGQL = `
+  mutation upsertAutomationRule($input: AutomationRuleInput!) {
+    upsertAutomationRule(input: $input) { ${ruleFields} }
+  }
+`
+
+export const setAutomationRuleEnabledGQL = `
+  mutation setAutomationRuleEnabled($id: String!, $enabled: Boolean!) {
+    setAutomationRuleEnabled(id: $id, enabled: $enabled)
+  }
+`
+
+export const deleteAutomationRuleGQL = `
+  mutation deleteAutomationRule($id: String!) { deleteAutomationRule(id: $id) }
+`
+
+export const runAutomationRuleGQL = `
+  mutation runAutomationRule($id: String!) { runAutomationRule(id: $id) }
+`
+
+export const setAutomationEnabledGQL = `
+  mutation setAutomationEnabled($enabled: Boolean!) { setAutomationEnabled(enabled: $enabled) }
+`
+
+export const clearAutomationRunsGQL = `
+  mutation clearAutomationRuns { clearAutomationRuns }
+`

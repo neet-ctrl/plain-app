@@ -426,6 +426,10 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".receivers.AutomationAlarmReceiver"
+            android:exported="false" />
+
         <service
             android:name=".services.QSTileService"
             android:exported="true"

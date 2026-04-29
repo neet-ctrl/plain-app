@@ -3,6 +3,9 @@ package com.ismartcoding.plain.web.schemas
 import com.ismartcoding.lib.kgraphql.schema.dsl.SchemaBuilder
 import com.ismartcoding.plain.MainApp
 import com.ismartcoding.plain.helpers.AppLauncherHelper
+import com.ismartcoding.plain.helpers.AutomationActionRunner
+import com.ismartcoding.plain.helpers.AutomationHelper
+import com.ismartcoding.plain.helpers.AutomationScheduler
 import com.ismartcoding.plain.helpers.BatteryHistoryHelper
 import com.ismartcoding.plain.helpers.BluetoothControlHelper
 import com.ismartcoding.plain.helpers.NetworkUsageHelper
@@ -146,6 +149,78 @@ data class PacketStateModel(
     val running: Boolean,
     val totalEntries: Int,
     val needsConsent: Boolean,
+)
+
+// ---------- Automation ----------
+
+@Serializable
+data class KvModel(val key: String, val value: String)
+
+@Serializable
+data class TriggerModel(val type: String, val params: List<KvModel>)
+
+@Serializable
+data class ConditionModel(val type: String, val params: List<KvModel>)
+
+@Serializable
+data class ActionModel(val type: String, val params: List<KvModel>)
+
+@Serializable
+data class AutomationRuleModel(
+    val id: String,
+    val name: String,
+    val enabled: Boolean,
+    val kind: String,
+    val trigger: TriggerModel,
+    val conditions: List<ConditionModel>,
+    val actions: List<ActionModel>,
+    val cooldownMs: Long,
+    val lastRunMs: Long,
+    val createdMs: Long,
+    val updatedMs: Long,
+)
+
+@Serializable
+data class AutomationRunModel(
+    val id: String,
+    val ruleId: String,
+    val ruleName: String,
+    val ts: Long,
+    val ok: Boolean,
+    val source: String,
+    val log: List<String>,
+)
+
+@Serializable
+data class AutomationStateModel(
+    val enabled: Boolean,
+    val ruleCount: Int,
+    val activeCount: Int,
+    val nextScheduledMs: Long,
+)
+
+@Serializable
+data class KvIn(val key: String = "", val value: String = "")
+
+@Serializable
+data class TriggerIn(val type: String = "manual", val params: List<KvIn> = emptyList())
+
+@Serializable
+data class ConditionIn(val type: String = "", val params: List<KvIn> = emptyList())
+
+@Serializable
+data class ActionIn(val type: String = "", val params: List<KvIn> = emptyList())
+
+@Serializable
+data class AutomationRuleInput(
+    val id: String = "",
+    val name: String = "Untitled",
+    val enabled: Boolean = true,
+    val kind: String = "rule",
+    val trigger: TriggerIn = TriggerIn(),
+    val conditions: List<ConditionIn> = emptyList(),
+    val actions: List<ActionIn> = emptyList(),
+    val cooldownMs: Long = 0L,
 )
 
 // ---------- Schema registration ----------
@@ -346,7 +421,125 @@ fun SchemaBuilder.addDeviceControlSchema() {
             true
         }
     }
+
+    // ---- Automation ----
+    query("automationState") {
+        resolver { ->
+            val rules = AutomationHelper.list(MainApp.instance)
+            val now = System.currentTimeMillis()
+            val nextScheduled = rules
+                .filter { it.enabled && (it.trigger.type == "time" || it.trigger.type == "scheduled_once") }
+                .mapNotNull {
+                    when (it.trigger.type) {
+                        "scheduled_once" -> it.trigger.params["atMs"]?.toLongOrNull()?.takeIf { ms -> ms > now }
+                        "time" -> nextDailyMs(it.trigger.params["hour"]?.toIntOrNull() ?: -1,
+                            it.trigger.params["minute"]?.toIntOrNull() ?: 0)
+                        else -> null
+                    }
+                }.minOrNull() ?: 0L
+            AutomationStateModel(
+                enabled = AutomationHelper.isEnabled(MainApp.instance),
+                ruleCount = rules.size,
+                activeCount = rules.count { it.enabled },
+                nextScheduledMs = nextScheduled,
+            )
+        }
+    }
+    query("automationRules") {
+        resolver { ->
+            AutomationHelper.list(MainApp.instance).map { it.toModel() }
+        }
+    }
+    query("automationRuns") {
+        resolver { limit: Int ->
+            AutomationHelper.runs(limit.coerceIn(1, 200), MainApp.instance).map {
+                AutomationRunModel(
+                    id = it.id, ruleId = it.ruleId, ruleName = it.ruleName,
+                    ts = it.ts, ok = it.ok, source = it.source, log = it.log,
+                )
+            }
+        }
+    }
+    mutation("setAutomationEnabled") {
+        resolver { enabled: Boolean ->
+            AutomationHelper.setEnabled(enabled, MainApp.instance)
+            if (enabled) AutomationScheduler.scheduleAll(MainApp.instance)
+            true
+        }
+    }
+    mutation("upsertAutomationRule") {
+        resolver { input: AutomationRuleInput ->
+            val rule = AutomationHelper.Rule(
+                id = input.id,
+                name = input.name,
+                enabled = input.enabled,
+                kind = input.kind,
+                trigger = AutomationHelper.Trigger(
+                    input.trigger.type,
+                    input.trigger.params.associate { it.key to it.value },
+                ),
+                conditions = input.conditions.map {
+                    AutomationHelper.Condition(it.type, it.params.associate { p -> p.key to p.value })
+                },
+                actions = input.actions.map {
+                    AutomationHelper.Action(it.type, it.params.associate { p -> p.key to p.value })
+                },
+                cooldownMs = input.cooldownMs,
+                lastRunMs = 0L, createdMs = 0L, updatedMs = 0L,
+            )
+            val saved = AutomationHelper.upsert(rule, MainApp.instance)
+            AutomationScheduler.scheduleRule(saved.id, MainApp.instance)
+            saved.toModel()
+        }
+    }
+    mutation("setAutomationRuleEnabled") {
+        resolver { id: String, enabled: Boolean ->
+            val ok = AutomationHelper.setEnabled(id, enabled, MainApp.instance)
+            if (ok) AutomationScheduler.scheduleRule(id, MainApp.instance)
+            ok
+        }
+    }
+    mutation("deleteAutomationRule") {
+        resolver { id: String ->
+            AutomationScheduler.cancel(id, MainApp.instance)
+            AutomationHelper.delete(id, MainApp.instance)
+        }
+    }
+    mutation("runAutomationRule") {
+        resolver { id: String ->
+            AutomationActionRunner.trigger(id, "manual", emptyMap(), MainApp.instance)
+        }
+    }
+    mutation("clearAutomationRuns") {
+        resolver { ->
+            AutomationHelper.clearRuns(MainApp.instance)
+            true
+        }
+    }
 }
+
+private fun nextDailyMs(hour: Int, minute: Int): Long? {
+    if (hour < 0) return null
+    val cal = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, hour)
+        set(java.util.Calendar.MINUTE, minute)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+        if (timeInMillis <= System.currentTimeMillis()) {
+            add(java.util.Calendar.DAY_OF_YEAR, 1)
+        }
+    }
+    return cal.timeInMillis
+}
+
+private fun AutomationHelper.Rule.toModel(): AutomationRuleModel = AutomationRuleModel(
+    id = id, name = name, enabled = enabled, kind = kind,
+    trigger = TriggerModel(trigger.type, trigger.params.map { KvModel(it.key, it.value) }),
+    conditions = conditions.map { c -> ConditionModel(c.type, c.params.map { KvModel(it.key, it.value) }) },
+    actions = actions.map { a -> ActionModel(a.type, a.params.map { KvModel(it.key, it.value) }) },
+    cooldownMs = cooldownMs, lastRunMs = lastRunMs,
+    createdMs = createdMs, updatedMs = updatedMs,
+)
 
 // ---------- Local conversion helpers ----------
 
