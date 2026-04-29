@@ -211,3 +211,15 @@ The 15 mini-games are being individually upgraded to a "deep" feature spec on bo
 ## Hide private notes on-device
 
 `NoteHelper.search/count/getIdsAsync/getTrashedIdsAsync` now accept an `excludePrivate: Boolean = false` flag. The Android `NotesViewModel` passes `true` so the on-device Notes screen never lists private notes (their counts are also excluded). The web GraphQL schemas (`NoteGraphQL.kt`, `TagGraphQL.kt`) leave the flag at the default `false`, so the web panel still fetches every note from the device's SQLite database, including private ones.
+
+## Telegram Bot Integration
+
+A full Telegram Bot runs alongside the web server using long-polling (OkHttp), providing remote device control via Telegram chat. Key files:
+
+- `app/src/main/java/com/ismartcoding/plain/telegram/TelegramApiClient.kt` — OkHttp-based HTTP client for Telegram Bot API (sendMessage, sendPhoto, sendAudio, sendVoice, sendVideo, sendDocument, sendLocation, sendChatAction, setMyCommands, getMe, getUpdates).
+- `app/src/main/java/com/ismartcoding/plain/telegram/TelegramBotManager.kt` — Singleton bot manager with 23 slash commands: `/start`, `/help`, `/stop`, `/messages`, `/sms`, `/sendsms`, `/calls`, `/contacts`, `/notifications`, `/logs`, `/files`, `/screenshot`, `/photo`, `/audio`, `/video`, `/apps`, `/blockapp`, `/unblockapp`, `/blockedapps`, `/location`, `/battery`, `/device`, `/commands`. Real-time forwarding of new notifications (`forwardNotification`) and call state changes (`forwardCallState`) to the configured chat ID. Duplicate state guard prevents repeated active-call messages.
+- `app/src/main/java/com/ismartcoding/plain/ui/page/settings/TelegramBotPage.kt` — Compose settings page (Bot Status toggle, credentials text fields for token + chat ID, per-feature forwarding toggles). Accessible from Settings → Telegram Bot.
+- `app/src/main/java/com/ismartcoding/plain/ui/nav/Routing.kt` — `Routing.TelegramBot` route added.
+- `app/src/main/res/values/strings_settings.xml` — 11 new string resources for the Telegram settings UI.
+- **Wired into**: `HttpServerService.kt` (starts/stops with web server, loads all prefs), `PNotificationListenerService.kt` (forwards notifications if `forwardNotifications` flag is set), `LiveCallTracker.kt` (forwards call ringing/active/ended states if `forwardCalls` flag is set).
+- **Preferences** (in `Preferences.kt`): `TelegramBotEnabledPreference`, `TelegramBotTokenPreference`, `TelegramChatIdPreference`, `TelegramBotForwardNotificationsPreference`, `TelegramBotForwardCallsPreference`.

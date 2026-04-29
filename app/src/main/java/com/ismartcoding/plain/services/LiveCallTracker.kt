@@ -14,6 +14,7 @@ import com.ismartcoding.plain.data.DNotification
 import com.ismartcoding.plain.events.EventType
 import com.ismartcoding.plain.events.WebSocketEvent
 import com.ismartcoding.plain.helpers.CallRecorderHelper
+import com.ismartcoding.plain.telegram.TelegramBotManager
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -61,7 +62,12 @@ object LiveCallTracker {
 
     private fun publish() {
         try {
-            sendEvent(WebSocketEvent(EventType.LIVE_CALL_STATE, JsonHelper.jsonEncode(snapshot())))
+            val snap = snapshot()
+            sendEvent(WebSocketEvent(EventType.LIVE_CALL_STATE, JsonHelper.jsonEncode(snap)))
+            // Forward call state changes to Telegram bot
+            if (snap.state in setOf("ringing", "active", "ended")) {
+                try { TelegramBotManager.forwardCallState(snap.state, snap.display, snap.source, snap.direction) } catch (_: Throwable) {}
+            }
         } catch (_: Throwable) {}
     }
 

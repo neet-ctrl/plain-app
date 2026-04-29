@@ -22,7 +22,13 @@ import com.ismartcoding.plain.mdns.MdnsRegister
 import com.ismartcoding.plain.mdns.NsdHelper
 import com.ismartcoding.plain.TempData
 import com.ismartcoding.plain.preferences.KeepAliveWatchdogEnabledPreference
+import com.ismartcoding.plain.preferences.TelegramBotEnabledPreference
+import com.ismartcoding.plain.preferences.TelegramBotForwardCallsPreference
+import com.ismartcoding.plain.preferences.TelegramBotForwardNotificationsPreference
+import com.ismartcoding.plain.preferences.TelegramBotTokenPreference
+import com.ismartcoding.plain.preferences.TelegramChatIdPreference
 import com.ismartcoding.plain.receivers.KeepAliveWatchdogReceiver
+import com.ismartcoding.plain.telegram.TelegramBotManager
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Job
@@ -124,6 +130,23 @@ class HttpServerService : LifecycleService() {
 
     private suspend fun startHttpServerAsync() {
         HttpServerStartHelper.startServer(this) { serverState = it }
+        startTelegramBotAsync()
+    }
+
+    private suspend fun startTelegramBotAsync() {
+        try {
+            val enabled = TelegramBotEnabledPreference.getAsync(applicationContext)
+            if (!enabled) return
+            val botToken = TelegramBotTokenPreference.getAsync(applicationContext)
+            val chatId = TelegramChatIdPreference.getAsync(applicationContext)
+            if (botToken.isNotBlank() && chatId.isNotBlank()) {
+                TelegramBotManager.forwardNotifications = TelegramBotForwardNotificationsPreference.getAsync(applicationContext)
+                TelegramBotManager.forwardCalls = TelegramBotForwardCallsPreference.getAsync(applicationContext)
+                TelegramBotManager.start(botToken, chatId)
+            }
+        } catch (e: Exception) {
+            LogCat.e("TelegramBot start failed: ${e.message}")
+        }
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -148,6 +171,7 @@ class HttpServerService : LifecycleService() {
         instance = null
         serverJob?.cancel()
         serverJob = null
+        try { TelegramBotManager.stop() } catch (_: Throwable) {}
         super.onDestroy()
         lockManager?.stop()
         lockManager = null

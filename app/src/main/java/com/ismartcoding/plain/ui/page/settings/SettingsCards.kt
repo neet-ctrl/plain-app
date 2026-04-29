@@ -80,6 +80,18 @@ internal fun SettingsCardItems(navController: NavHostController) {
     PCard {
         PListItem(
             modifier = Modifier.clickable {
+                navController.navigate(Routing.TelegramBot)
+            },
+            title = stringResource(R.string.telegram_bot),
+            subtitle = stringResource(R.string.telegram_bot_desc),
+            icon = R.drawable.bot,
+            showMore = true,
+        )
+    }
+    VerticalSpace(16.dp)
+    PCard {
+        PListItem(
+            modifier = Modifier.clickable {
                 navController.navigate(Routing.BackupRestore)
             },
             title = stringResource(R.string.backup_restore),

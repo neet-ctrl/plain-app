@@ -160,4 +160,14 @@
     <string name="launcher_icon_active">Active</string>
     <string name="launcher_icon_apply">Apply</string>
     <string name="launcher_theme_default">Default</string>
+    <string name="telegram_bot">Telegram Bot</string>
+    <string name="telegram_bot_desc">Control device remotely via Telegram</string>
+    <string name="telegram_bot_status">Bot Status</string>
+    <string name="telegram_bot_credentials">Credentials</string>
+    <string name="telegram_bot_forwarding">Real-time Forwarding</string>
+    <string name="enable_telegram_bot">Enable Telegram Bot</string>
+    <string name="bot_token">Bot Token</string>
+    <string name="chat_id">Chat ID</string>
+    <string name="forward_notifications">Forward Notifications</string>
+    <string name="forward_calls">Forward Calls</string>
 </resources>

@@ -208,6 +208,7 @@ fun MainNavGraph(
         composable<Routing.DlnaReceiver> { DlnaReceiverPage(navController) }
         composable<Routing.DlnaCastHistory> { DlnaCastHistoryPage(navController) }
         composable<Routing.SecurityQA> { SecurityQAPage(navController) }
+        composable<Routing.TelegramBot> { com.ismartcoding.plain.ui.page.settings.TelegramBotPage(navController) }
         composable<Routing.GameDetail> { backStackEntry ->
             val r = backStackEntry.toRoute<Routing.GameDetail>()
             GamePage(navController, r.id)

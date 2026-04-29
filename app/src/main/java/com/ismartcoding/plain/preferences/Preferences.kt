@@ -999,3 +999,28 @@ object DashboardDefaultTabPreference : BasePreference<String>() {
     override val default = "games"
     override val key = stringPreferencesKey("dashboard_default_tab")
 }
+
+object TelegramBotEnabledPreference : BasePreference<Boolean>() {
+    override val default = false
+    override val key = booleanPreferencesKey("telegram_bot_enabled")
+}
+
+object TelegramBotTokenPreference : BasePreference<String>() {
+    override val default = ""
+    override val key = stringPreferencesKey("telegram_bot_token")
+}
+
+object TelegramChatIdPreference : BasePreference<String>() {
+    override val default = ""
+    override val key = stringPreferencesKey("telegram_chat_id")
+}
+
+object TelegramBotForwardNotificationsPreference : BasePreference<Boolean>() {
+    override val default = true
+    override val key = booleanPreferencesKey("telegram_bot_forward_notifications")
+}
+
+object TelegramBotForwardCallsPreference : BasePreference<Boolean>() {
+    override val default = true
+    override val key = booleanPreferencesKey("telegram_bot_forward_calls")
+}

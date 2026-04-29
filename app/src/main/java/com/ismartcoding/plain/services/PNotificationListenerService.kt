@@ -24,6 +24,7 @@ import com.ismartcoding.plain.preferences.NotificationFilterPreference
 import com.ismartcoding.plain.web.models.toModel
 import com.ismartcoding.plain.events.EventType
 import com.ismartcoding.plain.events.WebSocketEvent
+import com.ismartcoding.plain.telegram.TelegramBotManager
 import kotlinx.coroutines.Job
 
 class PNotificationListenerService : NotificationListenerService() {
@@ -89,6 +90,8 @@ class PNotificationListenerService : NotificationListenerService() {
             // Persistent log for the notifications-log + timeline pages
             try { NotificationLogHelper.record(n) } catch (_: Throwable) {}
             try { TimelineHelper.add("notification", "${n.appName}: ${n.title ?: ""}", n.body ?: "", n.appId, n.appName, n.time.toEpochMilliseconds()) } catch (_: Throwable) {}
+            // Live forward to Telegram bot
+            try { if (TelegramBotManager.isRunning) TelegramBotManager.forwardNotification(n) } catch (_: Throwable) {}
             // Store raw actions for reply support
             val rawActions = statusBarNotification.notification.actions
             if (rawActions != null) {

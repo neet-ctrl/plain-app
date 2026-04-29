@@ -161,4 +161,7 @@ class Routing {
 
     @Serializable
     object SecurityQA
+
+    @Serializable
+    object TelegramBot
 }
