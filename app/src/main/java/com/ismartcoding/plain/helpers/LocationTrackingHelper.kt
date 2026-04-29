@@ -90,32 +90,60 @@ object LocationTrackingHelper {
         }
     }
 
-    fun listPoints(offset: Int = 0, limit: Int = 1000, ctx: Context = MainApp.instance): List<Point> {
+    fun listPoints(
+        offset: Int = 0,
+        limit: Int = 1000,
+        fromTs: Long = 0L,
+        toTs: Long = 0L,
+        ctx: Context = MainApp.instance,
+    ): List<Point> {
         val arr = readArray(ctx)
         val out = mutableListOf<Point>()
-        var i = offset
+        var skipped = 0
+        var i = 0
         while (i < arr.length() && out.size < limit) {
             try {
                 val o = arr.getJSONObject(i)
-                out.add(
-                    Point(
-                        ts = o.optLong("ts"),
-                        lat = o.optDouble("lat"),
-                        lng = o.optDouble("lng"),
-                        accuracy = o.optDouble("accuracy", 0.0).toFloat(),
-                        speed = o.optDouble("speed", 0.0).toFloat(),
-                        altitude = o.optDouble("altitude", 0.0),
-                        bearing = o.optDouble("bearing", 0.0).toFloat(),
-                        batteryLevel = o.optInt("battery", -1),
-                        charging = o.optBoolean("charging", false),
-                        provider = o.optString("provider", ""),
-                    )
-                )
+                val ts = o.optLong("ts")
+                val passFrom = fromTs <= 0L || ts >= fromTs
+                val passTo = toTs <= 0L || ts <= toTs
+                if (passFrom && passTo) {
+                    if (skipped < offset) {
+                        skipped++
+                    } else {
+                        out.add(
+                            Point(
+                                ts = ts,
+                                lat = o.optDouble("lat"),
+                                lng = o.optDouble("lng"),
+                                accuracy = o.optDouble("accuracy", 0.0).toFloat(),
+                                speed = o.optDouble("speed", 0.0).toFloat(),
+                                altitude = o.optDouble("altitude", 0.0),
+                                bearing = o.optDouble("bearing", 0.0).toFloat(),
+                                batteryLevel = o.optInt("battery", -1),
+                                charging = o.optBoolean("charging", false),
+                                provider = o.optString("provider", ""),
+                            )
+                        )
+                    }
+                }
             } catch (_: Throwable) {
             }
             i++
         }
         return out
+    }
+
+    fun countPointsInRange(fromTs: Long, toTs: Long, ctx: Context = MainApp.instance): Int {
+        val arr = readArray(ctx)
+        var count = 0
+        for (i in 0 until arr.length()) {
+            try {
+                val ts = arr.getJSONObject(i).optLong("ts")
+                if ((fromTs <= 0L || ts >= fromTs) && (toTs <= 0L || ts <= toTs)) count++
+            } catch (_: Throwable) {}
+        }
+        return count
     }
 
     fun countPoints(ctx: Context = MainApp.instance): Int = readArray(ctx).length()

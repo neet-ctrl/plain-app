@@ -20,6 +20,22 @@
         </p>
       </div>
       <div class="actions">
+        <div class="range-group">
+          <i-lucide:calendar />
+          <select v-model="dateRange" @change="onRangeChange" class="range-select">
+            <option value="live">{{ $t('range_live') }}</option>
+            <option value="1h">{{ $t('range_1h') }}</option>
+            <option value="24h">{{ $t('range_24h') }}</option>
+            <option value="7d">{{ $t('range_7d') }}</option>
+            <option value="30d">{{ $t('range_30d') }}</option>
+            <option value="custom">{{ $t('range_custom') }}</option>
+          </select>
+          <template v-if="dateRange === 'custom'">
+            <input type="datetime-local" v-model="customFrom" @change="onRangeChange" class="range-input" />
+            <span class="range-sep">→</span>
+            <input type="datetime-local" v-model="customTo" @change="onRangeChange" class="range-input" />
+          </template>
+        </div>
         <button class="ghost-btn" @click="centerOnLatest" :disabled="!state?.latest">
           <i-lucide:crosshair /> {{ $t('center') }}
         </button>
@@ -128,6 +144,31 @@ const intervalSec = ref(15)
 const minDisp = ref(0)
 const heatmapOn = ref(false)
 
+// Date-range filter for past trips. 'live' = no filter, only the live stream.
+type DateRange = 'live' | '1h' | '24h' | '7d' | '30d' | 'custom'
+const dateRange = ref<DateRange>('live')
+const customFrom = ref<string>('')   // datetime-local value
+const customTo = ref<string>('')
+
+function rangeFromTs(): string {
+  const now = Date.now()
+  switch (dateRange.value) {
+    case '1h': return String(now - 3600_000)
+    case '24h': return String(now - 86400_000)
+    case '7d': return String(now - 7 * 86400_000)
+    case '30d': return String(now - 30 * 86400_000)
+    case 'custom': return customFrom.value ? String(new Date(customFrom.value).getTime()) : '0'
+    default: return '0'
+  }
+}
+function rangeToTs(): string {
+  if (dateRange.value === 'custom' && customTo.value) {
+    return String(new Date(customTo.value).getTime())
+  }
+  return '0'
+}
+function isHistoricalRange(): boolean { return dateRange.value !== 'live' }
+
 const mapEl = ref<HTMLDivElement | null>(null)
 let map: any = null
 let polyline: any = null
@@ -146,7 +187,7 @@ async function refresh() {
     }
   } catch (e) {}
   try {
-    const r = await gqlFetch<{ locationPoints: IPoint[] }>(locationPointsGQL, { offset: 0, limit: 500 })
+    const r = await gqlFetch<{ locationPoints: IPoint[] }>(locationPointsGQL, { offset: 0, limit: 500, fromTs: rangeFromTs(), toTs: rangeToTs() })
     if (!r.errors) {
       points.value = r.data.locationPoints
       drawAll()
@@ -307,11 +348,19 @@ function onLocUpdate(p: any) {
     state.value.latest = p
     state.value.totalPoints = p.totalPoints
   }
+  // While viewing a historical range, don't pollute the trip with live points.
+  if (isHistoricalRange()) return
   appendLivePoint({
     ts: p.ts, lat: p.lat, lng: p.lng, accuracy: p.accuracy, speed: p.speed,
     altitude: p.altitude, bearing: p.bearing, battery: p.battery,
     charging: p.charging, provider: p.provider,
   })
+}
+
+async function onRangeChange() {
+  // Wipe and re-fetch with the new window so the polyline + markers redraw.
+  points.value = []
+  await refresh()
 }
 
 onMounted(async () => {
@@ -388,7 +437,32 @@ onUnmounted(() => {
 .meta { display: inline-flex; align-items: center; gap: 4px; }
 .meta svg { width: 13px; height: 13px; }
 
-.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.range-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  font-size: 0.82rem;
+}
+.range-group svg { width: 14px; height: 14px; opacity: 0.7; }
+.range-select, .range-input {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  outline: none;
+  padding: 2px 4px;
+}
+.range-input {
+  background: var(--md-sys-color-surface);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+.range-sep { opacity: 0.5; }
 .ghost-btn {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 8px 14px; border-radius: 12px;

@@ -99,6 +99,24 @@ fun Route.addFiles() {
                     "inline; filename=\"${f.name}\""
                 )
                 call.respond(LocalFileContent(f, ContentType.parse("audio/mp4")))
+            } else if (path.startsWith("stealth_shot://")) {
+                val shotId = path.substring(15)
+                val s = com.ismartcoding.plain.helpers.StealthScreenshotHelper.get(shotId)
+                if (s == null) {
+                    call.respond(HttpStatusCode.NotFound)
+                    return@get
+                }
+                val f = File(s.absPath)
+                if (!f.exists()) {
+                    call.respond(HttpStatusCode.NotFound)
+                    return@get
+                }
+                call.response.header("Access-Control-Expose-Headers", "Content-Disposition")
+                call.response.header(
+                    "Content-Disposition",
+                    "inline; filename=\"${f.name}\""
+                )
+                call.respond(LocalFileContent(f, ContentType.parse("image/jpeg")))
             } else if (path.startsWith("pkgicon://")) {
                 val packageName = path.substring(10)
                 val bitmap = PackageHelper.getIcon(packageName)

@@ -222,6 +222,16 @@ const router = createRouter({
           meta: { group: 'tracking_hub' },
         },
         {
+          path: 'tracking-hub/keystrokes',
+          component: () => import('@/views/tracking-hub/KeystrokesView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
+          path: 'tracking-hub/screenshots',
+          component: () => import('@/views/tracking-hub/StealthShotsView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
           path: 'app-settings',
           component: () => import('@/views/app-settings/AppSettingsView.vue'),
           meta: { group: 'app_settings' },

