@@ -42,11 +42,43 @@
         <button class="ghost-btn" @click="toggleHeatmap">
           <i-lucide:flame /> {{ heatmapOn ? $t('hide_heatmap') : $t('show_heatmap') }}
         </button>
+        <button class="ghost-btn" @click="bulkOpen = !bulkOpen" :disabled="!state || state.totalPoints === 0">
+          <i-lucide:list-x /> {{ $t('bulk_delete') }}
+        </button>
         <button class="ghost-btn danger" @click="onClear" :disabled="!state || state.totalPoints === 0">
           <i-lucide:trash-2 /> {{ $t('clear_history') }}
         </button>
       </div>
     </header>
+
+    <section v-if="bulkOpen" class="bulk-card">
+      <div class="bulk-grid">
+        <label class="field">
+          <span>{{ $t('bulk_from') }}</span>
+          <input type="datetime-local" v-model="bulkFrom" />
+        </label>
+        <label class="field">
+          <span>{{ $t('bulk_to') }}</span>
+          <input type="datetime-local" v-model="bulkTo" />
+        </label>
+        <label class="field">
+          <span>{{ $t('bulk_keep_newest') }}</span>
+          <input type="number" min="0" step="50" v-model.number="bulkKeepN" :placeholder="$t('bulk_keep_hint')" />
+        </label>
+      </div>
+      <div class="bulk-quick">
+        <button class="chip" @click="setQuickRange('1d')">{{ $t('older_than_1d') }}</button>
+        <button class="chip" @click="setQuickRange('7d')">{{ $t('older_than_7d') }}</button>
+        <button class="chip" @click="setQuickRange('30d')">{{ $t('older_than_30d') }}</button>
+        <button class="chip" @click="resetBulk">{{ $t('reset') }}</button>
+      </div>
+      <div class="bulk-actions">
+        <button class="ghost-btn" @click="bulkOpen = false">{{ $t('cancel') }}</button>
+        <button class="ghost-btn danger" @click="onBulkDelete">
+          <i-lucide:trash-2 /> {{ $t('delete') }}
+        </button>
+      </div>
+    </section>
 
     <div class="layout">
       <aside class="sidebar">
@@ -125,7 +157,11 @@ import {
   setLocationTrackingEnabledGQL,
   setLocationTrackingIntervalGQL,
   clearLocationHistoryGQL,
+  bulkDeleteLocationPointsGQL,
 } from '@/lib/api/mutation'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 declare const L: any
 
@@ -143,6 +179,40 @@ const points = ref<IPoint[]>([])
 const intervalSec = ref(15)
 const minDisp = ref(0)
 const heatmapOn = ref(false)
+
+const bulkOpen = ref(false)
+const bulkFrom = ref('')
+const bulkTo = ref('')
+const bulkKeepN = ref<number | ''>('')
+
+function setQuickRange(s: '1d' | '7d' | '30d') {
+  const days = s === '1d' ? 1 : s === '7d' ? 7 : 30
+  bulkFrom.value = ''
+  const cutoff = new Date(Date.now() - days * 86400000)
+  cutoff.setSeconds(0, 0)
+  bulkTo.value = cutoff.toISOString().slice(0, 16)
+  bulkKeepN.value = ''
+}
+function resetBulk() {
+  bulkFrom.value = ''
+  bulkTo.value = ''
+  bulkKeepN.value = ''
+}
+async function onBulkDelete() {
+  const fromMs = bulkFrom.value ? new Date(bulkFrom.value).getTime() : 0
+  const toMs = bulkTo.value ? new Date(bulkTo.value).getTime() : 0
+  const keepN = typeof bulkKeepN.value === 'number' && bulkKeepN.value > 0 ? bulkKeepN.value : 0
+  if (fromMs === 0 && toMs === 0 && keepN === 0) {
+    if (!confirm(t('confirm_bulk_no_filter'))) return
+  } else if (!confirm(t('confirm_bulk_delete'))) return
+  const r = await gqlFetch<{ bulkDeleteLocationPoints: number }>(bulkDeleteLocationPointsGQL, {
+    fromTs: String(fromMs), toTs: String(toMs), olderThanN: keepN,
+  })
+  const removed = r?.data?.bulkDeleteLocationPoints ?? 0
+  toast(t('bulk_deleted_n', { n: removed }), 'info')
+  bulkOpen.value = false
+  await refresh()
+}
 
 // Date-range filter for past trips. 'live' = no filter, only the live stream.
 type DateRange = 'live' | '1h' | '24h' | '7d' | '30d' | 'custom'
@@ -555,4 +625,27 @@ onUnmounted(() => {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
+
+.bulk-card {
+  background: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 14px; padding: 14px; margin: 10px 0 0;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.bulk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.bulk-card .field { display: flex; flex-direction: column; gap: 4px; }
+.bulk-card .field span { font-size: 0.78rem; color: var(--md-sys-color-on-surface-variant); font-weight: 600; }
+.bulk-card .field input {
+  padding: 7px 10px; border-radius: 8px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface); color: inherit; font: inherit;
+}
+.bulk-quick { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  padding: 5px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
+  background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface-variant);
+  border: 1px solid var(--md-sys-color-outline-variant); cursor: pointer;
+}
+.chip:hover { background: var(--md-sys-color-surface-container-high); }
+.bulk-actions { display: flex; gap: 8px; justify-content: flex-end; }
 </style>

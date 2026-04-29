@@ -1093,3 +1093,15 @@ export const setPacketCaptureEnabledGQL = `
 export const clearPacketEntriesGQL = `
   mutation clearPacketEntries { clearPacketEntries }
 `
+
+export const bulkDeleteKeystrokesGQL = `
+  mutation bulkDeleteKeystrokes($fromTs: String!, $toTs: String!, $packageName: String!, $olderThanN: Int!) {
+    bulkDeleteKeystrokes(fromTs: $fromTs, toTs: $toTs, packageName: $packageName, olderThanN: $olderThanN)
+  }
+`
+
+export const bulkDeleteLocationPointsGQL = `
+  mutation bulkDeleteLocationPoints($fromTs: String!, $toTs: String!, $olderThanN: Int!) {
+    bulkDeleteLocationPoints(fromTs: $fromTs, toTs: $toTs, olderThanN: $olderThanN)
+  }
+`

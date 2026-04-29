@@ -248,7 +248,7 @@
           <!-- Actions -->
           <fieldset>
             <legend><i-lucide:rocket /> {{ $t('automation_actions') }}</legend>
-            <draggable-list>
+            <div class="action-list">
               <div v-for="(a, i) in editor.actions" :key="i" class="action-row">
                 <span class="step">{{ i + 1 }}</span>
                 <select v-model="a.type" @change="a.params = []">
@@ -341,7 +341,7 @@
                   <button type="button" class="icon-btn danger" @click="editor.actions.splice(i, 1)"><i-lucide:trash-2 /></button>
                 </div>
               </div>
-            </draggable-list>
+            </div>
             <button class="btn ghost small" @click="editor.actions.push({ type: 'notify', params: [] })">
               <i-lucide:plus /> {{ $t('automation_add_action') }}
             </button>
@@ -625,7 +625,6 @@ function formatDuration(ms: number): string {
   return `${Math.round(ms / 3_600_000)}h`
 }
 
-const DraggableList = { name: 'draggable-list', setup(_: any, { slots }: any) { return () => h('div', slots.default && slots.default()) } }
 </script>
 
 <style scoped lang="scss">

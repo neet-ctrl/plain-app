@@ -44,9 +44,50 @@
           {{ pkgLabel(p.packageName) }} ({{ p.count }})
         </option>
       </select>
+      <button class="ghost-btn" @click="bulkOpen = !bulkOpen" :disabled="!state?.totalEntries">
+        <i-lucide:list-x /> {{ $t('bulk_delete') }}
+      </button>
       <button class="ghost-btn danger" @click="onClearAll" :disabled="!state?.totalEntries">
         <i-lucide:trash-2 /> {{ $t('clear_all') }}
       </button>
+    </section>
+
+    <section v-if="bulkOpen" class="bulk-card">
+      <div class="bulk-grid">
+        <label class="field">
+          <span>{{ $t('bulk_from') }}</span>
+          <input type="datetime-local" v-model="bulkFrom" />
+        </label>
+        <label class="field">
+          <span>{{ $t('bulk_to') }}</span>
+          <input type="datetime-local" v-model="bulkTo" />
+        </label>
+        <label class="field">
+          <span>{{ $t('bulk_keep_newest') }}</span>
+          <input type="number" min="0" step="10" v-model.number="bulkKeepN" :placeholder="$t('bulk_keep_hint')" />
+        </label>
+        <label class="field">
+          <span>{{ $t('bulk_app') }}</span>
+          <select v-model="bulkPkg">
+            <option value="">{{ $t('all_apps') }}</option>
+            <option v-for="p in pkgStats" :key="p.packageName" :value="p.packageName">
+              {{ pkgLabel(p.packageName) }} ({{ p.count }})
+            </option>
+          </select>
+        </label>
+      </div>
+      <div class="bulk-quick">
+        <button class="chip" @click="setQuickRange('1d')">{{ $t('older_than_1d') }}</button>
+        <button class="chip" @click="setQuickRange('7d')">{{ $t('older_than_7d') }}</button>
+        <button class="chip" @click="setQuickRange('30d')">{{ $t('older_than_30d') }}</button>
+        <button class="chip" @click="resetBulk">{{ $t('reset') }}</button>
+      </div>
+      <div class="bulk-actions">
+        <button class="ghost-btn" @click="bulkOpen = false">{{ $t('cancel') }}</button>
+        <button class="ghost-btn danger" @click="onBulkDelete">
+          <i-lucide:trash-2 /> {{ $t('delete') }}
+        </button>
+      </div>
     </section>
 
     <section class="entries-list" v-if="entries.length > 0">
@@ -103,6 +144,7 @@ import {
 import {
   setKeystrokeLoggerEnabledGQL, setKeystrokeBufferLimitGQL,
   clearKeystrokeLogGQL, deleteKeystrokeEntryGQL,
+  bulkDeleteKeystrokesGQL,
 } from '@/lib/api/mutation'
 import { getFileUrlByPath } from '@/lib/api/file'
 import { storeToRefs } from 'pinia'
@@ -124,7 +166,43 @@ const query = ref('')
 const pkgFilter = ref('')
 const bufferLimit = ref(5000)
 const copiedId = ref<string | null>(null)
+const bulkOpen = ref(false)
+const bulkFrom = ref('')
+const bulkTo = ref('')
+const bulkKeepN = ref<number | ''>('')
+const bulkPkg = ref('')
 const PAGE = 100
+
+function setQuickRange(s: '1d' | '7d' | '30d') {
+  const days = s === '1d' ? 1 : s === '7d' ? 7 : 30
+  bulkFrom.value = ''
+  const cutoff = new Date(Date.now() - days * 86400000)
+  cutoff.setSeconds(0, 0)
+  bulkTo.value = cutoff.toISOString().slice(0, 16)
+  bulkKeepN.value = ''
+}
+function resetBulk() {
+  bulkFrom.value = ''
+  bulkTo.value = ''
+  bulkKeepN.value = ''
+  bulkPkg.value = ''
+}
+async function onBulkDelete() {
+  const fromMs = bulkFrom.value ? new Date(bulkFrom.value).getTime() : 0
+  const toMs = bulkTo.value ? new Date(bulkTo.value).getTime() : 0
+  const keepN = typeof bulkKeepN.value === 'number' && bulkKeepN.value > 0 ? bulkKeepN.value : 0
+  if (fromMs === 0 && toMs === 0 && keepN === 0 && !bulkPkg.value) {
+    if (!confirm(t('confirm_bulk_no_filter'))) return
+  } else if (!confirm(t('confirm_bulk_delete'))) return
+  const r = await gqlFetch<{ bulkDeleteKeystrokes: number }>(bulkDeleteKeystrokesGQL, {
+    fromTs: String(fromMs), toTs: String(toMs),
+    packageName: bulkPkg.value, olderThanN: keepN,
+  })
+  const removed = r?.data?.bulkDeleteKeystrokes ?? 0
+  toast(t('bulk_deleted_n', { n: removed }), 'info')
+  bulkOpen.value = false
+  await Promise.all([loadState(), loadPkgStats(), reload()])
+}
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 function debouncedReload() {
@@ -360,4 +438,27 @@ onUnmounted(() => {
 }
 .empty svg { width: 36px; height: 36px; opacity: 0.4; }
 .empty h3 { margin: 0; font-weight: 500; font-size: 0.95rem; }
+
+.bulk-card {
+  background: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 14px; padding: 14px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.bulk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.bulk-card .field { display: flex; flex-direction: column; gap: 4px; }
+.bulk-card .field span { font-size: 0.78rem; color: var(--md-sys-color-on-surface-variant); font-weight: 600; }
+.bulk-card .field input, .bulk-card .field select {
+  padding: 7px 10px; border-radius: 8px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface); color: inherit; font: inherit;
+}
+.bulk-quick { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  padding: 5px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
+  background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface-variant);
+  border: 1px solid var(--md-sys-color-outline-variant); cursor: pointer;
+}
+.chip:hover { background: var(--md-sys-color-surface-container-high); }
+.bulk-actions { display: flex; gap: 8px; justify-content: flex-end; }
 </style>

@@ -173,6 +173,56 @@ object KeystrokeLogHelper {
         prefs(ctx).edit().remove(K_ENTRIES).apply()
     }
 
+    /**
+     * Bulk delete keystroke entries matching optional filters.
+     * - `fromTs`/`toTs` (millis, 0 = open) restrict the time window.
+     * - `packageName` restricts to a single app, blank = any app.
+     * - `olderThanN` (>0) keeps the newest N entries (after the above filters)
+     *   and deletes everything older. Pass 0 to ignore.
+     * Returns the number of removed entries.
+     */
+    fun bulkDelete(
+        fromTs: Long = 0L,
+        toTs: Long = 0L,
+        packageName: String = "",
+        olderThanN: Int = 0,
+        ctx: Context = MainApp.instance,
+    ): Int {
+        val raw = prefs(ctx).getString(K_ENTRIES, "[]") ?: "[]"
+        val arr = try { JSONArray(raw) } catch (_: Throwable) { JSONArray() }
+        val keep = JSONArray()
+        var removed = 0
+        var matchedSeen = 0
+        for (i in 0 until arr.length()) {
+            try {
+                val o = arr.getJSONObject(i)
+                val ts = o.optLong("ts")
+                val pkg = o.optString("packageName")
+                val matchesPkg = packageName.isEmpty() || packageName == pkg
+                val matchesFrom = fromTs <= 0L || ts >= fromTs
+                val matchesTo = toTs <= 0L || ts <= toTs
+                val matched = matchesPkg && matchesFrom && matchesTo
+                if (matched) {
+                    if (olderThanN > 0) {
+                        // Newest entries are stored first (index 0). Keep first N then delete the rest.
+                        if (matchedSeen < olderThanN) {
+                            keep.put(o)
+                        } else {
+                            removed++
+                        }
+                        matchedSeen++
+                    } else {
+                        removed++
+                    }
+                } else {
+                    keep.put(o)
+                }
+            } catch (_: Throwable) {}
+        }
+        if (removed > 0) prefs(ctx).edit().putString(K_ENTRIES, keep.toString()).apply()
+        return removed
+    }
+
     fun deleteOne(id: String, ctx: Context = MainApp.instance): Boolean {
         val raw = prefs(ctx).getString(K_ENTRIES, "[]") ?: "[]"
         val arr = try { JSONArray(raw) } catch (_: Throwable) { JSONArray() }

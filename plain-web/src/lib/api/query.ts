@@ -1071,3 +1071,9 @@ export const setAutomationEnabledGQL = `
 export const clearAutomationRunsGQL = `
   mutation clearAutomationRuns { clearAutomationRuns }
 `
+
+export const allPermissionsStatusGQL = `
+  query {
+    allPermissionsStatus { name label granted enabled category }
+  }
+`

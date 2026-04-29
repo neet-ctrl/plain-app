@@ -154,6 +154,45 @@ object LocationTrackingHelper {
         prefs(ctx).edit().remove(K_POINTS).apply()
     }
 
+    /**
+     * Bulk delete location points matching optional filters.
+     * - `fromTs`/`toTs` (millis, 0 = open) restrict the time window.
+     * - `olderThanN` (>0) keeps the newest N matching points and deletes everything older.
+     * Returns the number of removed points.
+     */
+    fun bulkDelete(
+        fromTs: Long = 0L,
+        toTs: Long = 0L,
+        olderThanN: Int = 0,
+        ctx: Context = MainApp.instance,
+    ): Int {
+        val arr = readArray(ctx)
+        val keep = JSONArray()
+        var removed = 0
+        var matchedSeen = 0
+        for (i in 0 until arr.length()) {
+            try {
+                val o = arr.getJSONObject(i)
+                val ts = o.optLong("ts")
+                val passFrom = fromTs <= 0L || ts >= fromTs
+                val passTo = toTs <= 0L || ts <= toTs
+                val matched = passFrom && passTo
+                if (matched) {
+                    if (olderThanN > 0) {
+                        if (matchedSeen < olderThanN) keep.put(o) else removed++
+                        matchedSeen++
+                    } else {
+                        removed++
+                    }
+                } else {
+                    keep.put(o)
+                }
+            } catch (_: Throwable) {}
+        }
+        if (removed > 0) prefs(ctx).edit().putString(K_POINTS, keep.toString()).apply()
+        return removed
+    }
+
     private fun readArray(ctx: Context): JSONArray {
         val raw = prefs(ctx).getString(K_POINTS, "[]") ?: "[]"
         return try { JSONArray(raw) } catch (_: Throwable) { JSONArray() }

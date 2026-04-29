@@ -29,6 +29,29 @@ import com.ismartcoding.plain.web.models.App
 import com.ismartcoding.plain.web.models.TempValue
 import com.ismartcoding.plain.web.models.toModel
 
+data class PermissionStatusItem(
+    val name: String,
+    val label: String,
+    val granted: Boolean,
+    val enabled: Boolean,
+    val category: String,
+)
+
+private fun categorize(name: String): String {
+    return when {
+        name.startsWith("READ_SMS") || name.startsWith("SEND_SMS") -> "messaging"
+        name.contains("CONTACT") -> "contacts"
+        name.contains("CALL") || name == "READ_PHONE_STATE" || name == "READ_PHONE_NUMBERS" -> "phone"
+        name.contains("LOCATION") -> "location"
+        name == "CAMERA" || name.startsWith("READ_MEDIA") || name == "WRITE_EXTERNAL_STORAGE" -> "media_storage"
+        name.contains("BLUETOOTH") -> "connectivity"
+        name == "RECORD_AUDIO" -> "audio"
+        name == "POST_NOTIFICATIONS" || name == "NOTIFICATION_LISTENER" -> "notifications"
+        name == "ACCESSIBILITY_SERVICE" || name == "PACKAGE_USAGE_STATS" || name == "SYSTEM_ALERT_WINDOW" || name == "WRITE_SETTINGS" || name == "QUERY_ALL_PACKAGES" || name == "SCHEDULE_EXACT_ALARM" -> "system"
+        else -> "other"
+    }
+}
+
 fun SchemaBuilder.addAppSchema() {
     query("deviceInfo") {
         resolver { ->
@@ -73,6 +96,25 @@ fun SchemaBuilder.addAppSchema() {
                 developerMode = DeveloperModePreference.getAsync(context),
                 favoriteFolders = FavoriteFoldersPreference.getValueAsync(context).map { it.toModel() },
             )
+        }
+    }
+    query("allPermissionsStatus") {
+        resolver { ->
+            val context = MainApp.instance
+            val apiPermissions = ApiPermissionsPreference.getAsync(context)
+            Permission.entries
+                .filter { it != Permission.NONE }
+                .map { p ->
+                    val granted = try { p.can(context) } catch (_: Throwable) { false }
+                    val enabled = apiPermissions.contains(p.name)
+                    PermissionStatusItem(
+                        name = p.name,
+                        label = try { p.getText() } catch (_: Throwable) { p.name },
+                        granted = granted,
+                        enabled = enabled,
+                        category = categorize(p.name),
+                    )
+                }
         }
     }
     mutation("setTempValue") {

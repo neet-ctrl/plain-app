@@ -87,6 +87,10 @@
       <template #icon><i-lucide:settings-2 /></template>
     </FeatureCard>
 
+    <FeatureCard to="/permissions-status" :title="$t('page_title.permissions_status')">
+      <template #icon><i-lucide:shield-check /></template>
+    </FeatureCard>
+
     <FeatureCard to="/call-recordings" :title="$t('call_recordings')">
       <template #icon><i-lucide:phone-call /></template>
     </FeatureCard>
