@@ -1,0 +1,134 @@
+
+Library
+Tasks
+Agent
+Now in new sub home card in web panel add Remote app launcher — list every installed app on the web, click to open it on the phone
+5.Per-app network usage — which app uploaded/downloaded how much, to which IPs
+Saved Wi-Fi list + hotspot toggle / control from web
+Bluetooth scanner / pair / unpair from web
+Battery & charging history graphs over days/weeks
+VPN-style packet capture log (what URLs the phone is talking to) but in modern ui and advance aeranence and many advnce setting amd ways ui design and all
+
+20 minutes ago
+The user wants me to implement six new feature cards for the web panel: a remote app launcher to open installed apps from the phone, per-app network usage tracking with upload/download stats, Wi-Fi management with hotspot toggling, Bluetooth pairing controls, battery and charging history visualizations, and a VPN-style packet feature.
+
+Looking at Android's constraints, most of these are feasible but have varying complexity — the app launcher and Bluetooth controls are straightforward, but network stats require special permissions and IP tracking needs root access, Wi-Fi management is heavily restricted on modern Android, and packet capture via VPNService is quite involved. The user wants polished, advanced UIs with multiple design options, so this is a substantial scope. Given the pattern from the previous tracking-hub features, I should structure these as new sub-cards in the web panel and work through the implementation systematically.
+
+I need to build six complete feature sets across Vue views, GraphQL schema and queries, Android services, and database tables — that's a lot to handle in one go. Some features have hard Android limitations that require user permission flows or aren't possible without VPN integration, so I should be realistic about what's actually achievable. Let me explore the codebase structure first to understand the patterns, then plan and build incrementally rather than trying to do everything at once.
+
+I'll take on this big request. Six new features is a lot, so let me first map the codebase to understand the patterns, then build them one by one with proper Android backends and modern web UIs.
+
+I've got a clear approach now. I need to follow a consistent pattern for each feature: add a FeatureCard to the main dashboard, create the corresponding Vue view and route it, build the Android helpers, extend the GraphQL schema, register it in the main GraphQL file, and add the translation strings. To keep this manageable, I'll consolidate some of the work into a single cohesive block.
+
+Looking at how the tracking-hub is organized, I can see it uses a hub-and-spoke pattern where one central page hosts multiple feature cards that link to their own sub-pages. Since the user wants new sub home cards, I'll create a "Device Control Hub" page that contains all 6 features as cards, then add just one entry point on the main dashboard. This mirrors the existing structure and keeps the UI cleaner.
+
+I have a clear picture now. I'll mirror the existing tracking-hub pattern: add one card on the main dashboard called "Device Control Hub" that opens a sub-hub with the 6 new features inside. Each feature gets its own page, helper, and GraphQL schema. Let me plan this out and start building.
+
+Objective
+Add a new Device Control Hub to the web panel with 6 feature pages:
+
+Remote App Launcher
+Per-App Network Usage
+Wi-Fi Networks + Hotspot
+Bluetooth Scanner
+Battery & Charging History
+Packet Capture (URL log via VPN)
+Tasks
+T001: Android backend - helpers
+Files:
+app/src/main/java/com/ismartcoding/plain/helpers/AppLauncherHelper.kt
+app/src/main/java/com/ismartcoding/plain/helpers/NetworkUsageHelper.kt
+app/src/main/java/com/ismartcoding/plain/helpers/WifiControlHelper.kt
+app/src/main/java/com/ismartcoding/plain/helpers/BluetoothControlHelper.kt
+app/src/main/java/com/ismartcoding/plain/helpers/BatteryHistoryHelper.kt
+app/src/main/java/com/ismartcoding/plain/helpers/PacketCaptureHelper.kt
+app/src/main/java/com/ismartcoding/plain/services/PacketCaptureVpnService.kt
+app/src/main/java/com/ismartcoding/plain/services/BatterySamplerService.kt
+T002: GraphQL schema
+Files:
+app/src/main/java/com/ismartcoding/plain/web/schemas/DeviceControlGraphQL.kt
+Register in MainGraphQL.kt
+T003: Manifest perms + service registration
+Files: app/src/main/AndroidManifest.xml
+T004: Web - GraphQL queries/mutations
+Files: plain-web/src/lib/api/query.ts, plain-web/src/lib/api/mutation.ts
+T005: Web - hub + 6 views
+Files:
+plain-web/src/views/device-hub/DeviceHubView.vue
+plain-web/src/views/device-hub/AppLauncherView.vue
+plain-web/src/views/device-hub/NetUsageView.vue
+plain-web/src/views/device-hub/WifiControlView.vue
+plain-web/src/views/device-hub/BluetoothView.vue
+plain-web/src/views/device-hub/BatteryHistoryView.vue
+plain-web/src/views/device-hub/PacketCaptureView.vue
+T006: Routes + dashboard card + i18n
+Files: plain-web/src/router/index.ts, plain-web/src/views/home/MainDashboard.vue, plain-web/src/i18n/lang/en.json
+T007: Build & verify
+Run vite build, verify it ships into Android assets if needed.
+I need to examine the existing helper patterns and manifest structure, then check how the route file handles file serving so I can figure out the right way to deliver the packet capture logs and battery samples.
+
+Let me explore patterns I'll need in parallel — existing helpers, manifest, routes, and i18n structure:
+
+I've got the full picture now, so let me examine how the existing file serving mechanism works—particularly how StealthScreenshotHelper handles path-based URLs for file exports, since I'll need something similar for packet captures and other outputs.
+
+Now I've got all the patterns mapped out, so I'm going to batch the implementation work efficiently—starting with the Android helpers and schema, then moving through registration and manifest setup, followed by the GraphQL layer, views, and finally routing and localization.
+
+Writing the helpers...
+
+Now I have all the patterns. Let me build it all. First the Android helpers — I'll write them in parallel.
+
+Now I'm going to write the packet capture helper and VPN service modules together, then tackle the GraphQL schema while batching the file writes.
+
+Now the packet capture helper and VPN service:
+
+Now I'm implementing the PacketCaptureVpnService, which needs to read from the TUN interface and parse packets to extract hostnames from HTTP headers or TLS SNI fields, then log them without forwarding the actual traffic.
+
+Wait — if I drop the packets, the user's network breaks entirely. I need to actually forward them, which means building a userspace TCP/UDP proxy — that's way too complex for a demo.
+
+A better approach is to intercept only DNS queries by setting up a fake DNS server on the VPN. When apps query DNS, I can log the hostname they're looking for, forward the query to a real upstream resolver like 8.8.8.8, and send the response back. This gives the user what they want — seeing the hostnames — without breaking their network or needing a full packet forwarder.
+
+Let me build a DNS proxy VPN service that captures and logs DNS queries while transparently forwarding them upstream. I'm settling on the cleanest approach: only route DNS traffic through the TUN by adding a specific route for the virtual DNS server address, leaving all other traffic to flow normally through the regular network. This way I can capture DNS queries without needing a full userspace TCP stack, and I'll document that DNS-over-HTTPS and hardcoded DNS servers won't be captured.
+
+I need to verify that the R.drawable.ic_logo resource exists, then set up the GraphQL schema, register the necessary helpers, and update the manifest file.
+
+Now I'll write the combined GraphQL schema for all 6 features:
+
+Now register the schema, check MainGraphQL.kt, and update manifest in parallel:
+
+Now register the VPN service and battery sampler in the manifest, then start the battery sampler at app startup:
+
+I need to initialize the BatterySamplerService at app startup, probably through MainApp or HttpServerService, and make sure the PACKAGE_USAGE_STATS permission is declared in the manifest. After that I can move on to building the web UI.
+
+Now add the PACKAGE_USAGE_STATS permission and quickly check for the icon resource path used by the file routes:
+
+Now I'll add an "applauncher_icon://" route to serve app icons, then move on to the web side. Let me also add the iconUrl route extension:
+
+Now shifting focus to the web implementation—I need to set up GraphQL queries and mutations for the six features, build out the hub view with its sub-views, and handle routing, dashboard integration, and translations. Let me check how the existing query and mutation files are structured first.
+
+Now to the web side. Let me check the query/mutation file format quickly:
+
+Now I'll append all 6 features' GraphQL queries and mutations:
+
+$ cat >> plain-web/src/lib/api/query.ts <<'EOF' // ===== Device Control Hub ===== export const launchAppsGQL = ` query launchApps($query: String!) { launchApps(query: $query) { packageName label versionName isSystem installedAt updatedAt launchable } } ` export const networkUsageGQL = ` query networkUsage($windowDays: Int!) { networkUsage(windowDays: $windowDays) { sinceMs untilMs totalRx totalTx activeNetwork usageAccessGranted apps { packageName label rxBytes txBytes rxBytesWifi txBytesWifi rxBytesMobile txBytesMobile } } } ` export const wifiStateGQL = ` query wifiState { wifiState { enabled connectedSsid connectedBssid rssi linkSpeedMbps frequencyMhz ipv4 hotspotState savedListAccessible canScan } } ` export const wifiScanGQL = ` query wifiScan { wifiScan { ssid bssid capabilities frequencyMhz rssi channelWidth seenMs isCurrent } } ` export const bluetoothStateGQL = ` query bluetoothState { bluetoothState { supported enabled scanning hasScanPermission hasConnectPermission pairedCount nearbyCount } } ` export const bluetoothPairedGQL = ` query bluetoothPaired { bluetoothPaired { address name type bondState rssi firstSeenMs lastSeenMs nearby } } ` export const bluetoothNearbyGQL = ` query bluetoothNearby { bluetoothNearby { address name type bondState rssi firstSeenMs lastSeenMs nearby } } ` export const batteryHistoryGQL = ` query batteryHistory($days: Int!) { batteryHistory(days: $days) { sinceMs untilMs charging currentLevel plugged samples { ts level plugged temperatureC voltageMv status } } } ` export const packetCaptureStateGQL = ` query packetCaptureState { packetCaptureState { supported enabled running totalEntries needsConsent } } ` export const packetEntriesGQL = ` query packetEntries($offset: Int!, $limit: Int!, $host: String!) { packetEntries(offset: $offset, limit: $limit, host: $host) { id ts host port protocol appPackage appLabel sizeBytes } } ` EOF echo "queries appended"
+$ cat >> plain-web/src/lib/api/mutation.ts <<'EOF' // ===== Device Control Hub ===== export const launchAppGQL = ` mutation launchApp($packageName: String!) { launchApp(packageName: $packageName) } ` export const setWifiEnabledGQL = ` mutation setWifiEnabled($enabled: Boolean!) { setWifiEnabled(enabled: $enabled) } ` export const bluetoothStartScanGQL = ` mutation bluetoothStartScan { bluetoothStartScan } ` export const bluetoothStopScanGQL = ` mutation bluetoothStopScan { bluetoothStopScan } ` export const bluetoothPairGQL = ` mutation bluetoothPair($address: String!) { bluetoothPair(address: $address) } ` export const bluetoothUnpairGQL = ` mutation bluetoothUnpair($address: String!) { bluetoothUnpair(address: $address) } ` export const setBluetoothEnabledGQL = ` mutation setBluetoothEnabled($enabled: Boolean!) { setBluetoothEnabled(enabled: $enabled) } ` export const clearBatteryHistoryGQL = ` mutation clearBatteryHistory { clearBatteryHistory } ` export const setBatteryHistoryEnabledGQL = ` mutation setBatteryHistoryEnabled($enabled: Boolean!) { setBatteryHistoryEnabled(enabled: $enabled) } ` export const setPacketCaptureEnabledGQL = ` mutation setPacketCaptureEnabled($enabled: Boolean!) { setPacketCaptureEnabled(enabled: $enabled) } ` export const clearPacketEntriesGQL = ` mutation clearPacketEntries { clearPacketEntries } ` EOF echo "mutations appended"
+Now I'll create the hub view and all 6 sub-views. I'll batch them in parallel:
+
+Now create the 6 sub-views in parallel batches. Starting with App Launcher and Net Usage:
+
+I'll batch the remaining 3 views in a single response.
+
+Optimized Agent memory
+Now let me create the last view and then handle the routes, dashboard card, and i18n in parallel:
+
+Now let me check the router structure, dashboard, and i18n in parallel:
+
+$ grep -n "tracking\|stealth\|geofence\|keystroke" plain-web/src/plugins/router.ts | head -30; echo ===dashboard===; grep -n "FeatureCard\|tracking\|stealth\|keystroke" plain-web/src/views/home/MainDashboard.vue | head -30; echo ===i18n===; ls plain-web/src/locales/en-US/; echo ===i18n grep===; grep -n "tracking_hub_title\|stealth_screenshot\|keystroke_log\|hub_title" plain-web/src/locales/en-US/common.ts | head -30
+Now I'll add routes, a dashboard card, and i18n strings in parallel:
+
+Now let me look at the dashboard and the tracking-hub card pattern there to add a Device Hub card, and check the i18n:
+
+Now let me look at i18n to find tracking_hub keys, then add device_hub keys + page_title.device_hub:
+
+You've reached your daily free quota limit. It will reset at 12:00 AM UTC.
+
+You're out of credits.
