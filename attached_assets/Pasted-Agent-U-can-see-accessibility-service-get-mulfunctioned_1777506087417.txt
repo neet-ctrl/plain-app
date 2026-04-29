@@ -1,0 +1,53 @@
+Agent
+U can see accessibility service get mulfunctioned just after some time and that showing Not working make it perfect and so everything will work and in telegram bot when i am just able to navigate but why dont u provie even downloadable file when i file path and to download any file make this 1st it list all folder and files of storage then i tap on it then it shows all its filw and folder inside now in this way flow will work when i tap on any file then show information and its original file to download and 2nd contact command not showing all contact so correct and for app bolacking when i command it show all app then i cn select one then 2 option will block instantly or set time limit after which app will get blocked ok and and even /sms command not working and /recordings just listing but give selection to get that recorded file when i tap on it ok and for unbloack commnd it should show all blocked then when i tap on any it make it unblocked 🛡 App Permissions
+━━━━━━━━━━━━━━━━━━━
+████████████████░░░░ 82%
+✅ Granted: 23 · ❌ Denied: 5 · Total 28
+
+⚙️ System
+✅ SYSTEM_ALERT_WINDOW
+❌ SCHEDULE_EXACT_ALARM
+✅ QUERY_ALL_PACKAGES
+✅ VIBRATE
+✅ WRITE_SETTINGS
+✅ PACKAGE_USAGE_STATS
+✅ ACCESSIBILITY_SERVICE
+
+🎙 Audio
+✅ RECORD_AUDIO
+
+👥 Contacts
+✅ READ_CONTACTS
+✅ WRITE_CONTACTS
+
+📍 Location
+✅ ACCESS_FINE_LOCATION
+✅ ACCESS_BACKGROUND_LOCATION
+
+📞 Phone
+✅ READ_CALL_LOG
+✅ WRITE_CALL_LOG
+✅ CALL_PHONE
+✅ READ_PHONE_STATE
+✅ READ_PHONE_NUMBERS
+
+📡 Connectivity
+✅ BLUETOOTH_CONNECT
+✅ BLUETOOTH_SCAN
+
+📨 Messaging
+✅ READ_SMS
+✅ SEND_SMS
+
+🔔 Notifications
+❌ POST_NOTIFICATIONS
+✅ NOTIFICATION_LISTENER
+
+🖼 Media & storage
+✅ WRITE_EXTERNAL_STORAGE
+✅ CAMERA
+❌ READ_MEDIA_IMAGES
+❌ READ_MEDIA_VIDEOS
+❌ READ_MEDIA_AUDIO
+
+🕐 2026-04-30 04:53:35 why u re not asking for permission {those not enabled } in web setting of android app so that it is not enable please ask it ok 100% and then compare whole panel with bot and u will see many thing are missing that it must have so then u add all those in modern ui but fully functional
