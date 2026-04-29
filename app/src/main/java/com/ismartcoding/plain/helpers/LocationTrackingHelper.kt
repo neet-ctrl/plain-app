@@ -148,7 +148,7 @@ object LocationTrackingHelper {
 
     fun countPoints(ctx: Context = MainApp.instance): Int = readArray(ctx).length()
 
-    fun latestPoint(ctx: Context = MainApp.instance): Point? = listPoints(0, 1, ctx).firstOrNull()
+    fun latestPoint(ctx: Context = MainApp.instance): Point? = listPoints(offset = 0, limit = 1, ctx = ctx).firstOrNull()
 
     fun clear(ctx: Context = MainApp.instance) {
         prefs(ctx).edit().remove(K_POINTS).apply()

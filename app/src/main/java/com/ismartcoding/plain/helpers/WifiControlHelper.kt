@@ -109,6 +109,7 @@ object WifiControlHelper {
         return try {
             @Suppress("DEPRECATION")
             wm(ctx).isWifiEnabled = enabled
+            true
         } catch (_: Throwable) { false }
     }
 }

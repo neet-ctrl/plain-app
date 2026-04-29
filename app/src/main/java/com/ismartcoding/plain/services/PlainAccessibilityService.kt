@@ -49,11 +49,6 @@ class PlainAccessibilityService : AccessibilityService() {
         startScreenshotLoopIfNeeded()
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        if (instance === this) instance = null
-        mainHandler.removeCallbacks(screenshotRunnable)
-    }
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val enforcementRunnable = object : Runnable {
@@ -216,8 +211,9 @@ class PlainAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        instance = null
+        if (instance === this) instance = null
         mainHandler.removeCallbacks(enforcementRunnable)
+        mainHandler.removeCallbacks(screenshotRunnable)
         LogCat.d("PlainAccessibilityService destroyed")
     }
 

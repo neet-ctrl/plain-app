@@ -1,0 +1,81 @@
+Skip to content
+plain-app
+Repository navigation
+Code
+Issues
+Actions
+Release APK Build
+Release APK Build #1
+Annotations
+1 error and 2 warnings
+Build Signed Release APK
+failed 1 minute ago in 5m 39s
+4s
+2s
+1s
+0s
+1s
+17s
+0s
+Run gradle/wrapper-validation-action@v3
+Run gradle/actions/wrapper-validation@v3.5.0
+✓ Found known Gradle Wrapper JAR files:
+  e996d452d2645e70c01c11143ca2d3742734a28da2bf61f25c82bdc288c9e637 gradle/wrapper/gradle-wrapper.jar
+Warning: This job uses deprecated functionality from the 'gradle/wrapper-validation-action' action. Consult the logs for more details.
+DEPRECATION: The action `gradle/wrapper-validation-action` has been replaced by `gradle/actions/wrapper-validation`. See https://github.com/gradle/actions/blob/main/docs/deprecation-upgrade-guide.md#the-action-gradlewrapper-validation-action-has-been-replaced-by-gradleactionswrapper-validation
+1s
+0s
+0s
+5m 9s
+Run ./gradlew :app:assembleGithubRelease --no-daemon --stacktrace
+Downloading https://services.gradle.org/distributions/gradle-9.4.1-bin.zip
+.............10%.............20%.............30%.............40%.............50%.............60%..............70%.............80%.............90%.............100%
+
+Welcome to Gradle 9.4.1!
+
+Here are the highlights of this release:
+ - Java 26 support
+ - Non-class-based JVM tests
+ - Enhanced console progress bar
+
+For more details see https://docs.gradle.org/9.4.1/release-notes.html
+
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.4.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+Calculating task graph as no cached configuration is available for tasks: :app:assembleGithubRelease
+
+> Configure project :app
+WARNING: The option setting 'android.disallowKotlinSourceSets=false' is experimental.
+The current default is 'true'.
+w: file:///home/runner/work/plain-app/plain-app/app/build.gradle.kts:142:21: 'fun srcDir(srcDir: Any): Any' is deprecated. Use `directories` mutable set instead.
+
+> Task :lib:preBuild UP-TO-DATE
+> Task :lib:preReleaseBuild UP-TO-DATE
+> Task :lib:mergeReleaseJniLibFolders
+> Task :lib:mergeReleaseNativeLibs NO-SOURCE
+> Task :lib:copyReleaseJniLibsProjectOnly
+> Task :lib:generateReleaseResources
+> Task :lib:packageReleaseResources
+> Task :lib:processReleaseNavigationResources
+> Task :lib:prepareReleaseArtProfile
+> Task :lib:javaPreCompileRelease
+> Task :lib:extractDeepLinksRelease
+> Task :lib:writeReleaseAarMetadata
+> Task :lib:mapReleaseSourceSetPaths
+> Task :lib:parseReleaseLocalResources
+> Task :lib:processReleaseManifest
+> Task :lib:generateReleaseAssets UP-TO-DATE
+> Task :lib:mergeReleaseAssets
+> Task :lib:extractProguardFiles
+> Task :lib:generateReleaseRFile
+> Task :lib:compileReleaseLibraryResources
+0s
+0s
+0s
+0s
+0s
+0s
+0s
+0s
+1s
+0s
