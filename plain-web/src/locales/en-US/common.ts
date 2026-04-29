@@ -135,6 +135,7 @@ export default {
     timeline: 'Timeline',
     talk_mode: 'Talk mode',
     tracking_hub: 'Tracking hub',
+    device_hub: 'Device control hub',
   },
   set_time_limit: 'Set daily time limit',
   time_limit_for: 'Daily time limit for',

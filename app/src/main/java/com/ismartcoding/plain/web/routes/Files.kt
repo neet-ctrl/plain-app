@@ -127,6 +127,14 @@ fun Route.addFiles() {
                     }
                 }
                 call.respond(bytes)
+            } else if (path.startsWith("applauncher_icon://")) {
+                val packageName = path.substring(19)
+                val bytes = com.ismartcoding.plain.helpers.AppLauncherHelper.iconBytes(packageName)
+                if (bytes == null) {
+                    call.respond(HttpStatusCode.NotFound)
+                    return@get
+                }
+                call.respond(bytes)
             } else {
                 val file = File(path)
                 if (!file.exists()) {

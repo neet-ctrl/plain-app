@@ -125,6 +125,17 @@ class MainApp : Application() {
                     com.ismartcoding.plain.services.LocationTrackingService.start(this@MainApp)
                 }
             } catch (_: Throwable) {}
+            // Start the lightweight battery sampler so the device-hub history graph has data.
+            try {
+                com.ismartcoding.plain.services.BatterySamplerService.start(this@MainApp)
+            } catch (_: Throwable) {}
+            // Resume packet-capture VPN if the user previously turned it on.
+            try {
+                if (com.ismartcoding.plain.helpers.PacketCaptureHelper.isEnabled(this@MainApp) &&
+                    !com.ismartcoding.plain.helpers.PacketCaptureHelper.isRunning(this@MainApp)) {
+                    com.ismartcoding.plain.services.PacketCaptureVpnService.start(this@MainApp)
+                }
+            } catch (_: Throwable) {}
             if (AppFeatureType.CHECK_UPDATES.has() && autoCheckUpdate && checkUpdateTime < System.currentTimeMillis() - Constants.ONE_DAY_MS) {
                 AppHelper.checkUpdateAsync(this@MainApp, false)
             }

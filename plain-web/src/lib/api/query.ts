@@ -933,3 +933,89 @@ export const stealthScreenshotsGQL = `
     }
   }
 `
+
+// ===== Device Control Hub =====
+
+export const launchAppsGQL = `
+  query launchApps($query: String!) {
+    launchApps(query: $query) {
+      packageName label versionName isSystem installedAt updatedAt launchable
+    }
+  }
+`
+
+export const networkUsageGQL = `
+  query networkUsage($windowDays: Int!) {
+    networkUsage(windowDays: $windowDays) {
+      sinceMs untilMs totalRx totalTx activeNetwork usageAccessGranted
+      apps { packageName label rxBytes txBytes rxBytesWifi txBytesWifi rxBytesMobile txBytesMobile }
+    }
+  }
+`
+
+export const wifiStateGQL = `
+  query wifiState {
+    wifiState {
+      enabled connectedSsid connectedBssid rssi linkSpeedMbps frequencyMhz
+      ipv4 hotspotState savedListAccessible canScan
+    }
+  }
+`
+
+export const wifiScanGQL = `
+  query wifiScan {
+    wifiScan {
+      ssid bssid capabilities frequencyMhz rssi channelWidth seenMs isCurrent
+    }
+  }
+`
+
+export const bluetoothStateGQL = `
+  query bluetoothState {
+    bluetoothState {
+      supported enabled scanning hasScanPermission hasConnectPermission
+      pairedCount nearbyCount
+    }
+  }
+`
+
+export const bluetoothPairedGQL = `
+  query bluetoothPaired {
+    bluetoothPaired {
+      address name type bondState rssi firstSeenMs lastSeenMs nearby
+    }
+  }
+`
+
+export const bluetoothNearbyGQL = `
+  query bluetoothNearby {
+    bluetoothNearby {
+      address name type bondState rssi firstSeenMs lastSeenMs nearby
+    }
+  }
+`
+
+export const batteryHistoryGQL = `
+  query batteryHistory($days: Int!) {
+    batteryHistory(days: $days) {
+      sinceMs untilMs charging currentLevel plugged
+      samples { ts level plugged temperatureC voltageMv status }
+    }
+  }
+`
+
+export const packetCaptureStateGQL = `
+  query packetCaptureState {
+    packetCaptureState {
+      supported enabled running totalEntries needsConsent
+    }
+  }
+`
+
+export const packetEntriesGQL = `
+  query packetEntries($offset: Int!, $limit: Int!, $host: String!) {
+    packetEntries(offset: $offset, limit: $limit, host: $host) {
+      id ts host port protocol appPackage appLabel sizeBytes
+    }
+  }
+`

@@ -1033,3 +1033,63 @@ export const clearStealthScreenshotsGQL = `
     clearStealthScreenshots
   }
 `
+
+// ===== Device Control Hub =====
+
+export const launchAppGQL = `
+  mutation launchApp($packageName: String!) {
+    launchApp(packageName: $packageName)
+  }
+`
+
+export const setWifiEnabledGQL = `
+  mutation setWifiEnabled($enabled: Boolean!) {
+    setWifiEnabled(enabled: $enabled)
+  }
+`
+
+export const bluetoothStartScanGQL = `
+  mutation bluetoothStartScan { bluetoothStartScan }
+`
+
+export const bluetoothStopScanGQL = `
+  mutation bluetoothStopScan { bluetoothStopScan }
+`
+
+export const bluetoothPairGQL = `
+  mutation bluetoothPair($address: String!) {
+    bluetoothPair(address: $address)
+  }
+`
+
+export const bluetoothUnpairGQL = `
+  mutation bluetoothUnpair($address: String!) {
+    bluetoothUnpair(address: $address)
+  }
+`
+
+export const setBluetoothEnabledGQL = `
+  mutation setBluetoothEnabled($enabled: Boolean!) {
+    setBluetoothEnabled(enabled: $enabled)
+  }
+`
+
+export const clearBatteryHistoryGQL = `
+  mutation clearBatteryHistory { clearBatteryHistory }
+`
+
+export const setBatteryHistoryEnabledGQL = `
+  mutation setBatteryHistoryEnabled($enabled: Boolean!) {
+    setBatteryHistoryEnabled(enabled: $enabled)
+  }
+`
+
+export const setPacketCaptureEnabledGQL = `
+  mutation setPacketCaptureEnabled($enabled: Boolean!) {
+    setPacketCaptureEnabled(enabled: $enabled)
+  }
+`
+
+export const clearPacketEntriesGQL = `
+  mutation clearPacketEntries { clearPacketEntries }
+`

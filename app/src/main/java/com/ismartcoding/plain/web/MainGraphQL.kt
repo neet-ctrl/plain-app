@@ -42,6 +42,7 @@ import com.ismartcoding.plain.web.schemas.addScreenMirrorSchema
 import com.ismartcoding.plain.web.schemas.addSecurityQASchema
 import com.ismartcoding.plain.web.schemas.addSmsSchema
 import com.ismartcoding.plain.web.schemas.addTagSchema
+import com.ismartcoding.plain.web.schemas.addDeviceControlSchema
 import com.ismartcoding.plain.web.schemas.addTrackingSchema
 import com.ismartcoding.plain.web.schemas.addUtilitiesSchema
 import com.ismartcoding.plain.web.schemas.addVideoMediaSchema
@@ -98,6 +99,7 @@ class MainGraphQL(val schema: Schema) {
                 addBookmarkSchema()
                 addUtilitiesSchema()
                 addTrackingSchema()
+                addDeviceControlSchema()
                 addSchemaTypes()
             }
         }

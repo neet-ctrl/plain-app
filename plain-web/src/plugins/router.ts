@@ -232,6 +232,41 @@ const router = createRouter({
           meta: { group: 'tracking_hub' },
         },
         {
+          path: 'device-hub',
+          component: () => import('@/views/device-hub/DeviceHubView.vue'),
+          meta: { group: 'device_hub' },
+        },
+        {
+          path: 'device-hub/app-launcher',
+          component: () => import('@/views/device-hub/AppLauncherView.vue'),
+          meta: { group: 'device_hub' },
+        },
+        {
+          path: 'device-hub/net-usage',
+          component: () => import('@/views/device-hub/NetUsageView.vue'),
+          meta: { group: 'device_hub' },
+        },
+        {
+          path: 'device-hub/wifi',
+          component: () => import('@/views/device-hub/WifiControlView.vue'),
+          meta: { group: 'device_hub' },
+        },
+        {
+          path: 'device-hub/bluetooth',
+          component: () => import('@/views/device-hub/BluetoothView.vue'),
+          meta: { group: 'device_hub' },
+        },
+        {
+          path: 'device-hub/battery',
+          component: () => import('@/views/device-hub/BatteryHistoryView.vue'),
+          meta: { group: 'device_hub' },
+        },
+        {
+          path: 'device-hub/packet-capture',
+          component: () => import('@/views/device-hub/PacketCaptureView.vue'),
+          meta: { group: 'device_hub' },
+        },
+        {
           path: 'app-settings',
           component: () => import('@/views/app-settings/AppSettingsView.vue'),
           meta: { group: 'app_settings' },

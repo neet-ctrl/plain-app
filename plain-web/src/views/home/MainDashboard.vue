@@ -83,6 +83,10 @@
       <template #icon><i-lucide:radar /></template>
     </FeatureCard>
 
+    <FeatureCard to="/device-hub" :title="$t('page_title.device_hub')">
+      <template #icon><i-lucide:settings-2 /></template>
+    </FeatureCard>
+
     <FeatureCard to="/call-recordings" :title="$t('call_recordings')">
       <template #icon><i-lucide:phone-call /></template>
     </FeatureCard>
