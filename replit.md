@@ -291,3 +291,14 @@ Re-imagined `/apps` as an interactive Telegram inline-keyboard browser instead o
 - **TelegramApiClient changes**: `inlineKeyboard` now treats a `url:` prefix as an InlineKeyboardButton URL; `sendPhoto` now sends `parse_mode=HTML` and uses the correct mime per file extension (so the icon caption renders `<code>` properly).
 
 New callback prefixes added: `apps_pg`, `apps_q`, `appd`, `appl`, `appst`, `appblock`, `appunblock`, `applimit`, `appclim`, `appapk`, `appicn`, `appcp`, `appu`, `appuok`. New pending-input action: `appsearch`.
+
+## Telegram bot — `/mutenotifs` command (April 30, 2026)
+
+Added a one-shot mute switch for the notification forwarding stream so the user can shush the bot without disabling the underlying NotificationListener service.
+
+- **`/mutenotifs`** — flips current state
+- **`/mutenotifs on`** (aliases: `1`, `true`, `yes`, `mute`) — silences forwards
+- **`/mutenotifs off`** (aliases: `0`, `false`, `no`, `unmute`) — resumes forwards
+- Aliases for the command itself: `/mutenotif`, `/mutenotifications`, `/shutup`, `/silence`
+- Toggle is volatile (in-memory `forwardNotifications` flag in `TelegramBotManager`) and survives until the bot process is restarted; it does NOT touch the device's notification listener — `/notifications` and `/logs` continue to work and the local notification log keeps recording.
+- Confirmation messages include an inline-keyboard button ("🔔 Resume forwards" / "🔕 Mute again") wired to `notif_mute` / `notif_unmute` callbacks for one-tap reverse.

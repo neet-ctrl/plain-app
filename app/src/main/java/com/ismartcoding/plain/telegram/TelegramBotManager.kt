@@ -103,6 +103,7 @@ object TelegramBotManager {
         "contacts" to "👥 Browse contacts — tap to call, SMS, or share",
         "find" to "🔍 Reverse-lookup a phone number — /find <number>",
         "notifications" to "🔔 Recent notifications",
+        "mutenotifs" to "🔕 Mute / unmute auto-forwarded notifications — /mutenotifs [on|off]",
         "logs" to "📋 Notification log history",
         "files" to "📁 Browse storage — tap folders to open, files to download",
         "screenshot" to "📸 Take a screenshot",
@@ -365,6 +366,7 @@ object TelegramBotManager {
                     "contacts" -> cmdContacts(args)
                     "find", "findcontact", "lookup", "whois" -> cmdFind(args)
                     "notifications" -> cmdNotifications(args)
+                    "mutenotifs", "mutenotif", "mutenotifications", "shutup", "silence" -> cmdMuteNotifs(args)
                     "logs" -> cmdLogs(args)
                     "files" -> cmdFiles(args)
                     "screenshot" -> cmdScreenshot()
@@ -696,6 +698,24 @@ object TelegramBotManager {
                         AppBlockHelper.setBlocked(rest, false)
                         TelegramApiClient.answerCallbackQuery(token, cqId, "Unblocked")
                         renderUnblockPicker(editMessageId = messageId)
+                    }
+                    "notif_mute" -> {
+                        forwardNotifications = false
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Notifications muted", false)
+                        TelegramApiClient.editMessageText(
+                            token, chatId, messageId,
+                            "🔕 <b>Notification forwarding muted.</b>\nSend <code>/mutenotifs off</code> to resume.",
+                            replyMarkup = TelegramApiClient.inlineKeyboard(listOf(listOf("🔔 Resume forwards" to "notif_unmute")))
+                        )
+                    }
+                    "notif_unmute" -> {
+                        forwardNotifications = true
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Notifications resumed", false)
+                        TelegramApiClient.editMessageText(
+                            token, chatId, messageId,
+                            "🔔 <b>Notification forwarding resumed.</b>\nNew device notifications will appear here again.",
+                            replyMarkup = TelegramApiClient.inlineKeyboard(listOf(listOf("🔕 Mute again" to "notif_mute")))
+                        )
                     }
                     // ---- /apps modern picker ----
                     "apps_pg" -> {
@@ -1554,6 +1574,48 @@ object TelegramBotManager {
             if (sb.length > 3500) { sb.append("…truncated"); return@forEachIndexed }
         }
         sendMessage(sb.toString())
+    }
+
+    /**
+     * Toggle the auto-forwarding of incoming Android notifications to this Telegram chat.
+     *
+     * `/mutenotifs`        — flips the current state
+     * `/mutenotifs on`     — silences forwards (notifications still get logged on the device)
+     * `/mutenotifs off`    — resumes forwards immediately
+     *
+     * Only the bot stream is affected — the device keeps logging notifications normally
+     * and `/notifications` / `/logs` still work as before.
+     */
+    private fun cmdMuteNotifs(args: List<String>) {
+        val arg = args.firstOrNull()?.lowercase()
+        val newMuted = when (arg) {
+            "on", "1", "true", "yes", "mute" -> true
+            "off", "0", "false", "no", "unmute" -> false
+            null, "" -> forwardNotifications  // no arg → flip current state
+            else -> {
+                sendMessage("❓ Use <code>/mutenotifs on</code> to silence, <code>/mutenotifs off</code> to resume, or <code>/mutenotifs</code> alone to toggle.")
+                return
+            }
+        }
+        forwardNotifications = !newMuted
+        if (newMuted) {
+            sendMessage(
+                "🔕 <b>Notification forwarding muted.</b>\n" +
+                "I'll stop pushing 🔔 alerts to this chat until you send <code>/mutenotifs off</code>.\n" +
+                "<i>Your phone keeps receiving them as usual — only this Telegram stream is paused.</i>",
+                replyMarkup = TelegramApiClient.inlineKeyboard(listOf(
+                    listOf("🔔 Resume forwards" to "notif_unmute"),
+                ))
+            )
+        } else {
+            sendMessage(
+                "🔔 <b>Notification forwarding resumed.</b>\n" +
+                "New device notifications will appear here again.",
+                replyMarkup = TelegramApiClient.inlineKeyboard(listOf(
+                    listOf("🔕 Mute again" to "notif_mute"),
+                ))
+            )
+        }
     }
 
     private fun cmdLogs(args: List<String>) {
