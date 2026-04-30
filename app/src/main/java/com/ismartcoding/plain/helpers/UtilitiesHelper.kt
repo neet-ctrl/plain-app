@@ -71,6 +71,32 @@ object UtilitiesHelper {
         try { tts?.stop() } catch (_: Exception) {}
     }
 
+    // ---------------- Toast ----------------
+
+    /**
+     * Show a short Android Toast on the device. Always run on the main looper —
+     * Toasts crash with `RuntimeException: Can't toast on a thread that has not
+     * called Looper.prepare()` when posted from a worker (Telegram bot polling
+     * thread, GraphQL resolver thread, etc.).
+     *
+     * `longToast=true` uses LENGTH_LONG (~3.5 s) instead of the default LENGTH_SHORT (~2 s).
+     */
+    fun toast(text: String, longToast: Boolean = false) {
+        if (text.isBlank()) return
+        val ctx = MainApp.instance
+        Handler(Looper.getMainLooper()).post {
+            try {
+                android.widget.Toast.makeText(
+                    ctx,
+                    text,
+                    if (longToast) android.widget.Toast.LENGTH_LONG else android.widget.Toast.LENGTH_SHORT,
+                ).show()
+            } catch (e: Exception) {
+                LogCat.e("Toast failed: ${e.message}", e)
+            }
+        }
+    }
+
     // ---------------- Vibrate ----------------
 
     @Suppress("DEPRECATION")

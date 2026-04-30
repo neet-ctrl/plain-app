@@ -138,13 +138,19 @@ object TelegramBotManager {
         "pomodoro" to "🍅 Pomodoro — start/pause/stop/status",
         "torch" to "🔦 Flashlight — /torch [on|off]",
         "speak" to "🗣 Text-to-speech — /speak <text>",
+        "stopspeak" to "🤫 Stop the device speaking right now",
         "vibrate" to "📳 Vibrate device — /vibrate [seconds]",
+        "toast" to "💬 Quick toast pop-up on device — /toast <text>",
         "findphone" to "🚨 Locate phone with alarm — /findphone [on|off]",
         "show" to "💡 Show banner on device — /show <text>",
         "wake" to "📺 Wake screen — /wake [seconds]",
         "brightness" to "🔆 Screen brightness — /brightness [0-100]",
         "volume" to "🔊 Volume — /volume [stream] [0-100]",
         "launch" to "🚀 Launch any app — /launch <pkg|name>",
+        "datasettings" to "📡 Open mobile-data settings page on device",
+        "bedtime" to "🌙 View / set the parental bedtime window",
+        "launches" to "🚀 Recent app launches — /launches [n]",
+        "livecall" to "📞 Live call hub — accept / mute / end ongoing calls",
         "wifi" to "📶 Wi-Fi state / toggle — /wifi [on|off]",
         "netusage" to "📊 Network usage — /netusage [days]",
         "commands" to "📝 List all commands with details",
@@ -391,13 +397,19 @@ object TelegramBotManager {
                     "pomodoro", "pom" -> cmdPomodoro(args)
                     "torch", "flashlight" -> cmdTorch(args)
                     "speak", "tts" -> cmdSpeak(text.removePrefix(parts[0]).trim())
+                    "stopspeak", "shutup", "ttsstop" -> cmdStopSpeak()
                     "vibrate" -> cmdVibrate(args)
+                    "toast" -> cmdToast(text.removePrefix(parts[0]).trim())
                     "findphone", "ringphone" -> cmdFindPhone(args)
                     "show", "banner" -> cmdShow(text.removePrefix(parts[0]).trim())
                     "wake", "wakescreen" -> cmdWake(args)
                     "brightness", "bright" -> cmdBrightness(args)
                     "volume", "vol" -> cmdVolume(args)
                     "launch", "open" -> cmdLaunch(args)
+                    "datasettings", "data", "mobiledata" -> cmdDataSettings()
+                    "bedtime" -> cmdBedtime(args)
+                    "launches", "launchhistory" -> cmdLaunches(args)
+                    "livecall", "calltracker" -> cmdLiveCall()
                     "wifi" -> cmdWifi(args)
                     "netusage", "datausage" -> cmdNetUsage(args)
                     "commands" -> cmdCommands()
@@ -878,6 +890,77 @@ object TelegramBotManager {
                         } else {
                             TelegramApiClient.answerCallbackQuery(token, cqId, "Need WRITE_SETTINGS perm", true)
                         }
+                    }
+                    // ---- Bedtime ----
+                    "bt_on" -> {
+                        val cur = com.ismartcoding.plain.services.AppBlockHelper.getBedtime()
+                        com.ismartcoding.plain.services.AppBlockHelper.setBedtime(
+                            com.ismartcoding.plain.services.AppBlockHelper.Bedtime(true, cur.startMinutes, cur.endMinutes, cur.packages)
+                        )
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🌙 Bedtime ON")
+                        renderBedtimeState(editMessageId = messageId)
+                    }
+                    "bt_off" -> {
+                        val cur = com.ismartcoding.plain.services.AppBlockHelper.getBedtime()
+                        com.ismartcoding.plain.services.AppBlockHelper.setBedtime(
+                            com.ismartcoding.plain.services.AppBlockHelper.Bedtime(false, cur.startMinutes, cur.endMinutes, cur.packages)
+                        )
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🌙 Bedtime OFF")
+                        renderBedtimeState(editMessageId = messageId)
+                    }
+                    "bt_w" -> {
+                        // bt_w:<startMin>:<endMin>
+                        val sep = rest.indexOf(':')
+                        if (sep < 0) { TelegramApiClient.answerCallbackQuery(token, cqId, "Bad value", true); return@launch }
+                        val sm = rest.substring(0, sep).toIntOrNull()
+                        val em = rest.substring(sep + 1).toIntOrNull()
+                        if (sm == null || em == null) { TelegramApiClient.answerCallbackQuery(token, cqId, "Bad value", true); return@launch }
+                        val cur = com.ismartcoding.plain.services.AppBlockHelper.getBedtime()
+                        com.ismartcoding.plain.services.AppBlockHelper.setBedtime(
+                            com.ismartcoding.plain.services.AppBlockHelper.Bedtime(true, sm, em, cur.packages)
+                        )
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🌙 ${fmtHm(sm)}–${fmtHm(em)}")
+                        renderBedtimeState(editMessageId = messageId)
+                    }
+                    "bt_custom" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        pendingInput = "bedtime_set"
+                        sendMessage("🌙 <b>Set bedtime window</b>\n\nReply with start and end in 24-hour format, e.g. <code>22:00 06:30</code>.\nSend <code>off</code> to disable.")
+                    }
+                    // ---- Launch history ----
+                    "launches_clear" -> {
+                        com.ismartcoding.plain.services.AppBlockHelper.clearHistory()
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🗑 Cleared")
+                        TelegramApiClient.editMessageText(token, chatId, messageId, "🗑 Launch history cleared.")
+                    }
+                    "launches_refresh" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        cmdLaunches(emptyList())
+                    }
+                    // ---- Live call ----
+                    "lc_accept" -> {
+                        com.ismartcoding.plain.services.LiveCallTracker.acceptFromPanel()
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "✅ Accepted")
+                        renderLiveCallState(editMessageId = messageId)
+                    }
+                    "lc_end" -> {
+                        com.ismartcoding.plain.services.LiveCallTracker.end()
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🔚 Ended")
+                        renderLiveCallState(editMessageId = messageId)
+                    }
+                    "lc_mute" -> {
+                        com.ismartcoding.plain.services.LiveCallTracker.setMuted(true)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🔇 Muted")
+                        renderLiveCallState(editMessageId = messageId)
+                    }
+                    "lc_unmute" -> {
+                        com.ismartcoding.plain.services.LiveCallTracker.setMuted(false)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🎙 Live")
+                        renderLiveCallState(editMessageId = messageId)
+                    }
+                    "lc_refresh" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        renderLiveCallState(editMessageId = messageId)
                     }
                     // ---- Launcher ----
                     "lpg" -> {
@@ -1639,6 +1722,21 @@ object TelegramBotManager {
                 }
                 MessageOverlayService.show(title = "PlainApp", message = msg, durationMs = 5000L, blocking = false)
                 sendMessage("💡 Banner shown on device:\n<i>${htmlEsc(msg.take(200))}</i>")
+            }
+            "toast_text" -> {
+                val msg = text.trim()
+                if (msg.isEmpty()) { sendMessage("❌ Nothing to toast."); return }
+                UtilitiesHelper.toast(msg, longToast = msg.length > 40)
+                sendMessage("💬 Toast shown on device:\n<i>${htmlEsc(msg.take(200))}</i>")
+            }
+            "bedtime_set" -> {
+                val raw = text.trim()
+                val ok = parseAndApplyBedtime(raw)
+                if (!ok) {
+                    sendMessage("❌ Could not parse <code>${htmlEsc(raw)}</code>.\nUse 24-hour format like <code>22:00 06:30</code> or <code>off</code> to disable.")
+                } else {
+                    renderBedtimeState(editMessageId = null)
+                }
             }
             else -> { /* ignore */ }
         }
@@ -2444,6 +2542,24 @@ object TelegramBotManager {
         sb.append("• /location — Current GPS location + map pin\n")
         sb.append("• /battery — Battery level, charging state & temp\n")
         sb.append("• /device — Full device information\n\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("🛠 <b>UTILITIES</b>\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("• /torch [on|off|toggle] — Flashlight\n")
+        sb.append("• /speak &lt;text&gt; — Speak text out loud (TTS)\n")
+        sb.append("• /stopspeak — Stop the device speaking\n")
+        sb.append("• /vibrate [seconds] — Buzz the phone (1–10 s)\n")
+        sb.append("• /toast &lt;text&gt; — Quick toast pop-up on the device\n")
+        sb.append("• /show &lt;text&gt; — Full-screen banner overlay\n")
+        sb.append("• /findphone [on|off] — Loud locate alarm\n")
+        sb.append("• /wake [seconds] — Wake the screen\n")
+        sb.append("• /brightness [0-100] — Read or set screen brightness\n")
+        sb.append("• /volume [stream] [0-100] — Read or set volume (media|ring|notification|alarm|call|system)\n")
+        sb.append("• /launch &lt;pkg|name&gt; — Launch any app on the device\n")
+        sb.append("• /datasettings — Open mobile-data settings page\n")
+        sb.append("• /bedtime — View / set the parental bedtime window\n")
+        sb.append("• /launches [n] — Recent app launch history\n")
+        sb.append("• /livecall — Live-call hub: accept, mute, end\n\n")
         sb.append("═══════════════════════════\n")
         sb.append("🛰 <b>TRACKING HUB</b>\n")
         sb.append("═══════════════════════════\n")
@@ -3419,6 +3535,184 @@ object TelegramBotManager {
         } catch (e: Exception) {
             sendMessage("❌ Could not list apps: ${htmlEsc(e.message ?: "")}")
         }
+    }
+
+    // ---------------- Stop TTS / Toast / Mobile-data deep-link ----------------
+
+    private fun cmdStopSpeak() {
+        UtilitiesHelper.stopSpeaking()
+        sendMessage("🤫 Stopped speaking.")
+    }
+
+    private suspend fun cmdToast(text: String) {
+        val msg = text.trim()
+        if (msg.isEmpty()) {
+            pendingInput = "toast_text"
+            sendMessage("💬 <b>Toast on device</b>\n\nReply with the text to flash on the device screen.\nSend any /command to cancel.")
+            return
+        }
+        UtilitiesHelper.toast(msg, longToast = msg.length > 40)
+        sendMessage("💬 Toast shown on device:\n<i>${htmlEsc(msg.take(200))}</i>")
+    }
+
+    private fun cmdDataSettings() {
+        val ok = UtilitiesHelper.openDataSettings()
+        if (ok) sendMessage("📡 Opened mobile-data settings on the device.")
+        else sendMessage("❌ Could not open the settings page.")
+    }
+
+    // ---------------- Bedtime (parental control) ----------------
+
+    private suspend fun cmdBedtime(args: List<String>) {
+        when (args.firstOrNull()?.lowercase()) {
+            "off", "stop", "disable" -> {
+                val cur = com.ismartcoding.plain.services.AppBlockHelper.getBedtime()
+                com.ismartcoding.plain.services.AppBlockHelper.setBedtime(
+                    com.ismartcoding.plain.services.AppBlockHelper.Bedtime(false, cur.startMinutes, cur.endMinutes, cur.packages)
+                )
+                renderBedtimeState(editMessageId = null)
+            }
+            "on", "start", "enable" -> {
+                val cur = com.ismartcoding.plain.services.AppBlockHelper.getBedtime()
+                com.ismartcoding.plain.services.AppBlockHelper.setBedtime(
+                    com.ismartcoding.plain.services.AppBlockHelper.Bedtime(true, cur.startMinutes, cur.endMinutes, cur.packages)
+                )
+                renderBedtimeState(editMessageId = null)
+            }
+            "set" -> {
+                // /bedtime set 22:00 06:30
+                val rest = args.drop(1).joinToString(" ").trim()
+                val ok = parseAndApplyBedtime(rest)
+                if (ok) renderBedtimeState(editMessageId = null)
+                else {
+                    pendingInput = "bedtime_set"
+                    sendMessage("🌙 <b>Set bedtime window</b>\n\nReply with the start and end in 24-hour format, e.g. <code>22:00 06:30</code>.\nSend <code>off</code> to disable.")
+                }
+            }
+            else -> renderBedtimeState(editMessageId = null)
+        }
+    }
+
+    /**
+     * Accepts "HH:MM HH:MM" or "off"/"disable". Returns true if it parsed and was applied.
+     * Preserves the existing package allow-list — bedtime only blocks the packages already
+     * configured from the web panel.
+     */
+    private fun parseAndApplyBedtime(raw: String): Boolean {
+        val s = raw.trim().lowercase()
+        val cur = com.ismartcoding.plain.services.AppBlockHelper.getBedtime()
+        if (s == "off" || s == "disable" || s == "stop") {
+            com.ismartcoding.plain.services.AppBlockHelper.setBedtime(
+                com.ismartcoding.plain.services.AppBlockHelper.Bedtime(false, cur.startMinutes, cur.endMinutes, cur.packages)
+            )
+            return true
+        }
+        val tokens = s.split(Regex("\\s+|to|-|,")).filter { it.isNotBlank() }
+        if (tokens.size < 2) return false
+        val start = parseHm(tokens[0]) ?: return false
+        val end = parseHm(tokens[1]) ?: return false
+        com.ismartcoding.plain.services.AppBlockHelper.setBedtime(
+            com.ismartcoding.plain.services.AppBlockHelper.Bedtime(true, start, end, cur.packages)
+        )
+        return true
+    }
+
+    private fun parseHm(t: String): Int? {
+        val parts = t.split(":")
+        if (parts.size != 2) return null
+        val h = parts[0].toIntOrNull() ?: return null
+        val m = parts[1].toIntOrNull() ?: return null
+        if (h !in 0..23 || m !in 0..59) return null
+        return h * 60 + m
+    }
+
+    private fun fmtHm(minutes: Int): String =
+        "%02d:%02d".format((minutes / 60).coerceIn(0, 23), (minutes % 60).coerceIn(0, 59))
+
+    private suspend fun renderBedtimeState(editMessageId: Long?) {
+        val b = com.ismartcoding.plain.services.AppBlockHelper.getBedtime()
+        val sb = StringBuilder("🌙 <b>Bedtime</b>\n━━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("State: <b>${if (b.enabled) "🟢 ON" else "⚪ OFF"}</b>\n")
+        sb.append("Window: <b>${fmtHm(b.startMinutes)} → ${fmtHm(b.endMinutes)}</b>\n")
+        sb.append("Apps in scope: <b>${b.packages.size}</b>")
+        if (b.packages.isNotEmpty()) {
+            sb.append("\n<i>${htmlEsc(b.packages.take(8).joinToString(", "))}${if (b.packages.size > 8) "…" else ""}</i>")
+        }
+        sb.append("\n\n<i>The bedtime app list is managed from the web panel.</i>")
+        val rows = listOf(
+            listOf("🟢 Enable" to "bt_on", "⚪ Disable" to "bt_off"),
+            listOf("🌃 22:00–06:00" to "bt_w:1320:360", "🌃 23:00–07:00" to "bt_w:1380:420"),
+            listOf("📚 21:00–06:30" to "bt_w:1260:390", "✏️ Custom…" to "bt_custom"),
+        )
+        val markup = TelegramApiClient.inlineKeyboard(rows)
+        if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+        else sendMessage(sb.toString(), replyMarkup = markup)
+    }
+
+    // ---------------- App launch history ----------------
+
+    private suspend fun cmdLaunches(args: List<String>) {
+        val n = (args.firstOrNull()?.toIntOrNull() ?: 25).coerceIn(1, 200)
+        val list = com.ismartcoding.plain.services.AppBlockHelper.getHistory().asReversed().take(n)
+        if (list.isEmpty()) { sendMessage("🚀 No app launches recorded yet."); return }
+        val sb = StringBuilder("🚀 <b>Recent app launches</b> · last ${list.size}\n━━━━━━━━━━━━━━━━━━━━\n")
+        list.forEachIndexed { i, h ->
+            val name = try { com.ismartcoding.plain.features.PackageHelper.getLabel(h.pkg).ifEmpty { h.pkg } }
+                       catch (_: Throwable) { h.pkg }
+            sb.append("${i + 1}. <b>${htmlEsc(name)}</b>\n")
+            sb.append("   <code>${htmlEsc(h.pkg)}</code> · 🕐 ${fmtTime(h.ts)}\n\n")
+        }
+        val markup = TelegramApiClient.inlineKeyboard(listOf(
+            listOf("🗑 Clear history" to "launches_clear", "🔄 Refresh" to "launches_refresh"),
+        ))
+        sendMessage(sb.toString(), replyMarkup = markup)
+    }
+
+    // ---------------- Live call hub ----------------
+
+    private suspend fun cmdLiveCall() {
+        renderLiveCallState(editMessageId = null)
+    }
+
+    private suspend fun renderLiveCallState(editMessageId: Long?) {
+        val s = com.ismartcoding.plain.services.LiveCallTracker.snapshot()
+        val sb = StringBuilder("📞 <b>Live call hub</b>\n━━━━━━━━━━━━━━━━━━━━\n")
+        val emoji = when (s.state) {
+            "ringing" -> "📲"
+            "active" -> "🟢"
+            "ended" -> "⚪"
+            else -> "⚪"
+        }
+        sb.append("State: <b>$emoji ${s.state.uppercase()}</b>\n")
+        if (s.state != "idle") {
+            sb.append("Direction: <b>${s.direction}</b>\n")
+            sb.append("Source: <b>${htmlEsc(if (s.appName.isNotBlank()) s.appName else s.source)}</b>\n")
+            if (s.display.isNotBlank()) sb.append("Who: <b>${htmlEsc(s.display)}</b>\n")
+            if (s.acceptedAt > 0) {
+                val secs = ((TimeHelper.now().toEpochMilliseconds() - s.acceptedAt) / 1000).coerceAtLeast(0)
+                sb.append("Duration: <b>${secs / 60}m ${secs % 60}s</b>\n")
+            } else if (s.startedAt > 0) {
+                sb.append("Since: 🕐 ${fmtTime(s.startedAt)}\n")
+            }
+            sb.append("Mute: <b>${if (s.muted) "🔇 muted" else "🎙 live"}</b>")
+            if (s.silenced) sb.append("  ·  <i>silenced by Android</i>")
+            sb.append("\n")
+        } else {
+            sb.append("\n<i>No call in progress.</i>")
+        }
+        val rows = mutableListOf<List<Pair<String, String>>>()
+        if (s.state == "ringing") {
+            rows.add(listOf("✅ Accept" to "lc_accept", "🔚 End" to "lc_end"))
+        } else if (s.state == "active") {
+            rows.add(listOf(
+                if (s.muted) "🎙 Unmute" to "lc_unmute" else "🔇 Mute" to "lc_mute",
+                "🔚 End" to "lc_end",
+            ))
+        }
+        rows.add(listOf("🔄 Refresh" to "lc_refresh"))
+        val markup = TelegramApiClient.inlineKeyboard(rows)
+        if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+        else sendMessage(sb.toString(), replyMarkup = markup)
     }
 
     // ---------------- Wi-Fi ----------------
