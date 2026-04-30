@@ -190,6 +190,26 @@ object TelegramApiClient {
         return post(token, "sendLocation", json)
     }
 
+    fun sendContact(
+        token: String,
+        chatId: String,
+        phoneNumber: String,
+        firstName: String,
+        lastName: String? = null,
+        vcard: String? = null,
+        replyMarkup: JSONObject? = null,
+    ): Boolean {
+        val json = JSONObject().apply {
+            put("chat_id", chatId)
+            put("phone_number", phoneNumber)
+            put("first_name", firstName)
+            if (!lastName.isNullOrBlank()) put("last_name", lastName)
+            if (!vcard.isNullOrBlank()) put("vcard", vcard)
+            if (replyMarkup != null) put("reply_markup", replyMarkup)
+        }
+        return post(token, "sendContact", json)
+    }
+
     fun sendChatAction(token: String, chatId: String, action: String = "typing"): Boolean {
         val json = JSONObject().apply {
             put("chat_id", chatId)

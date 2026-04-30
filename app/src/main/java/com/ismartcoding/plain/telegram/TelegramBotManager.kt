@@ -82,7 +82,7 @@ object TelegramBotManager {
         "sendsms" to "📤 Send SMS — /sendsms <number> <text>",
         "calls" to "📞 Recent call log",
         "recordings" to "🎙️ Call recordings — tap to download",
-        "contacts" to "👥 Browse contacts (paginated)",
+        "contacts" to "👥 Browse contacts — tap to call, SMS, or share",
         "notifications" to "🔔 Recent notifications",
         "logs" to "📋 Notification log history",
         "files" to "📁 Browse storage — tap folders to open, files to download",
@@ -441,6 +441,45 @@ object TelegramBotManager {
                         val off = rest.substring(sep + 1).toIntOrNull() ?: 0
                         renderContactsPage(q, off, editMessageId = messageId)
                     }
+                    "c_view" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        // rest = "<rawId>:<q>:<offset>" — we only need rawId; the back state is tracked globally.
+                        val rawId = rest.substringBefore(':')
+                        renderContactDetail(rawId, editMessageId = messageId)
+                    }
+                    "c_back" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        renderContactsPage(lastContactsQuery, lastContactsOffset, editMessageId = messageId)
+                    }
+                    "c_call" -> {
+                        val num = phoneFromToken(rest)
+                        if (num == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Number expired", true)
+                        } else {
+                            try {
+                                CallMediaStoreHelper.call(MainApp.instance, num)
+                                TelegramApiClient.answerCallbackQuery(token, cqId, "📞 Calling $num…")
+                                sendMessage("📞 Placing call to <code>${htmlEsc(num)}</code> on the device.\n<i>If nothing happens, grant the Phone (CALL_PHONE) permission in PlainApp.</i>")
+                            } catch (e: Exception) {
+                                TelegramApiClient.answerCallbackQuery(token, cqId, "Failed", true)
+                                sendMessage("❌ Could not place call: ${htmlEsc(e.message ?: "")}")
+                            }
+                        }
+                    }
+                    "c_sms" -> {
+                        val num = phoneFromToken(rest)
+                        if (num == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Number expired", true)
+                        } else {
+                            TelegramApiClient.answerCallbackQuery(token, cqId)
+                            pendingInput = "sms_to:${phoneToken(num)}"
+                            sendMessage("💬 <b>Send SMS to <code>${htmlEsc(num)}</code></b>\n\nReply with the message text.\nSend any /command to cancel.")
+                        }
+                    }
+                    "c_share" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Sharing contact…")
+                        cbShareContact(rest)
+                    }
                     "block_list" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
                         val off = rest.toIntOrNull() ?: 0
@@ -737,6 +776,10 @@ object TelegramBotManager {
         }
     }
 
+    /** Last list state, used so the contact-detail "Back to list" button restores the right page. */
+    @Volatile private var lastContactsQuery: String = ""
+    @Volatile private var lastContactsOffset: Int = 0
+
     private suspend fun cmdContacts(args: List<String>) {
         sendTyping()
         val query = if (args.isNotEmpty()) "text:${args.joinToString(" ")}" else ""
@@ -744,6 +787,8 @@ object TelegramBotManager {
     }
 
     private suspend fun renderContactsPage(query: String, offset: Int, editMessageId: Long?) {
+        lastContactsQuery = query
+        lastContactsOffset = offset
         try {
             val pageSize = 20
             val contacts = ContactMediaStoreHelper.searchAsync(MainApp.instance, query, pageSize + 1, offset)
@@ -757,27 +802,28 @@ object TelegramBotManager {
                 return
             }
             val title = if (query.isEmpty()) "👥 <b>Contacts</b>" else "👥 <b>Contacts</b> · <i>${htmlEsc(query.removePrefix("text:"))}</i>"
-            val sb = StringBuilder("$title\nShowing ${offset + 1}–${offset + pageItems.size}\n\n")
+            val sb = StringBuilder("$title  ·  Showing ${offset + 1}–${offset + pageItems.size}\n")
+            sb.append("<i>Tap a contact to call, message, or share.</i>\n\n")
+            val rows = mutableListOf<List<Pair<String, String>>>()
             pageItems.forEachIndexed { i, c ->
                 val display = contactDisplayName(c)
-                sb.append("${offset + i + 1}. 👤 <b>${htmlEsc(display)}</b>\n")
-                c.phoneNumbers.forEachIndexed { j, ph ->
-                    if (j < 3) sb.append("   📞 <code>${htmlEsc(ph.value)}</code>\n")
-                }
-                c.emails.forEachIndexed { j, em ->
-                    if (j < 2) sb.append("   📧 <code>${htmlEsc(em.value)}</code>\n")
-                }
+                val firstPhone = c.phoneNumbers.firstOrNull()?.value
+                val previewPhone = if (firstPhone != null) "  ·  📞 ${htmlEsc(firstPhone)}" else ""
+                sb.append("${offset + i + 1}. 👤 <b>${htmlEsc(display)}</b>$previewPhone\n")
                 if (c.organization != null && c.organization!!.company.isNotBlank()) {
                     sb.append("   🏢 ${htmlEsc(c.organization!!.company)}\n")
                 }
-                sb.append("\n")
-                if (sb.length > 3600) return@forEachIndexed
+                // 1-button row per contact = clean modern list
+                val q = query.ifEmpty { "_" }
+                val btnLabel = "${offset + i + 1}. ${display.take(28)}"
+                rows.add(listOf(btnLabel to "c_view:${c.id}:$q:$offset"))
             }
             val nav = mutableListOf<Pair<String, String>>()
             val q = query.ifEmpty { "_" }
             if (offset > 0) nav.add("◀️ Prev" to "contacts_pg:$q:${(offset - pageSize).coerceAtLeast(0)}")
             if (hasMore) nav.add("Next ▶️" to "contacts_pg:$q:${offset + pageSize}")
-            val markup = if (nav.isNotEmpty()) TelegramApiClient.inlineKeyboard(listOf(nav)) else null
+            if (nav.isNotEmpty()) rows.add(nav)
+            val markup = TelegramApiClient.inlineKeyboard(rows)
             if (editMessageId != null) {
                 TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
             } else {
@@ -830,6 +876,16 @@ object TelegramBotManager {
         return hex
     }
     private fun pathFromToken(token: String): String? = pathTokens[token]
+
+    /** Phone-number tokens — keeps callback_data short and avoids escaping issues with +, spaces, etc. */
+    private val phoneTokens = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private fun phoneToken(num: String): String {
+        val md = java.security.MessageDigest.getInstance("MD5")
+        val hex = md.digest(num.toByteArray()).joinToString("") { "%02x".format(it) }.take(10)
+        phoneTokens[hex] = num
+        return hex
+    }
+    private fun phoneFromToken(t: String): String? = phoneTokens[t]
 
     private fun cmdFiles(args: List<String>) {
         val path = if (args.isNotEmpty()) args.joinToString(" ") else defaultStorageRoot()
@@ -1102,8 +1158,154 @@ object TelegramBotManager {
                 }
                 runVideoRecording(n, useFront = cam == "front")
             }
+            "sms_to" -> {
+                val tok = parts.getOrNull(1) ?: return
+                val num = phoneFromToken(tok)
+                if (num.isNullOrBlank()) {
+                    sendMessage("⚠️ Number expired. Open the contact again and tap 💬 SMS.")
+                    return
+                }
+                val body = text.trim()
+                if (body.isEmpty()) {
+                    sendMessage("❌ Empty message — nothing was sent.")
+                    return
+                }
+                try {
+                    SmsHelper.sendText(num, body)
+                    sendMessage("✅ SMS sent to <code>${htmlEsc(num)}</code>:\n<i>${htmlEsc(body)}</i>")
+                } catch (e: Exception) {
+                    sendMessage("❌ Failed to send SMS: ${htmlEsc(e.message ?: "")}")
+                }
+            }
             else -> { /* ignore */ }
         }
+    }
+
+    private suspend fun renderContactDetail(rawId: String, editMessageId: Long?) {
+        try {
+            val c = ContactMediaStoreHelper.getByIdAsync(MainApp.instance, rawId)
+            if (c == null) {
+                val msg = "❌ Contact not found (id $rawId)."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+                else sendMessage(msg)
+                return
+            }
+            val display = contactDisplayName(c)
+            val sb = StringBuilder()
+            sb.append("👤 <b>${htmlEsc(display)}</b>\n")
+            sb.append("━━━━━━━━━━━━━━━━━━━━\n")
+            val org = c.organization
+            if (org != null && (org.company.isNotBlank() || org.title.isNotBlank())) {
+                val parts = listOfNotNull(
+                    org.company.takeIf { it.isNotBlank() },
+                    org.title.takeIf { it.isNotBlank() },
+                ).joinToString(" · ")
+                sb.append("🏢 ${htmlEsc(parts)}\n")
+            }
+            if (c.nickname.isNotBlank()) sb.append("🏷 <i>${htmlEsc(c.nickname)}</i>\n")
+            if (org != null || c.nickname.isNotBlank()) sb.append("\n")
+
+            if (c.phoneNumbers.isNotEmpty()) {
+                sb.append("<b>📞 Phone numbers</b>\n")
+                c.phoneNumbers.forEach { ph ->
+                    val label = phoneTypeLabel(ph.type, ph.label)
+                    val labelTxt = if (label.isNotBlank()) "  · $label" else ""
+                    sb.append("   • <code>${htmlEsc(ph.value)}</code>$labelTxt\n")
+                }
+                sb.append("\n")
+            }
+            if (c.emails.isNotEmpty()) {
+                sb.append("<b>📧 Email</b>\n")
+                c.emails.forEach { sb.append("   • <code>${htmlEsc(it.value)}</code>\n") }
+                sb.append("\n")
+            }
+            if (c.addresses.isNotEmpty()) {
+                sb.append("<b>📍 Address</b>\n")
+                c.addresses.forEach { sb.append("   • ${htmlEsc(it.value)}\n") }
+                sb.append("\n")
+            }
+            if (c.websites.isNotEmpty()) {
+                sb.append("<b>🔗 Website</b>\n")
+                c.websites.forEach { sb.append("   • ${htmlEsc(it.value)}\n") }
+                sb.append("\n")
+            }
+            if (c.notes.isNotBlank()) {
+                sb.append("<b>📝 Note</b>\n   ${htmlEsc(c.notes.take(500))}\n\n")
+            }
+
+            // Action keyboard: per-phone Call + SMS rows, then Share + Back.
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            c.phoneNumbers.take(5).forEach { ph ->
+                val tok = phoneToken(ph.value)
+                val short = ph.value.take(18)
+                rows.add(listOf(
+                    "📞 Call $short" to "c_call:$tok",
+                    "💬 SMS $short" to "c_sms:$tok",
+                ))
+            }
+            if (c.phoneNumbers.isNotEmpty()) {
+                rows.add(listOf("📤 Share contact card" to "c_share:$rawId"))
+            }
+            rows.add(listOf("⬅️ Back to list" to "c_back"))
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            val msg = "❌ Could not load contact: ${htmlEsc(e.message ?: "")}"
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+            else sendMessage(msg)
+        }
+    }
+
+    private fun phoneTypeLabel(type: Int, customLabel: String): String {
+        if (customLabel.isNotBlank()) return customLabel
+        return when (type) {
+            android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_HOME -> "Home"
+            android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE -> "Mobile"
+            android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_WORK -> "Work"
+            android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_FAX_WORK -> "Work fax"
+            android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_FAX_HOME -> "Home fax"
+            android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_PAGER -> "Pager"
+            android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_OTHER -> "Other"
+            android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_MAIN -> "Main"
+            else -> ""
+        }
+    }
+
+    private suspend fun cbShareContact(rawId: String) {
+        try {
+            val c = ContactMediaStoreHelper.getByIdAsync(MainApp.instance, rawId)
+            if (c == null) { sendMessage("❌ Contact not found."); return }
+            val phone = c.phoneNumbers.firstOrNull()?.value
+            if (phone.isNullOrBlank()) { sendMessage("❌ This contact has no phone number to share."); return }
+            val first = c.givenName.ifBlank { contactDisplayName(c) }
+            val last = c.familyName.ifBlank { null }
+            val vcard = buildVCard(c)
+            val ok = TelegramApiClient.sendContact(token, chatId, phone, first, last, vcard)
+            if (!ok) sendMessage("❌ Telegram refused the contact card.")
+        } catch (e: Exception) {
+            sendMessage("❌ Could not share contact: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    private fun buildVCard(c: com.ismartcoding.plain.data.DContact): String {
+        val sb = StringBuilder()
+        sb.append("BEGIN:VCARD\r\nVERSION:3.0\r\n")
+        val display = contactDisplayName(c)
+        sb.append("FN:$display\r\n")
+        sb.append("N:${c.familyName};${c.givenName};${c.middleName};${c.prefix};${c.suffix}\r\n")
+        if (c.nickname.isNotBlank()) sb.append("NICKNAME:${c.nickname}\r\n")
+        c.organization?.let { o ->
+            if (o.company.isNotBlank()) sb.append("ORG:${o.company}\r\n")
+            if (o.title.isNotBlank()) sb.append("TITLE:${o.title}\r\n")
+        }
+        c.phoneNumbers.forEach { sb.append("TEL:${it.value}\r\n") }
+        c.emails.forEach { sb.append("EMAIL:${it.value}\r\n") }
+        c.addresses.forEach { sb.append("ADR:;;${it.value};;;;\r\n") }
+        c.websites.forEach { sb.append("URL:${it.value}\r\n") }
+        if (c.notes.isNotBlank()) sb.append("NOTE:${c.notes.replace("\n", "\\n")}\r\n")
+        sb.append("END:VCARD\r\n")
+        return sb.toString()
     }
 
     /** Robust display name for a contact: structured name → nickname → organization → first phone → "(no name)". */
