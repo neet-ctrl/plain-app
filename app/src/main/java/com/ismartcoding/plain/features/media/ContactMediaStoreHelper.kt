@@ -91,7 +91,11 @@ object ContactMediaStoreHelper {
         context: Context,
         id: String,
     ): DContact? {
-        return searchAsync(context, "id=$id", 1, 0).firstOrNull()
+        // SearchHelper uses ':' as the field/value delimiter — using '=' previously
+        // caused the whole "id=…" string to be treated as a free-text search, which
+        // never matched the RAW_CONTACT_ID column and made every tap fail with
+        // "Contact not found".
+        return searchAsync(context, "id:$id", 1, 0).firstOrNull()
     }
 
     suspend fun getIdsAsync(context: Context, query: String): Set<String> {

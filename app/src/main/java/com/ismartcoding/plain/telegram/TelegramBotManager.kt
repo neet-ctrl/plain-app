@@ -101,6 +101,7 @@ object TelegramBotManager {
         "calls" to "📞 Recent call log",
         "recordings" to "🎙️ Call recordings — tap to download",
         "contacts" to "👥 Browse contacts — tap to call, SMS, or share",
+        "find" to "🔍 Reverse-lookup a phone number — /find <number>",
         "notifications" to "🔔 Recent notifications",
         "logs" to "📋 Notification log history",
         "files" to "📁 Browse storage — tap folders to open, files to download",
@@ -353,6 +354,7 @@ object TelegramBotManager {
                     "calls" -> cmdCalls(args)
                     "recordings" -> cmdRecordings(args)
                     "contacts" -> cmdContacts(args)
+                    "find", "findcontact", "lookup", "whois" -> cmdFind(args)
                     "notifications" -> cmdNotifications(args)
                     "logs" -> cmdLogs(args)
                     "files" -> cmdFiles(args)
@@ -539,6 +541,41 @@ object TelegramBotManager {
                     "c_share" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId, "Sharing contact…")
                         cbShareContact(rest)
+                    }
+                    "nf_call" -> {
+                        val num = phoneFromToken(rest)
+                        if (num == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Number expired", true)
+                        } else {
+                            try {
+                                CallMediaStoreHelper.call(MainApp.instance, num)
+                                TelegramApiClient.answerCallbackQuery(token, cqId, "📞 Calling $num…")
+                                sendMessage("📞 Placing call to <code>${htmlEsc(num)}</code> on the device.\n<i>If nothing happens, grant the Phone (CALL_PHONE) permission in PlainApp.</i>")
+                            } catch (e: Exception) {
+                                TelegramApiClient.answerCallbackQuery(token, cqId, "Failed", true)
+                                sendMessage("❌ Could not place call: ${htmlEsc(e.message ?: "")}")
+                            }
+                        }
+                    }
+                    "nf_sms" -> {
+                        val num = phoneFromToken(rest)
+                        if (num == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Number expired", true)
+                        } else {
+                            TelegramApiClient.answerCallbackQuery(token, cqId)
+                            pendingInput = "sms_to:${phoneToken(num)}"
+                            sendMessage("💬 <b>Send SMS to <code>${htmlEsc(num)}</code></b>\n\nReply with the message text.\nSend any /command to cancel.")
+                        }
+                    }
+                    "nf_save" -> {
+                        val num = phoneFromToken(rest)
+                        if (num == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Number expired", true)
+                        } else {
+                            TelegramApiClient.answerCallbackQuery(token, cqId)
+                            pendingInput = "save_contact:${phoneToken(num)}"
+                            sendMessage("💾 <b>Save <code>${htmlEsc(num)}</code> as a new contact</b>\n\nReply with the contact's name (e.g. <i>John Doe</i>).\nSend any /command to cancel.")
+                        }
                     }
                     "block_list" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
@@ -968,9 +1005,13 @@ object TelegramBotManager {
     private suspend fun renderSmsThreadPage(threadId: String, offset: Int, editMessageId: Long?) {
         try {
             val pageSize = 10
-            val messages = SmsHelper.searchAsync(MainApp.instance, "thread_id:$threadId", pageSize + 1, offset)
-            val hasMore = messages.size > pageSize
-            val pageItems = messages.take(pageSize)
+            // Slice client-side so paging is reliable even when the SMS provider
+            // refuses LIMIT/OFFSET in the sort clause on Android 11+.
+            val fetchCap = offset + pageSize + 1
+            val all = SmsHelper.searchAsync(MainApp.instance, "thread_id:$threadId", fetchCap, 0)
+            val window = all.drop(offset).take(pageSize + 1)
+            val hasMore = window.size > pageSize
+            val pageItems = window.take(pageSize)
             if (pageItems.isEmpty()) {
                 val msg = if (offset == 0) "📭 No messages in thread $threadId" else "📭 No more messages."
                 if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
@@ -1019,9 +1060,13 @@ object TelegramBotManager {
     private suspend fun renderCallsPage(offset: Int, editMessageId: Long?) {
         try {
             val pageSize = 10
-            val calls = CallMediaStoreHelper.searchAsync(MainApp.instance, "", pageSize + 1, offset)
-            val hasMore = calls.size > pageSize
-            val pageItems = calls.take(pageSize)
+            // CallLog provider ignores QUERY_ARG_OFFSET on most devices, so the same
+            // first page would otherwise repeat. Slice client-side for reliable paging.
+            val fetchCap = offset + pageSize + 1
+            val all = CallMediaStoreHelper.searchAsync(MainApp.instance, "", fetchCap, 0)
+            val window = all.drop(offset).take(pageSize + 1)
+            val hasMore = window.size > pageSize
+            val pageItems = window.take(pageSize)
             if (pageItems.isEmpty()) {
                 val msg = if (offset == 0) "📞 No call log entries." else "📞 No more entries."
                 if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
@@ -1100,9 +1145,15 @@ object TelegramBotManager {
         lastContactsOffset = offset
         try {
             val pageSize = 20
-            val contacts = ContactMediaStoreHelper.searchAsync(MainApp.instance, query, pageSize + 1, offset)
-            val hasMore = contacts.size > pageSize
-            val pageItems = contacts.take(pageSize)
+            // Android's Contacts provider does not honour QUERY_ARG_OFFSET reliably on
+            // Android 11+, so paging with a non-zero offset would just return the same
+            // first page over and over. We fetch up to (offset + pageSize + 1) rows from
+            // offset 0 and slice client-side, matching the working /files paging pattern.
+            val fetchCap = offset + pageSize + 1
+            val all = ContactMediaStoreHelper.searchAsync(MainApp.instance, query, fetchCap, 0)
+            val window = all.drop(offset).take(pageSize + 1)
+            val hasMore = window.size > pageSize
+            val pageItems = window.take(pageSize)
             if (pageItems.isEmpty()) {
                 val msg = if (offset == 0) "👥 No contacts found." else "👥 No more contacts."
                 if (editMessageId != null) {
@@ -1486,6 +1537,32 @@ object TelegramBotManager {
                     sendMessage("❌ Failed to send SMS: ${htmlEsc(e.message ?: "")}")
                 }
             }
+            "save_contact" -> {
+                val tok = parts.getOrNull(1) ?: return
+                val num = phoneFromToken(tok)
+                if (num.isNullOrBlank()) {
+                    sendMessage("⚠️ Number expired. Send /find <number> again.")
+                    return
+                }
+                val name = text.trim()
+                if (name.isEmpty()) {
+                    sendMessage("❌ Empty name — nothing was saved.")
+                    return
+                }
+                try {
+                    val newId = saveQuickContactAsync(name, num)
+                    if (newId.isBlank()) {
+                        sendMessage("❌ Could not save contact (no available account).")
+                    } else {
+                        sendMessage("✅ <b>Saved</b> ${htmlEsc(name)} · <code>${htmlEsc(num)}</code>\n<i>Tap below to open the contact.</i>",
+                            replyMarkup = TelegramApiClient.inlineKeyboard(listOf(
+                                listOf("👤 Open contact" to "c_view:$newId"),
+                            )))
+                    }
+                } catch (e: Exception) {
+                    sendMessage("❌ Could not save contact: ${htmlEsc(e.message ?: "")}")
+                }
+            }
             "note_create" -> {
                 val raw = text.trim()
                 if (raw.isEmpty()) { sendMessage("❌ Empty note — nothing saved."); return }
@@ -1565,6 +1642,114 @@ object TelegramBotManager {
             }
             else -> { /* ignore */ }
         }
+    }
+
+    /**
+     * /find <number> — reverse-lookup a phone number against the device contacts.
+     *
+     * Uses ContactsContract.PhoneLookup which matches by E.164 / normalized number,
+     * so it works with or without country code, spaces, dashes, or parentheses.
+     * If the number isn't saved, we offer Call / SMS / Save-as-contact buttons.
+     */
+    private suspend fun cmdFind(args: List<String>) {
+        sendTyping()
+        if (args.isEmpty()) {
+            sendMessage("ℹ️ Usage: <code>/find &lt;number&gt;</code>\n\nExample: <code>/find +1 415 555 0123</code>")
+            return
+        }
+        val raw = args.joinToString(" ").trim()
+        // Strip Telegram-style trailing punctuation a user may copy-paste from a chat.
+        val number = raw.trimEnd(',', '.', ';')
+        try {
+            val ctx = MainApp.instance
+            val uri = android.net.Uri.withAppendedPath(
+                android.provider.ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+                android.net.Uri.encode(number),
+            )
+            var contactId: Long = -1L
+            var displayName = ""
+            ctx.contentResolver.query(
+                uri,
+                arrayOf(
+                    android.provider.ContactsContract.PhoneLookup._ID,
+                    android.provider.ContactsContract.PhoneLookup.DISPLAY_NAME,
+                ),
+                null, null, null,
+            )?.use { cur ->
+                if (cur.moveToFirst()) {
+                    contactId = cur.getLong(0)
+                    displayName = cur.getString(1) ?: ""
+                }
+            }
+
+            if (contactId > 0) {
+                // Translate the aggregated contact id to the raw_contact_id our helpers use.
+                var rawId = ""
+                ctx.contentResolver.query(
+                    android.provider.ContactsContract.RawContacts.CONTENT_URI,
+                    arrayOf(android.provider.ContactsContract.RawContacts._ID),
+                    "${android.provider.ContactsContract.RawContacts.CONTACT_ID}=?",
+                    arrayOf(contactId.toString()),
+                    null,
+                )?.use { cur -> if (cur.moveToFirst()) rawId = cur.getLong(0).toString() }
+
+                if (rawId.isNotBlank()) {
+                    sendMessage("✅ Match: <b>${htmlEsc(displayName.ifBlank { number })}</b> · <code>${htmlEsc(number)}</code>")
+                    renderContactDetail(rawId, editMessageId = null)
+                    return
+                }
+            }
+
+            // Not in contacts — offer quick actions.
+            val tok = phoneToken(number)
+            val text = "🔍 <b>No contact</b> matches <code>${htmlEsc(number)}</code>\n\n" +
+                "<i>Pick an action below.</i>"
+            val rows = listOf(
+                listOf(
+                    "📞 Call" to "nf_call:$tok",
+                    "💬 SMS" to "nf_sms:$tok",
+                ),
+                listOf("💾 Save as new contact" to "nf_save:$tok"),
+            )
+            sendMessage(text, replyMarkup = TelegramApiClient.inlineKeyboard(rows))
+        } catch (e: Exception) {
+            sendMessage("❌ Lookup failed: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    /**
+     * Insert a minimal contact (display name + one phone number) into the device
+     * address book and return the new RAW_CONTACT_ID. Splits the display name on the
+     * first space into given / family for ContactsContract.StructuredName.
+     */
+    private suspend fun saveQuickContactAsync(displayName: String, phone: String): String {
+        val source = com.ismartcoding.plain.features.contact.SourceHelper.getAll()
+            .firstOrNull { it.name.isNotBlank() }
+            ?: com.ismartcoding.plain.features.contact.SourceHelper.getAll().firstOrNull()
+            ?: return ""
+        val trimmed = displayName.trim()
+        val first: String
+        val last: String
+        val sp = trimmed.indexOf(' ')
+        if (sp > 0) {
+            first = trimmed.substring(0, sp)
+            last = trimmed.substring(sp + 1).trim()
+        } else {
+            first = trimmed
+            last = ""
+        }
+        val input = com.ismartcoding.plain.web.models.ContactInput(
+            firstName = first,
+            lastName = last,
+            source = source.name,
+            phoneNumbers = listOf(
+                com.ismartcoding.plain.web.models.ContentItemInput(
+                    value = phone,
+                    type = android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE,
+                ),
+            ),
+        )
+        return com.ismartcoding.plain.features.media.ContactMediaStoreHelper.createAsync(input)
     }
 
     private suspend fun renderContactDetail(rawId: String, editMessageId: Long?) {
@@ -2223,7 +2408,8 @@ object TelegramBotManager {
         sb.append("═══════════════════════════\n")
         sb.append("👥 <b>CONTACTS</b>\n")
         sb.append("═══════════════════════════\n")
-        sb.append("• /contacts [name] — List all contacts or search by name\n\n")
+        sb.append("• /contacts [name] — List all contacts or search by name\n")
+        sb.append("• /find &lt;number&gt; — Reverse-lookup a phone number from a call/SMS\n\n")
         sb.append("═══════════════════════════\n")
         sb.append("🔔 <b>NOTIFICATIONS & LOGS</b>\n")
         sb.append("═══════════════════════════\n")
