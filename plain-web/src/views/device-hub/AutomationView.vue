@@ -25,6 +25,12 @@
       </div>
     </header>
 
+    <div v-if="state && !state.enabled" class="engine-warn">
+      <i-lucide:power-off />
+      <span>{{ $t('automation_engine_off_warn') }}</span>
+      <button class="btn primary sm" @click="enableEngine">{{ $t('automation_turn_on') }}</button>
+    </div>
+
     <div class="stat-strip" v-if="state">
       <div class="stat">
         <div class="stat-num">{{ state.activeCount }} / {{ state.ruleCount }}</div>
@@ -57,6 +63,9 @@
       <div v-if="filteredRules.length === 0" class="empty">
         <i-lucide:inbox />
         <p>{{ tab === 'schedules' ? $t('automation_no_schedules') : $t('automation_no_rules') }}</p>
+        <button class="btn primary" @click="openNew(tab === 'schedules' ? 'schedule' : 'rule')">
+          <i-lucide:plus /> {{ tab === 'schedules' ? $t('automation_new_schedule') : $t('automation_new_rule') }}
+        </button>
       </div>
       <article v-for="r in filteredRules" :key="r.id" class="rule-card" :class="{ off: !r.enabled }">
         <div class="rule-top">
@@ -201,6 +210,9 @@
                   <span>SSID</span>
                   <input type="text" :value="paramVal(editor.trigger.params, 'ssid', '')" @input="setParam($event, editor.trigger.params, 'ssid')" />
                 </label>
+              </template>
+              <template v-else-if="editor.trigger.type === 'manual'">
+                <p class="hint">{{ $t('automation_manual_hint') }}</p>
               </template>
               <template v-else-if="editor.trigger.type === 'app_launched'">
                 <label class="field">
@@ -374,7 +386,7 @@ import { ref, computed, onMounted, h } from 'vue'
 import { gqlFetch } from '@/lib/api/gql-client'
 import {
   automationStateGQL, automationRulesGQL, automationRunsGQL,
-  upsertAutomationRuleGQL, setAutomationRuleEnabledGQL, deleteAutomationRuleGQL,
+  upsertAutomationRuleJsonGQL, setAutomationRuleEnabledGQL, deleteAutomationRuleGQL,
   runAutomationRuleGQL, setAutomationEnabledGQL, clearAutomationRunsGQL,
 } from '@/lib/api/query'
 
@@ -499,38 +511,59 @@ function openNew(kind: string) {
 function openEdit(r: Rule) {
   editor.value = JSON.parse(JSON.stringify(r))
 }
+// Convert the editor's [{key,value}, ...] params arrays into the flat
+// {key: value, ...} map shape the backend's parseRuleJson() expects.
+function kvToObj(arr: Kv[]): Record<string, string> {
+  const o: Record<string, string> = {}
+  for (const p of arr || []) if (p.key) o[p.key] = p.value
+  return o
+}
 async function onSave() {
   if (!editor.value) return
   const e = editor.value
-  const input = {
-    id: e.id, name: e.name, enabled: e.enabled, kind: e.kind, cooldownMs: e.cooldownMs,
-    trigger: { type: e.trigger.type, params: e.trigger.params },
-    conditions: e.conditions, actions: e.actions,
+  const payload = {
+    id: e.id, name: e.name || 'Untitled', enabled: e.enabled,
+    kind: e.kind, cooldownMs: e.cooldownMs || 0,
+    trigger: { type: e.trigger.type, params: kvToObj(e.trigger.params) },
+    conditions: e.conditions.map(c => ({ type: c.type, params: kvToObj(c.params) })),
+    actions: e.actions.map(a => ({ type: a.type, params: kvToObj(a.params) })),
   }
-  await gqlFetch(upsertAutomationRuleGQL, { input })
+  const res: any = await gqlFetch(upsertAutomationRuleJsonGQL, { ruleJson: JSON.stringify(payload) })
+  if (res?.errors?.length) {
+    alert(res.errors.map((x: any) => x.message).join('\n'))
+    return
+  }
   editor.value = null
   await load()
 }
+function showErrors(res: any): boolean {
+  if (res?.errors?.length) { alert(res.errors.map((x: any) => x.message).join('\n')); return true }
+  return false
+}
 async function toggleEnabled(r: Rule) {
-  await gqlFetch(setAutomationRuleEnabledGQL, { id: r.id, enabled: !r.enabled })
-  await load()
+  const res: any = await gqlFetch(setAutomationRuleEnabledGQL, { id: r.id, enabled: !r.enabled })
+  if (!showErrors(res)) await load()
 }
 async function runNow(r: Rule) {
-  await gqlFetch(runAutomationRuleGQL, { id: r.id })
-  setTimeout(load, 600)
+  const res: any = await gqlFetch(runAutomationRuleGQL, { id: r.id })
+  if (!showErrors(res)) setTimeout(load, 600)
 }
 async function confirmDelete(r: Rule) {
   if (!confirm(`Delete "${r.name}"?`)) return
-  await gqlFetch(deleteAutomationRuleGQL, { id: r.id })
-  await load()
+  const res: any = await gqlFetch(deleteAutomationRuleGQL, { id: r.id })
+  if (!showErrors(res)) await load()
 }
 async function onEnabledChange(e: Event) {
-  await gqlFetch(setAutomationEnabledGQL, { enabled: (e.target as HTMLInputElement).checked })
-  await load()
+  const res: any = await gqlFetch(setAutomationEnabledGQL, { enabled: (e.target as HTMLInputElement).checked })
+  if (!showErrors(res)) await load()
+}
+async function enableEngine() {
+  const res: any = await gqlFetch(setAutomationEnabledGQL, { enabled: true })
+  if (!showErrors(res)) await load()
 }
 async function onClearRuns() {
-  await gqlFetch(clearAutomationRunsGQL, {})
-  await load()
+  const res: any = await gqlFetch(clearAutomationRunsGQL, {})
+  if (!showErrors(res)) await load()
 }
 function moveAction(i: number, delta: number) {
   if (!editor.value) return
@@ -648,6 +681,10 @@ function formatDuration(ms: number): string {
 .btn.ghost { background: transparent; }
 .btn.small { padding: 4px 10px; font-size: 0.78rem; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.engine-warn { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: color-mix(in srgb, #f59e0b 14%, transparent); border: 1px solid color-mix(in srgb, #f59e0b 40%, transparent); border-radius: 12px; color: var(--md-sys-color-on-surface); font-size: 0.88rem; }
+.engine-warn > span { flex: 1; }
+.engine-warn .btn.sm { padding: 6px 14px; font-size: 0.8rem; }
 
 .stat-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
 .stat { padding: 14px; background: var(--md-sys-color-surface-container); border-radius: 14px; border: 1px solid var(--md-sys-color-outline-variant); }

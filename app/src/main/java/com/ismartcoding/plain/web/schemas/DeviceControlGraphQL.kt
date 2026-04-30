@@ -467,6 +467,20 @@ fun SchemaBuilder.addDeviceControlSchema() {
             true
         }
     }
+    // The web panel sends the rule as a single JSON string instead of a nested
+    // GraphQL input object. The previous typed input (`AutomationRuleInput`) had
+    // three levels of nested input lists (`AutomationRuleInput → ConditionIn →
+    // List<KvIn>`) which kgraphql could not deserialize reliably, causing every
+    // "Save rule" click to silently no-op. JSON keeps the wire format flat and
+    // mirrors what the bot sends in /newrule, /newschedule, /editrule.
+    mutation("upsertAutomationRuleJson") {
+        resolver { ruleJson: String ->
+            val saved = AutomationHelper.upsert(parseRuleJson(ruleJson), MainApp.instance)
+            AutomationScheduler.scheduleRule(saved.id, MainApp.instance)
+            saved.toModel()
+        }
+    }
+    // Legacy typed-input mutation kept so older bundled web panels still work.
     mutation("upsertAutomationRule") {
         resolver { input: AutomationRuleInput ->
             val rule = AutomationHelper.Rule(
@@ -516,6 +530,56 @@ fun SchemaBuilder.addDeviceControlSchema() {
             true
         }
     }
+}
+
+/**
+ * Parse a flat JSON payload sent by the web panel or the Telegram bot into an
+ * [AutomationHelper.Rule] ready to be persisted by [AutomationHelper.upsert].
+ *
+ * Expected shape (all fields optional except trigger.type):
+ * {
+ *   "id": "",                      // blank for new rule
+ *   "name": "Bedtime",
+ *   "enabled": true,
+ *   "kind": "rule",                // or "schedule"
+ *   "cooldownMs": 0,
+ *   "trigger": { "type": "time", "params": { "hour": "22", "minute": "30" } },
+ *   "conditions": [{ "type": "wifi_ssid", "params": { "ssid": "Home" } }],
+ *   "actions":    [{ "type": "notify", "params": { "title": "...", "body": "..." } }]
+ * }
+ */
+fun parseRuleJson(json: String): AutomationHelper.Rule {
+    val o = org.json.JSONObject(json)
+    fun jsonToMap(j: org.json.JSONObject?): Map<String, String> {
+        if (j == null) return emptyMap()
+        return j.keys().asSequence().associateWith { j.optString(it, "") }
+    }
+    val tObj = o.optJSONObject("trigger") ?: org.json.JSONObject()
+    val trigger = AutomationHelper.Trigger(
+        tObj.optString("type", "manual"),
+        jsonToMap(tObj.optJSONObject("params")),
+    )
+    val condArr = o.optJSONArray("conditions") ?: org.json.JSONArray()
+    val conds = (0 until condArr.length()).map {
+        val c = condArr.getJSONObject(it)
+        AutomationHelper.Condition(c.optString("type"), jsonToMap(c.optJSONObject("params")))
+    }
+    val actArr = o.optJSONArray("actions") ?: org.json.JSONArray()
+    val acts = (0 until actArr.length()).map {
+        val a = actArr.getJSONObject(it)
+        AutomationHelper.Action(a.optString("type"), jsonToMap(a.optJSONObject("params")))
+    }
+    return AutomationHelper.Rule(
+        id = o.optString("id", ""),
+        name = o.optString("name", "Untitled").ifBlank { "Untitled" },
+        enabled = o.optBoolean("enabled", true),
+        kind = o.optString("kind", "rule").ifBlank { "rule" },
+        trigger = trigger,
+        conditions = conds,
+        actions = acts,
+        cooldownMs = o.optLong("cooldownMs", 0L),
+        lastRunMs = 0L, createdMs = 0L, updatedMs = 0L,
+    )
 }
 
 private fun nextDailyMs(hour: Int, minute: Int): Long? {

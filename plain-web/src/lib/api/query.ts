@@ -1050,6 +1050,15 @@ export const upsertAutomationRuleGQL = `
   }
 `
 
+// Preferred wire format. Avoids kgraphql's nested-input deserialization issues
+// by sending the entire rule as a single JSON string. See parseRuleJson() in
+// DeviceControlGraphQL.kt for the expected shape.
+export const upsertAutomationRuleJsonGQL = `
+  mutation upsertAutomationRuleJson($ruleJson: String!) {
+    upsertAutomationRuleJson(ruleJson: $ruleJson) { ${ruleFields} }
+  }
+`
+
 export const setAutomationRuleEnabledGQL = `
   mutation setAutomationRuleEnabled($id: String!, $enabled: Boolean!) {
     setAutomationRuleEnabled(id: $id, enabled: $enabled)

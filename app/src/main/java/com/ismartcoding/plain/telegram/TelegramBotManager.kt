@@ -124,6 +124,9 @@ object TelegramBotManager {
         "shots" to "🖼 Recent stealth screenshots — /shots [n]",
         "permissions" to "🛡 Status of every app permission",
         "automations" to "⚙️ List automation rules",
+        "newrule" to "➕ Create a manual rule — /newrule <name> <action> <args>",
+        "newschedule" to "📅 Create a daily schedule — /newschedule HH:MM <name> <action> <args>",
+        "delrule" to "🗑 Delete a rule — /delrule <id>",
         "runrule" to "▶️ Run an automation — /runrule <id>",
         "togglerule" to "🔁 Enable/disable a rule — /togglerule <id>",
         "notes" to "📝 Browse notes — /notes [search]",
@@ -383,6 +386,9 @@ object TelegramBotManager {
                     "shots", "screenshots" -> cmdShots(args)
                     "permissions", "perms" -> cmdPermissions()
                     "automations", "rules" -> cmdAutomations()
+                    "newrule", "addrule" -> cmdNewRule(args)
+                    "newschedule", "addschedule" -> cmdNewSchedule(args)
+                    "delrule", "deleterule" -> cmdDelRule(args)
                     "runrule" -> cmdRunRule(args)
                     "togglerule" -> cmdToggleRule(args)
                     "notes" -> cmdNotes(args)
@@ -600,6 +606,55 @@ object TelegramBotManager {
                             pendingInput = "save_contact:${phoneToken(num)}"
                             sendMessage("💾 <b>Save <code>${htmlEsc(num)}</code> as a new contact</b>\n\nReply with the contact's name (e.g. <i>John Doe</i>).\nSend any /command to cancel.")
                         }
+                    }
+                    "auto_run" -> {
+                        // rest = first 20 chars of rule UUID
+                        val rule = AutomationHelper.list().firstOrNull { it.id.startsWith(rest) }
+                        if (rule == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Rule no longer exists", true)
+                        } else {
+                            try {
+                                val started = com.ismartcoding.plain.helpers.AutomationActionRunner.trigger(rule.id, "manual")
+                                TelegramApiClient.answerCallbackQuery(
+                                    token, cqId,
+                                    if (started) "▶ ${rule.name}" else "⚠ Skipped (disabled / cooldown)",
+                                    !started,
+                                )
+                            } catch (e: Throwable) {
+                                TelegramApiClient.answerCallbackQuery(token, cqId, "Failed: ${e.message?.take(60)}", true)
+                            }
+                        }
+                    }
+                    "auto_tog" -> {
+                        val rule = AutomationHelper.list().firstOrNull { it.id.startsWith(rest) }
+                        if (rule == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Rule no longer exists", true)
+                        } else {
+                            val updated = rule.copy(enabled = !rule.enabled)
+                            AutomationHelper.upsert(updated)
+                            TelegramApiClient.answerCallbackQuery(
+                                token, cqId,
+                                "${if (updated.enabled) "🟢 ON" else "⚪ OFF"}: ${rule.name}",
+                            )
+                            cmdAutomations()
+                        }
+                    }
+                    "auto_del" -> {
+                        val rule = AutomationHelper.list().firstOrNull { it.id.startsWith(rest) }
+                        if (rule == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Rule no longer exists", true)
+                        } else {
+                            com.ismartcoding.plain.helpers.AutomationScheduler.cancel(rule.id, MainApp.instance)
+                            AutomationHelper.delete(rule.id, MainApp.instance)
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "🗑 Deleted ${rule.name}")
+                            cmdAutomations()
+                        }
+                    }
+                    "auto_engine" -> {
+                        val on = rest == "1"
+                        AutomationHelper.setEnabled(on, MainApp.instance)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, if (on) "Engine ON" else "Engine OFF")
+                        cmdAutomations()
                     }
                     "block_list" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
@@ -2494,10 +2549,19 @@ object TelegramBotManager {
         sb.append("━━━━━━━━━━━━━━━━━━━\n")
         sb.append("📋 Total: <b>${rules.size}</b>\n\n")
         if (rules.isEmpty()) {
-            sb.append("(no rules yet — create them in PlainApp → Device Hub → Automation)")
-            sendMessage(sb.toString())
+            sb.append("(no rules yet)\n\n")
+            sb.append("💡 Create one with:\n")
+            sb.append("• <code>/newrule My rule notify Hello world</code>\n")
+            sb.append("• <code>/newschedule 22:30 Bedtime speak Good night</code>\n")
+            val rows = listOf(
+                listOf("⚡ Engine on" to "auto_engine:1", "⚪ Engine off" to "auto_engine:0"),
+            )
+            sendMessage(sb.toString(), replyMarkup = TelegramApiClient.inlineKeyboard(rows))
             return
         }
+        // Per-rule action row uses idx (1-based) as a stable handle for callbacks
+        // — Telegram callback_data is 64 bytes, and full UUIDs would crowd it.
+        val rows = mutableListOf<List<Pair<String, String>>>()
         rules.forEachIndexed { i, r ->
             val state = if (r.enabled) "🟢" else "⚪"
             val kind = if (r.kind == "schedule") "📅" else "🔀"
@@ -2509,10 +2573,24 @@ object TelegramBotManager {
             }
             if (r.lastRunMs > 0) sb.append("   🕐 last run: ${fmtTime(r.lastRunMs)}\n")
             sb.append("   🆔 <code>${r.id.take(8)}</code>\n\n")
+            // Build the action row for this rule (capped at the first 12 rules
+            // so the inline keyboard doesn't exceed Telegram's hard limit).
+            if (i < 12) {
+                val tag = "${i + 1}."
+                val toggle = if (r.enabled) "$tag ⚪ Off" else "$tag 🟢 On"
+                rows.add(listOf(
+                    "$tag ▶️ Run" to "auto_run:${r.id.take(20)}",
+                    toggle to "auto_tog:${r.id.take(20)}",
+                    "🗑 Delete" to "auto_del:${r.id.take(20)}",
+                ))
+            }
             if (sb.length > 3500) { sb.append("…"); return@forEachIndexed }
         }
-        sb.append("\n💡 /runrule &lt;id&gt; to run · /togglerule &lt;id&gt; to toggle")
-        sendMessage(sb.toString())
+        rows.add(listOf(
+            (if (enabled) "⚪ Engine off" else "⚡ Engine on") to ("auto_engine:" + if (enabled) "0" else "1"),
+        ))
+        sb.append("\n💡 <code>/newrule</code>, <code>/newschedule</code>, <code>/delrule</code> to manage")
+        sendMessage(sb.toString(), replyMarkup = TelegramApiClient.inlineKeyboard(rows))
     }
 
     private fun cmdRunRule(args: List<String>) {
@@ -2539,6 +2617,170 @@ object TelegramBotManager {
         sendMessage("${if (updated.enabled) "🟢" else "⚪"} <b>${htmlEsc(rule.name)}</b> is now ${if (updated.enabled) "ON" else "OFF"}")
     }
 
+    /**
+     * Quick-create a manual or simple-trigger rule.
+     *
+     * Syntax: /newrule <name…> <action> <action-args…>
+     *   /newrule "Tell wife" sms +15551234 On my way
+     *   /newrule Beep notify Heads up : something happened
+     *   /newrule Toggle wifi toggle_wifi off
+     *
+     * For more complex rules use the web panel; this command exists so a phone-
+     * less user can still set up and test rules from the bot.
+     */
+    private fun cmdNewRule(args: List<String>) {
+        if (args.size < 2) {
+            sendMessage(
+                "Usage: <code>/newrule &lt;name…&gt; &lt;action&gt; &lt;args…&gt;</code>\n\n" +
+                "Examples:\n" +
+                "• <code>/newrule Beep notify Heads up : Battery low</code>\n" +
+                "• <code>/newrule Tell mom sms +15551234 Be home soon</code>\n" +
+                "• <code>/newrule Speak hello speak Good morning</code>\n" +
+                "• <code>/newrule Wifi off toggle_wifi false</code>\n" +
+                "• <code>/newrule Lights flashlight true</code>\n\n" +
+                "Supported actions: <code>notify</code>, <code>sms</code>, <code>call</code>, " +
+                "<code>speak</code>, <code>toggle_wifi</code>, <code>toggle_bluetooth</code>, " +
+                "<code>toggle_dnd</code>, <code>flashlight</code>, <code>vibrate</code>, " +
+                "<code>set_clipboard</code>, <code>lock_screen</code>"
+            )
+            return
+        }
+        val (name, action) = splitNameAndAction(args) ?: run {
+            sendMessage("❌ Could not find a known action keyword in your command. See /newrule for examples.")
+            return
+        }
+        try {
+            val saved = AutomationHelper.upsert(AutomationHelper.Rule(
+                id = "", name = name, enabled = true, kind = "rule",
+                trigger = AutomationHelper.Trigger("manual", emptyMap()),
+                conditions = emptyList(), actions = listOf(action),
+                cooldownMs = 0L, lastRunMs = 0L, createdMs = 0L, updatedMs = 0L,
+            ))
+            sendMessage(
+                "✅ Created rule <b>${htmlEsc(saved.name)}</b>\n" +
+                "🆔 <code>${saved.id.take(8)}</code>\n" +
+                "🎯 trigger: <code>manual</code> (use <code>/runrule ${saved.id.take(8)}</code> to fire it)\n" +
+                "⚡ action: <code>${action.type}</code>"
+            )
+        } catch (e: Throwable) {
+            sendMessage("❌ Could not save rule: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    /**
+     * Quick-create a daily scheduled action.
+     * Syntax: /newschedule HH:MM <name…> <action> <action-args…>
+     *   /newschedule 22:30 Bedtime speak Good night
+     *   /newschedule 07:00 Morning notify Wake up : Time to start
+     */
+    private fun cmdNewSchedule(args: List<String>) {
+        if (args.size < 3) {
+            sendMessage(
+                "Usage: <code>/newschedule HH:MM &lt;name…&gt; &lt;action&gt; &lt;args…&gt;</code>\n\n" +
+                "Examples:\n" +
+                "• <code>/newschedule 22:30 Bedtime speak Good night</code>\n" +
+                "• <code>/newschedule 07:00 Morning notify Wake up : Time to start</code>\n" +
+                "• <code>/newschedule 09:00 Standup vibrate 800</code>"
+            )
+            return
+        }
+        val time = args[0]
+        val tParts = time.split(":")
+        val hour = tParts.getOrNull(0)?.toIntOrNull()
+        val minute = tParts.getOrNull(1)?.toIntOrNull() ?: 0
+        if (hour == null || hour !in 0..23 || minute !in 0..59) {
+            sendMessage("❌ Time must be HH:MM (24-hour). Got: <code>${htmlEsc(time)}</code>")
+            return
+        }
+        val (name, action) = splitNameAndAction(args.drop(1)) ?: run {
+            sendMessage("❌ Could not find a known action keyword in your command. See /newschedule for examples.")
+            return
+        }
+        try {
+            val trigParams = mapOf(
+                "hour" to hour.toString(), "minute" to minute.toString(),
+                "days" to "1,2,3,4,5,6,7",
+            )
+            val saved = AutomationHelper.upsert(AutomationHelper.Rule(
+                id = "", name = name, enabled = true, kind = "schedule",
+                trigger = AutomationHelper.Trigger("time", trigParams),
+                conditions = emptyList(), actions = listOf(action),
+                cooldownMs = 0L, lastRunMs = 0L, createdMs = 0L, updatedMs = 0L,
+            ))
+            com.ismartcoding.plain.helpers.AutomationScheduler.scheduleRule(saved.id, MainApp.instance)
+            sendMessage(
+                "✅ Scheduled <b>${htmlEsc(saved.name)}</b>\n" +
+                "🆔 <code>${saved.id.take(8)}</code>\n" +
+                "🕐 daily at <b>${"%02d:%02d".format(hour, minute)}</b>\n" +
+                "⚡ action: <code>${action.type}</code>"
+            )
+        } catch (e: Throwable) {
+            sendMessage("❌ Could not save schedule: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    private fun cmdDelRule(args: List<String>) {
+        if (args.isEmpty()) { sendMessage("Usage: <code>/delrule &lt;id&gt;</code>"); return }
+        val idPrefix = args[0]
+        val rule = AutomationHelper.list().firstOrNull { it.id.startsWith(idPrefix) }
+        if (rule == null) { sendMessage("❌ No rule matches <code>${htmlEsc(idPrefix)}</code>"); return }
+        com.ismartcoding.plain.helpers.AutomationScheduler.cancel(rule.id, MainApp.instance)
+        AutomationHelper.delete(rule.id, MainApp.instance)
+        sendMessage("🗑 Deleted <b>${htmlEsc(rule.name)}</b>")
+    }
+
+    /**
+     * Pull a known action keyword out of the tail of [args] and turn the
+     * remaining args into an [AutomationHelper.Action] with the appropriate
+     * params map. Returns the rule name (everything before the action keyword)
+     * and the parsed Action, or null if no known action keyword is present.
+     */
+    private fun splitNameAndAction(args: List<String>): Pair<String, AutomationHelper.Action>? {
+        val knownActions = setOf(
+            "notify", "sms", "send_sms", "call", "make_call", "speak",
+            "toggle_wifi", "toggle_bluetooth", "toggle_dnd",
+            "flashlight", "vibrate", "set_clipboard", "lock_screen",
+        )
+        val actionIdx = args.indexOfFirst { it.lowercase() in knownActions }
+        if (actionIdx < 1) return null
+        val name = args.subList(0, actionIdx).joinToString(" ").trim().ifBlank { "Untitled" }
+        val keyword = args[actionIdx].lowercase()
+        val tail = args.drop(actionIdx + 1)
+        val action = when (keyword) {
+            "notify" -> {
+                // "title : body" or just "title"
+                val joined = tail.joinToString(" ")
+                val sep = joined.indexOf(" : ")
+                val (title, body) = if (sep > 0) joined.substring(0, sep) to joined.substring(sep + 3)
+                    else joined to ""
+                AutomationHelper.Action("notify", mapOf("title" to title, "body" to body))
+            }
+            "sms", "send_sms" -> {
+                val to = tail.firstOrNull() ?: ""
+                val body = tail.drop(1).joinToString(" ")
+                AutomationHelper.Action("send_sms", mapOf("to" to to, "body" to body))
+            }
+            "call", "make_call" -> {
+                AutomationHelper.Action("make_call", mapOf("to" to (tail.firstOrNull() ?: "")))
+            }
+            "speak" -> {
+                AutomationHelper.Action("speak", mapOf("text" to tail.joinToString(" ")))
+            }
+            "toggle_wifi", "toggle_bluetooth", "toggle_dnd", "flashlight" -> {
+                val state = (tail.firstOrNull() ?: "true").lowercase()
+                val on = state in setOf("true", "on", "1", "yes", "y")
+                AutomationHelper.Action(keyword, mapOf("state" to on.toString()))
+            }
+            "vibrate" -> AutomationHelper.Action("vibrate",
+                mapOf("ms" to (tail.firstOrNull()?.toIntOrNull()?.coerceIn(10, 5000)?.toString() ?: "250")))
+            "set_clipboard" -> AutomationHelper.Action("set_clipboard",
+                mapOf("text" to tail.joinToString(" ")))
+            "lock_screen" -> AutomationHelper.Action("lock_screen", emptyMap())
+            else -> return null
+        }
+        return name to action
+    }
+
     private fun cmdCommands() {
         val sb = StringBuilder("📝 <b>All Commands — Full Details</b>\n\n")
         sb.append("═══════════════════════════\n")
@@ -2547,7 +2789,8 @@ object TelegramBotManager {
         sb.append("• /messages [n] — List last N SMS conversations (default 10, max 50)\n")
         sb.append("• /sms &lt;thread_id&gt; — Read messages in a specific SMS thread\n")
         sb.append("• /sendsms &lt;number&gt; &lt;text&gt; — Send an SMS to any number\n")
-        sb.append("• /calls [n] — View call log (default 20, max 100)\n\n")
+        sb.append("• /calls [n] — View call log (default 20, max 100)\n")
+        sb.append("• /recordings — Browse call recordings, tap to download\n\n")
         sb.append("═══════════════════════════\n")
         sb.append("👥 <b>CONTACTS</b>\n")
         sb.append("═══════════════════════════\n")
@@ -2621,9 +2864,46 @@ object TelegramBotManager {
         sb.append("═══════════════════════════\n")
         sb.append("⚙️ <b>AUTOMATION</b>\n")
         sb.append("═══════════════════════════\n")
-        sb.append("• /automations — List all automation rules with status\n")
-        sb.append("• /runrule &lt;id&gt; — Run a rule manually (use first 8 chars)\n")
+        sb.append("• /automations — List all automation rules with inline Run/Toggle/Delete buttons\n")
+        sb.append("• /newrule &lt;name…&gt; &lt;action&gt; &lt;args…&gt; — Quick-create a manual rule\n")
+        sb.append("    e.g. <code>/newrule Beep notify Heads up : Battery low</code>\n")
+        sb.append("• /newschedule HH:MM &lt;name…&gt; &lt;action&gt; &lt;args…&gt; — Daily schedule\n")
+        sb.append("    e.g. <code>/newschedule 22:30 Bedtime speak Good night</code>\n")
+        sb.append("• /delrule &lt;id&gt; — Delete a rule (use first 8 chars)\n")
+        sb.append("• /runrule &lt;id&gt; — Run a rule manually\n")
         sb.append("• /togglerule &lt;id&gt; — Enable/disable a rule\n\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("📝 <b>NOTES & BOOKMARKS</b>\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("• /notes [search] — Browse notes, tap to view, edit or delete\n")
+        sb.append("• /addnote — Create a new note (interactive: title then body)\n")
+        sb.append("• /bookmarks [search] — Browse bookmarks, tap to open / delete\n")
+        sb.append("• /addbookmark &lt;url&gt; — Save a URL as a bookmark\n\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("📡 <b>RSS FEEDS</b>\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("• /feeds — List subscribed feeds, tap one for recent entries\n")
+        sb.append("• /feedentries [search] — Search across all recent feed entries\n\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("🎵 <b>MEDIA LIBRARY</b>\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("• /music [search] — Browse music library, tap to download\n")
+        sb.append("• /videos [search] — Browse video library, tap to download\n")
+        sb.append("• /images [search] — Browse image gallery, tap to send\n\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("🍅 <b>FOCUS</b>\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("• /pomodoro — Show timer status with start / pause / stop buttons\n")
+        sb.append("• /pomodoro start — Begin a new focus session\n")
+        sb.append("• /pomodoro pause — Pause the running timer\n")
+        sb.append("• /pomodoro stop — Cancel the current session\n\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("📶 <b>NETWORK</b>\n")
+        sb.append("═══════════════════════════\n")
+        sb.append("• /wifi — Show Wi-Fi state and current SSID\n")
+        sb.append("• /wifi on — Turn Wi-Fi on (Android 9 and earlier)\n")
+        sb.append("• /wifi off — Turn Wi-Fi off (Android 9 and earlier)\n")
+        sb.append("• /netusage [days] — Mobile + Wi-Fi data usage for the last N days (1–30)\n\n")
         sb.append("═══════════════════════════\n")
         sb.append("⚙️ <b>BOT CONTROL</b>\n")
         sb.append("═══════════════════════════\n")

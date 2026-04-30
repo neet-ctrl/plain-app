@@ -237,6 +237,7 @@ declare module 'vue' {
     'ILucide:plug': typeof import('~icons/lucide/plug')['default']
     'ILucide:plus': typeof import('~icons/lucide/plus')['default']
     'ILucide:plusCircle': typeof import('~icons/lucide/plus-circle')['default']
+    'ILucide:powerOff': typeof import('~icons/lucide/power-off')['default']
     'ILucide:radar': typeof import('~icons/lucide/radar')['default']
     'ILucide:radio': typeof import('~icons/lucide/radio')['default']
     'ILucide:radioTower': typeof import('~icons/lucide/radio-tower')['default']
