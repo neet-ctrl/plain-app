@@ -29,7 +29,7 @@ object TelegramApiClient {
     private fun base(token: String) = "https://api.telegram.org/bot$token"
 
     fun getUpdates(token: String, offset: Long, timeout: Int = 25): JSONObject? {
-        val url = "${base(token)}/getUpdates?offset=$offset&timeout=$timeout&allowed_updates=%5B%22message%22%5D"
+        val url = "${base(token)}/getUpdates?offset=$offset&timeout=$timeout&allowed_updates=%5B%22message%22%2C%22callback_query%22%5D"
         return try {
             val req = Request.Builder().url(url).get().build()
             client.newCall(req).execute().use { resp ->
@@ -42,13 +42,82 @@ object TelegramApiClient {
         }
     }
 
-    fun sendMessage(token: String, chatId: String, text: String, parseMode: String = "HTML"): Boolean {
+    fun sendMessage(
+        token: String,
+        chatId: String,
+        text: String,
+        parseMode: String = "HTML",
+        replyMarkup: JSONObject? = null,
+    ): Boolean {
         val json = JSONObject().apply {
             put("chat_id", chatId)
             put("text", text.take(4096))
             put("parse_mode", parseMode)
+            if (replyMarkup != null) put("reply_markup", replyMarkup)
         }
         return post(token, "sendMessage", json)
+    }
+
+    fun editMessageText(
+        token: String,
+        chatId: String,
+        messageId: Long,
+        text: String,
+        parseMode: String = "HTML",
+        replyMarkup: JSONObject? = null,
+    ): Boolean {
+        val json = JSONObject().apply {
+            put("chat_id", chatId)
+            put("message_id", messageId)
+            put("text", text.take(4096))
+            put("parse_mode", parseMode)
+            if (replyMarkup != null) put("reply_markup", replyMarkup)
+        }
+        return post(token, "editMessageText", json)
+    }
+
+    fun editMessageReplyMarkup(
+        token: String,
+        chatId: String,
+        messageId: Long,
+        replyMarkup: JSONObject?,
+    ): Boolean {
+        val json = JSONObject().apply {
+            put("chat_id", chatId)
+            put("message_id", messageId)
+            if (replyMarkup != null) put("reply_markup", replyMarkup)
+        }
+        return post(token, "editMessageReplyMarkup", json)
+    }
+
+    fun answerCallbackQuery(
+        token: String,
+        callbackQueryId: String,
+        text: String = "",
+        showAlert: Boolean = false,
+    ): Boolean {
+        val json = JSONObject().apply {
+            put("callback_query_id", callbackQueryId)
+            if (text.isNotEmpty()) put("text", text.take(200))
+            if (showAlert) put("show_alert", true)
+        }
+        return post(token, "answerCallbackQuery", json)
+    }
+
+    /** Build a single inline keyboard JSON object from rows of (label -> callback_data). */
+    fun inlineKeyboard(rows: List<List<Pair<String, String>>>): JSONObject {
+        val kb = JSONArray()
+        rows.forEach { row ->
+            val r = JSONArray()
+            row.forEach { (label, data) ->
+                r.put(JSONObject().apply {
+                    put("text", label.take(64))
+                    put("callback_data", data.take(64))
+                })
+            }
+            kb.put(r)
+        }
+        return JSONObject().put("inline_keyboard", kb)
     }
 
     fun sendPhoto(token: String, chatId: String, file: File, caption: String = ""): Boolean {
