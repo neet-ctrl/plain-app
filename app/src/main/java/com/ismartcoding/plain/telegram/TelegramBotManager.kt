@@ -67,6 +67,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.toLocalDateTime
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
@@ -3030,7 +3031,7 @@ object TelegramBotManager {
     private suspend fun renderPomodoroStatus(editMessageId: Long?) {
         try {
             val settings = PomodoroSettingsPreference.getValueAsync(MainApp.instance)
-            val today = kotlinx.datetime.Clock.System.now()
+            val today = com.ismartcoding.plain.helpers.TimeHelper.now()
                 .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).date.toString()
             val dao = com.ismartcoding.plain.db.AppDatabase.instance.pomodoroItemDao()
             val rec = try { dao.getByDate(today) } catch (_: Throwable) { null }
@@ -3282,7 +3283,7 @@ object TelegramBotManager {
             sb.append("📥 Total RX: <b>${humanSize(w.totalRx)}</b>\n")
             sb.append("📤 Total TX: <b>${humanSize(w.totalTx)}</b>\n\n")
             sb.append("<b>Top apps:</b>\n")
-            w.items.take(15).forEachIndexed { i, app ->
+            w.apps.take(15).forEachIndexed { i, app ->
                 sb.append("${i + 1}. <b>${htmlEsc(app.label.take(30))}</b>  ·  ${humanSize(app.rxBytes + app.txBytes)}\n")
                 sb.append("   📶 Wi-Fi ${humanSize(app.rxBytesWifi + app.txBytesWifi)}  ·  📡 Mobile ${humanSize(app.rxBytesMobile + app.txBytesMobile)}\n")
             }
