@@ -697,6 +697,170 @@ object TelegramBotManager {
                         TelegramApiClient.answerCallbackQuery(token, cqId, "Unblocked")
                         renderUnblockPicker(editMessageId = messageId)
                     }
+                    // ---- /apps modern picker ----
+                    "apps_pg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val off = rest.toIntOrNull() ?: 0
+                        renderAppsPickerPage(lastAppsQuery, off, editMessageId = messageId)
+                    }
+                    "apps_q" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Send the search text…")
+                        pendingInput = "appsearch"
+                        sendMessage("🔍 Send a name fragment to search apps (e.g. <code>chrome</code>), or send <code>*</code> to clear.")
+                    }
+                    "appd" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            TelegramApiClient.editMessageText(token, chatId, messageId, "⚠️ App session expired. Send /apps to start over.")
+                        } else {
+                            renderAppDetail(pkg, editMessageId = messageId)
+                        }
+                    }
+                    "appl" -> {
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Session expired", true)
+                        } else {
+                            try {
+                                PackageHelper.launch(MainApp.instance, pkg)
+                                TelegramApiClient.answerCallbackQuery(token, cqId, "Launching ${pkg}", false)
+                            } catch (e: Exception) {
+                                TelegramApiClient.answerCallbackQuery(token, cqId, "Launch failed: ${e.message}", true)
+                            }
+                        }
+                    }
+                    "appst" -> {
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Session expired", true)
+                        } else {
+                            try {
+                                PackageHelper.viewInSettings(MainApp.instance, pkg)
+                                TelegramApiClient.answerCallbackQuery(token, cqId, "Opened settings", false)
+                            } catch (e: Exception) {
+                                TelegramApiClient.answerCallbackQuery(token, cqId, "Failed: ${e.message}", true)
+                            }
+                        }
+                    }
+                    "appblock" -> {
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Session expired", true)
+                        } else {
+                            AppBlockHelper.setBlocked(pkg, true)
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Blocked", false)
+                            renderAppDetail(pkg, editMessageId = messageId)
+                        }
+                    }
+                    "appunblock" -> {
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Session expired", true)
+                        } else {
+                            AppBlockHelper.setBlocked(pkg, false)
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Unblocked", false)
+                            renderAppDetail(pkg, editMessageId = messageId)
+                        }
+                    }
+                    "applimit" -> {
+                        val parts = rest.split(":")
+                        val pkg = parts.getOrNull(0)?.let { pkgFromToken(it) }
+                        val mins = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                        if (pkg == null || mins <= 0) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Bad limit", true)
+                        } else {
+                            AppBlockHelper.setTimeLimit(pkg, mins * 60_000L)
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Limited to ${mins} min/day", false)
+                            renderAppDetail(pkg, editMessageId = messageId)
+                        }
+                    }
+                    "appclim" -> {
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Session expired", true)
+                        } else {
+                            AppBlockHelper.setTimeLimit(pkg, 0L)
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Limit cleared", false)
+                            renderAppDetail(pkg, editMessageId = messageId)
+                        }
+                    }
+                    "appapk" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Uploading APK…")
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            sendMessage("⚠️ App session expired. Send /apps to start over.")
+                        } else {
+                            try {
+                                val info = PackageHelper.searchAsync(
+                                    "ids:$pkg", 1, 0,
+                                    com.ismartcoding.plain.features.file.FileSortBy.NAME_ASC,
+                                ).firstOrNull()
+                                if (info == null) sendMessage("❌ App not found.")
+                                else if (info.path.isBlank()) sendMessage("❌ APK file path unavailable for <code>${htmlEsc(pkg)}</code>.")
+                                else cbSendFile(info.path)
+                            } catch (e: Exception) {
+                                sendMessage("❌ Failed: ${htmlEsc(e.message ?: "")}")
+                            }
+                        }
+                    }
+                    "appicn" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Sending icon…")
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            sendMessage("⚠️ App session expired. Send /apps to start over.")
+                        } else {
+                            sendAppIcon(pkg)
+                        }
+                    }
+                    "appcp" -> {
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Session expired", true)
+                        } else {
+                            try {
+                                val cm = MainApp.instance.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                cm.setPrimaryClip(android.content.ClipData.newPlainText("package", pkg))
+                                TelegramApiClient.answerCallbackQuery(token, cqId, "Copied to device clipboard", false)
+                            } catch (e: Exception) {
+                                TelegramApiClient.answerCallbackQuery(token, cqId, "Failed: ${e.message}", true)
+                            }
+                        }
+                    }
+                    "appu" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            TelegramApiClient.editMessageText(token, chatId, messageId, "⚠️ App session expired. Send /apps to start over.")
+                        } else {
+                            TelegramApiClient.editMessageText(
+                                token, chatId, messageId,
+                                "🗑 <b>Uninstall ${htmlEsc(pkg)}?</b>\n\nThe Android system uninstall dialog will pop up on the device — you must confirm there too.",
+                                replyMarkup = TelegramApiClient.inlineKeyboard(listOf(
+                                    listOf("✅ Yes, prompt on device" to "appuok:$rest"),
+                                    listOf("◀️ Cancel" to "appd:$rest"),
+                                ))
+                            )
+                        }
+                    }
+                    "appuok" -> {
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Session expired", true)
+                        } else {
+                            try {
+                                PackageHelper.uninstall(MainApp.instance, pkg)
+                                TelegramApiClient.answerCallbackQuery(token, cqId, "Confirm on device")
+                                TelegramApiClient.editMessageText(
+                                    token, chatId, messageId,
+                                    "🗑 Uninstall dialog opened on the device for <code>${htmlEsc(pkg)}</code>.\nConfirm there to complete removal.",
+                                    replyMarkup = TelegramApiClient.inlineKeyboard(listOf(listOf("◀️ Back to apps" to "apps_pg:0")))
+                                )
+                            } catch (e: Exception) {
+                                TelegramApiClient.answerCallbackQuery(token, cqId, "Failed: ${e.message}", true)
+                            }
+                        }
+                    }
                     "files_pg" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
                         val sep = rest.lastIndexOf(':')
@@ -1549,6 +1713,33 @@ object TelegramBotManager {
         }
     }
 
+    /**
+     * Render an installed app's launcher icon to a temp PNG and upload it to
+     * Telegram with a caption naming the package. Used by the /apps action menu.
+     */
+    private suspend fun sendAppIcon(pkg: String) {
+        try {
+            val info = PackageHelper.searchAsync(
+                "ids:$pkg", 1, 0,
+                com.ismartcoding.plain.features.file.FileSortBy.NAME_ASC,
+            ).firstOrNull()
+            if (info == null) { sendMessage("❌ App not found: <code>${htmlEsc(pkg)}</code>"); return }
+            val bmp = try {
+                PackageHelper.getIcon(pkg)
+            } catch (e: Exception) {
+                sendMessage("❌ No icon available for <code>${htmlEsc(pkg)}</code>: ${htmlEsc(e.message ?: "")}")
+                return
+            }
+            val tmp = File.createTempFile("appicon_", ".png", MainApp.instance.cacheDir)
+            tmp.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, it) }
+            val ok = TelegramApiClient.sendPhoto(token, chatId, tmp, "🖼 ${htmlEsc(info.name)}\n<code>${htmlEsc(pkg)}</code>")
+            tmp.delete()
+            if (!ok) sendMessage("❌ Failed to upload icon for <code>${htmlEsc(pkg)}</code>")
+        } catch (e: Exception) {
+            sendMessage("❌ Icon error: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
     private fun humanSize(bytes: Long): String {
         if (bytes < 1024) return "$bytes B"
         val kb = bytes / 1024.0
@@ -1700,6 +1891,12 @@ object TelegramBotManager {
                     return
                 }
                 runVideoRecording(n, useFront = cam == "front")
+            }
+            "appsearch" -> {
+                val q = text.trim()
+                lastAppsQuery = if (q == "*" || q.isEmpty()) "" else q
+                renderAppsPickerPage(lastAppsQuery, offset = 0, editMessageId = null)
+                return
             }
             "sms_to" -> {
                 val tok = parts.getOrNull(1) ?: return
@@ -2089,22 +2286,158 @@ object TelegramBotManager {
         return "(no name)"
     }
 
+    /** Free-form text query the user is currently scrolling. Empty = all apps. */
+    @Volatile private var lastAppsQuery: String = ""
+
     private suspend fun cmdApps(args: List<String>) {
         sendTyping()
-        val query = if (args.isNotEmpty()) "text:${args.joinToString(" ")}" else ""
+        lastAppsQuery = args.joinToString(" ").trim()
+        renderAppsPickerPage(lastAppsQuery, offset = 0, editMessageId = null)
+    }
+
+    /**
+     * Modern paginated app picker. Each row is a tappable inline button that opens
+     * the per-app action menu (renderAppDetail). The header summarizes the page,
+     * and footer rows give Prev / Next / 🔍 Search controls.
+     */
+    private suspend fun renderAppsPickerPage(query: String, offset: Int, editMessageId: Long?) {
+        sendTyping()
         try {
-            val apps = PackageHelper.searchAsync(query, 40, 0, com.ismartcoding.plain.features.file.FileSortBy.NAME_ASC)
-            if (apps.isEmpty()) { sendMessage("📱 No apps found."); return }
-            val sb = StringBuilder("📱 <b>Installed Apps</b> (${apps.size})\n\n")
-            apps.forEachIndexed { i, a ->
-                val blocked = if (AppBlockHelper.isBlocked(a.id)) " 🚫" else ""
-                sb.append("${i + 1}. <b>${htmlEsc(a.name)}</b>$blocked\n")
-                sb.append("   <code>${htmlEsc(a.id)}</code>  v${htmlEsc(a.version)}\n\n")
-                if (sb.length > 3600) { sb.append("…and more. Use /apps <name> to search."); return@forEachIndexed }
+            val pageSize = 10
+            val q = if (query.isBlank()) "" else "text:$query"
+            val apps = PackageHelper.searchAsync(
+                q, pageSize + 1, offset,
+                com.ismartcoding.plain.features.file.FileSortBy.NAME_ASC,
+            )
+            val hasMore = apps.size > pageSize
+            val pageItems = apps.take(pageSize)
+            val limits = AppBlockHelper.getTimeLimits()
+            val title = StringBuilder("📱 <b>Installed Apps</b>")
+            if (query.isNotBlank()) title.append(" — search: <code>${htmlEsc(query)}</code>")
+            title.append("\n")
+            if (pageItems.isEmpty()) {
+                val msg = "$title\n\nNo apps found.\nTry <code>/apps</code> to clear the search."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+                else sendMessage(msg)
+                return
             }
-            sendMessage(sb.toString())
+            title.append("Showing ${offset + 1}–${offset + pageItems.size}  ·  tap any app for actions\n\n")
+            val sb = StringBuilder(title)
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            pageItems.forEachIndexed { i, a ->
+                val blocked = AppBlockHelper.isBlocked(a.id)
+                val limited = limits.containsKey(a.id)
+                val tag = when {
+                    blocked -> " 🚫"
+                    limited -> " ⏱"
+                    else -> ""
+                }
+                sb.append("${offset + i + 1}. <b>${htmlEsc(a.name)}</b>$tag\n")
+                sb.append("   <code>${htmlEsc(a.id)}</code>  ·  v${htmlEsc(a.version)}\n\n")
+                rows.add(listOf("${offset + i + 1}. ${a.name.take(28)}$tag" to "appd:${pkgToken(a.id)}"))
+            }
+            val nav = mutableListOf<Pair<String, String>>()
+            if (offset > 0) nav.add("◀️ Prev" to "apps_pg:${(offset - pageSize).coerceAtLeast(0)}")
+            if (hasMore) nav.add("Next ▶️" to "apps_pg:${offset + pageSize}")
+            if (nav.isNotEmpty()) rows.add(nav)
+            rows.add(listOf("🔍 Search apps" to "apps_q", "🔄 Refresh" to "apps_pg:0"))
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
         } catch (e: Exception) {
             sendMessage("❌ Could not list apps: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    /**
+     * Per-app action panel. Shows everything you'd want to do with the app —
+     * launch it, open its system Settings page, block it instantly, time-limit
+     * it for the day, uninstall it, pull its APK & icon down to Telegram, copy
+     * its package id to the device clipboard, and a Play Store link.
+     */
+    private suspend fun renderAppDetail(pkg: String, editMessageId: Long?) {
+        try {
+            val info = try {
+                PackageHelper.searchAsync(
+                    "ids:$pkg", 1, 0,
+                    com.ismartcoding.plain.features.file.FileSortBy.NAME_ASC,
+                ).firstOrNull()
+            } catch (_: Exception) { null }
+            if (info == null) {
+                val msg = "❌ App not found or no longer installed: <code>${htmlEsc(pkg)}</code>"
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+                else sendMessage(msg)
+                return
+            }
+            val isSystem = (info.appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+            val canLaunch = PackageHelper.canLaunch(pkg)
+            val isBlocked = AppBlockHelper.isBlocked(pkg)
+            val limitMs = AppBlockHelper.getTimeLimits()[pkg]
+            val installed = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                .format(java.util.Date(info.installedAt.toEpochMilliseconds()))
+            val updated = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                .format(java.util.Date(info.updatedAt.toEpochMilliseconds()))
+            val apkSize = humanSize(info.size)
+            val text = buildString {
+                append("📱 <b>${htmlEsc(info.name)}</b>\n")
+                append("<code>${htmlEsc(info.id)}</code>\n\n")
+                append("🏷 <b>Version:</b> ${htmlEsc(info.version)}\n")
+                append("📦 <b>APK size:</b> $apkSize\n")
+                append("📅 <b>Installed:</b> $installed\n")
+                append("🔄 <b>Updated:</b> $updated\n")
+                append("🛠 <b>Type:</b> ${if (isSystem) "System app" else "User app"}\n")
+                append("🚀 <b>Launchable:</b> ${if (canLaunch) "yes" else "no (background only)"}\n")
+                when {
+                    isBlocked -> append("🚫 <b>Status:</b> Blocked\n")
+                    limitMs != null -> append("⏱ <b>Status:</b> Limited to ${limitMs / 60_000} min/day\n")
+                    else -> append("✅ <b>Status:</b> Active\n")
+                }
+            }
+            val tok = pkgToken(pkg)
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            // Row 1 — primary actions: launch + settings page
+            val row1 = mutableListOf<Pair<String, String>>()
+            if (canLaunch) row1.add("▶️ Launch" to "appl:$tok")
+            row1.add("⚙️ Settings page" to "appst:$tok")
+            rows.add(row1)
+            // Row 2 — block / unblock
+            if (isBlocked) {
+                rows.add(listOf("✅ Unblock" to "appunblock:$tok"))
+            } else {
+                rows.add(listOf("🚫 Block always" to "appblock:$tok"))
+            }
+            // Row 3 — time-limit shortcuts (or clear if a limit is set)
+            if (limitMs != null) {
+                rows.add(listOf("✕ Clear ${limitMs / 60_000} min limit" to "appclim:$tok"))
+            } else {
+                rows.add(listOf(
+                    "⏱ 30 min" to "applimit:$tok:30",
+                    "⏱ 1 h" to "applimit:$tok:60",
+                    "⏱ 2 h" to "applimit:$tok:120",
+                ))
+            }
+            // Row 4 — file ops: APK + icon download
+            rows.add(listOf(
+                "📥 Download APK" to "appapk:$tok",
+                "🖼 Send icon" to "appicn:$tok",
+            ))
+            // Row 5 — utilities: clipboard + play store url + uninstall
+            rows.add(listOf(
+                "📋 Copy package id" to "appcp:$tok",
+                "🛒 Play Store" to "url:https://play.google.com/store/apps/details?id=$pkg",
+            ))
+            // Row 6 — danger zone (system apps can't be uninstalled normally)
+            if (!isSystem) {
+                rows.add(listOf("🗑 Uninstall" to "appu:$tok"))
+            }
+            // Row 7 — back to list
+            rows.add(listOf("◀️ Back to apps" to "apps_pg:0"))
+
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, text, replyMarkup = markup)
+            else sendMessage(text, replyMarkup = markup)
+        } catch (e: Exception) {
+            sendMessage("❌ Could not open app details: ${htmlEsc(e.message ?: "")}")
         }
     }
 

@@ -104,16 +104,25 @@ object TelegramApiClient {
         return post(token, "answerCallbackQuery", json)
     }
 
-    /** Build a single inline keyboard JSON object from rows of (label -> callback_data). */
+    /**
+     * Build a single inline keyboard JSON object from rows of (label -> data).
+     * `data` is normally a callback_data string, but if it starts with `url:`
+     * the rest is interpreted as a URL and Telegram will open it in the browser
+     * instead of firing a callback. This keeps the simple Pair API while letting
+     * callers mix URL-buttons and callback-buttons in the same keyboard.
+     */
     fun inlineKeyboard(rows: List<List<Pair<String, String>>>): JSONObject {
         val kb = JSONArray()
         rows.forEach { row ->
             val r = JSONArray()
             row.forEach { (label, data) ->
-                r.put(JSONObject().apply {
-                    put("text", label.take(64))
-                    put("callback_data", data.take(64))
-                })
+                val btn = JSONObject().apply { put("text", label.take(64)) }
+                if (data.startsWith("url:")) {
+                    btn.put("url", data.removePrefix("url:"))
+                } else {
+                    btn.put("callback_data", data.take(64))
+                }
+                r.put(btn)
             }
             kb.put(r)
         }
@@ -121,10 +130,21 @@ object TelegramApiClient {
     }
 
     fun sendPhoto(token: String, chatId: String, file: File, caption: String = ""): Boolean {
+        val mime = when (file.extension.lowercase()) {
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            "gif" -> "image/gif"
+            else -> "image/jpeg"
+        }
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("chat_id", chatId)
-            .addFormDataPart("photo", file.name, file.asRequestBody("image/jpeg".toMediaType()))
-            .also { if (caption.isNotEmpty()) it.addFormDataPart("caption", caption.take(1024)) }
+            .addFormDataPart("photo", file.name, file.asRequestBody(mime.toMediaType()))
+            .also {
+                if (caption.isNotEmpty()) {
+                    it.addFormDataPart("caption", caption.take(1024))
+                    it.addFormDataPart("parse_mode", "HTML")
+                }
+            }
             .build()
         return multipart(token, "sendPhoto", body)
     }

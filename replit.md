@@ -269,3 +269,25 @@ A full Telegram Bot runs alongside the web server using long-polling (OkHttp), p
 - **Manifest**: `LocationTrackingService` foreground service type updated to `location|microphone`
 - **Service**: `startForeground()` now uses combined `FOREGROUND_SERVICE_TYPE_LOCATION | FOREGROUND_SERVICE_TYPE_MICROPHONE` on Android 14+ (`UPSIDE_DOWN_CAKE`) so `MediaRecorder` can access the mic from within the tracking service
 - **Web panel rebuilt**: Vue source changes compiled and deployed to `app/src/main/resources/web/`
+
+## Telegram bot — modern `/apps` panel (April 30, 2026)
+
+Re-imagined `/apps` as an interactive Telegram inline-keyboard browser instead of a flat text dump.
+
+- **Paginated picker** (`renderAppsPickerPage`): 10 apps per page, each row a tappable button labelled with the app name and a 🚫 / ⏱ tag if it's currently blocked or time-limited. Footer rows: Prev / Next / 🔍 Search / 🔄 Refresh.
+- **Search-on-demand**: tapping 🔍 sets `pendingInput="appsearch"`; the next message becomes the new query (or `*` to clear). The query (`lastAppsQuery`) is remembered across page jumps.
+- **Per-app action menu** (`renderAppDetail`): shows version, APK size, install/update dates, system-vs-user flag, launchability, and current block/limit status. Buttons:
+  - ▶️ Launch (only if `canLaunch`) — `PackageHelper.launch`
+  - ⚙️ Settings page — `PackageHelper.viewInSettings`
+  - 🚫 Block always / ✅ Unblock — `AppBlockHelper.setBlocked`
+  - ⏱ 30 min / 1 h / 2 h shortcuts (or ✕ Clear N min limit) — `AppBlockHelper.setTimeLimit`
+  - 📥 Download APK — re-uses `cbSendFile(info.path)` (50 MB cap)
+  - 🖼 Send icon — `PackageHelper.getIcon(pkg)` → temp PNG → `sendPhoto`
+  - 📋 Copy package id (to the device clipboard)
+  - 🛒 Play Store (URL button — `inlineKeyboard` now supports `url:…` data prefix)
+  - 🗑 Uninstall (hidden for system apps) → confirm step → `PackageHelper.uninstall` opens the on-device removal dialog
+  - ◀️ Back to apps
+- **Token cache**: re-uses the existing `pkgToken` / `pkgFromToken` MD5-12 cache so callback_data fits Telegram's 64-byte limit even for very long package names.
+- **TelegramApiClient changes**: `inlineKeyboard` now treats a `url:` prefix as an InlineKeyboardButton URL; `sendPhoto` now sends `parse_mode=HTML` and uses the correct mime per file extension (so the icon caption renders `<code>` properly).
+
+New callback prefixes added: `apps_pg`, `apps_q`, `appd`, `appl`, `appst`, `appblock`, `appunblock`, `applimit`, `appclim`, `appapk`, `appicn`, `appcp`, `appu`, `appuok`. New pending-input action: `appsearch`.
