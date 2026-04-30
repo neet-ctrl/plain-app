@@ -4409,7 +4409,7 @@ object TelegramBotManager {
             sb.append("Source: <b>${htmlEsc(if (s.appName.isNotBlank()) s.appName else s.source)}</b>\n")
             if (s.display.isNotBlank()) sb.append("Who: <b>${htmlEsc(s.display)}</b>\n")
             if (s.acceptedAt > 0) {
-                val secs = ((TimeHelper.now().toEpochMilliseconds() - s.acceptedAt) / 1000).coerceAtLeast(0)
+                val secs = ((com.ismartcoding.plain.helpers.TimeHelper.now().toEpochMilliseconds() - s.acceptedAt) / 1000).coerceAtLeast(0)
                 sb.append("Duration: <b>${secs / 60}m ${secs % 60}s</b>\n")
             } else if (s.startedAt > 0) {
                 sb.append("Since: 🕐 ${fmtTime(s.startedAt)}\n")
