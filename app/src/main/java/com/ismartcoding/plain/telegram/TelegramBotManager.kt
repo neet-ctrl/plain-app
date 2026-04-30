@@ -579,6 +579,18 @@ object TelegramBotManager {
                             sendMessage("💬 <b>Send SMS to <code>${htmlEsc(num)}</code></b>\n\nReply with the message text.\nSend any /command to cancel.")
                         }
                     }
+                    "cl_open" -> {
+                        val num = phoneFromToken(rest)
+                        if (num == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Number expired", true)
+                        } else {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "🔍 Looking up…")
+                            // Re-use the /find flow: opens the contact detail when the
+                            // number is in the address book, or falls back to the
+                            // unknown-number panel (Call / SMS / Save) when it isn't.
+                            cmdFind(listOf(num))
+                        }
+                    }
                     "nf_save" -> {
                         val num = phoneFromToken(rest)
                         if (num == null) {
@@ -1156,7 +1168,15 @@ object TelegramBotManager {
                 else sendMessage(msg)
                 return
             }
-            val sb = StringBuilder("📞 <b>Recent Calls</b> · Showing ${offset + 1}–${offset + pageItems.size}\n\n")
+            val sb = StringBuilder("📞 <b>Recent Calls</b> · Showing ${offset + 1}–${offset + pageItems.size}\n")
+            sb.append("<i>Tap a number's row below to call, text, or save it.</i>\n\n")
+
+            // Track which numbers we've already issued a button row for, so a number
+            // that appears multiple times in the page doesn't duplicate buttons.
+            // Map number -> the index in the visible list (1-based) so the button
+            // label can reference the call entry the user is acting on.
+            val seenNumbers = LinkedHashMap<String, Pair<Int, Boolean>>() // num -> (index, knownContact)
+
             pageItems.forEachIndexed { i, c ->
                 val typeEmoji = when (c.type) {
                     CallLog.Calls.INCOMING_TYPE -> "📲 Incoming"
@@ -1167,14 +1187,39 @@ object TelegramBotManager {
                 }
                 val dur = if (c.duration > 0) " · ${c.duration}s" else ""
                 val name = if (c.name.isNotBlank()) " (${htmlEsc(c.name)})" else ""
-                sb.append("${offset + i + 1}. $typeEmoji${dur}\n")
+                val rowIndex = offset + i + 1
+                sb.append("${rowIndex}. $typeEmoji${dur}\n")
                 sb.append("   📱 <code>${htmlEsc(c.number)}</code>$name\n")
                 sb.append("   🕐 ${fmtTime(c.startedAt.toEpochMilliseconds())}\n\n")
+
+                if (c.number.isNotBlank() && !seenNumbers.containsKey(c.number)) {
+                    seenNumbers[c.number] = rowIndex to c.name.isNotBlank()
+                }
             }
+
+            val rows = mutableListOf<List<Pair<String, String>>>()
+
+            // One Call / SMS / (Save|Open) row per unique number on the page.
+            // Cap at 8 to keep the inline keyboard usable on phones.
+            seenNumbers.entries.take(8).forEach { (num, meta) ->
+                val (rowIndex, isKnown) = meta
+                val tok = phoneToken(num)
+                val short = num.take(16)
+                val thirdLabel = if (isKnown) "👤 Open" else "💾 Save"
+                val thirdData = if (isKnown) "cl_open:$tok" else "nf_save:$tok"
+                rows.add(listOf(
+                    "${rowIndex}. 📞 $short" to "nf_call:$tok",
+                    "💬 SMS" to "nf_sms:$tok",
+                    thirdLabel to thirdData,
+                ))
+            }
+
             val nav = mutableListOf<Pair<String, String>>()
             if (offset > 0) nav.add("◀️ Prev" to "calls_pg:${(offset - pageSize).coerceAtLeast(0)}")
             if (hasMore) nav.add("Next ▶️" to "calls_pg:${offset + pageSize}")
-            val markup = if (nav.isNotEmpty()) TelegramApiClient.inlineKeyboard(listOf(nav)) else null
+            if (nav.isNotEmpty()) rows.add(nav)
+
+            val markup = if (rows.isNotEmpty()) TelegramApiClient.inlineKeyboard(rows) else null
             if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
             else sendMessage(sb.toString(), replyMarkup = markup)
         } catch (e: Exception) {
