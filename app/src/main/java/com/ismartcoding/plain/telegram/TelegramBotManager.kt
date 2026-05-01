@@ -5077,7 +5077,7 @@ object TelegramBotManager {
             val sb = StringBuilder("📡 <b>SIM Cards</b>\n━━━━━━━━━━━━━━━━━━━━\n")
             sims.forEachIndexed { i, s ->
                 sb.append("${i + 1}. 📶 <b>${htmlEsc(s.label.ifBlank { "SIM ${i + 1}" })}</b>\n")
-                sb.append("   📱 <code>${htmlEsc(s.address.ifBlank { "(number hidden)" })}</code>\n\n")
+                sb.append("   📱 <code>${htmlEsc(s.number.ifBlank { "(number hidden)" })}</code>\n\n")
             }
             sendMessage(sb.toString())
         } catch (e: Exception) {
