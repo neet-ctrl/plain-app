@@ -4907,7 +4907,7 @@ object TelegramBotManager {
 
     private suspend fun renderImagesPage(query: String, offset: Int, editMessageId: Long?) {
         try {
-            val pageSize = 10
+            val pageSize = 5
             val items = ImageMediaStoreHelper.searchAsync(MainApp.instance, query, pageSize + 1, offset, FileSortBy.DATE_DESC)
             val hasMore = items.size > pageSize
             val pageItems = items.take(pageSize)
@@ -4916,13 +4916,47 @@ object TelegramBotManager {
                 if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
                 return
             }
-            val sb = StringBuilder("🖼 <b>Gallery</b> · ${offset + 1}–${offset + pageItems.size}\n<i>Tap to send the photo here.</i>\n\n")
+
+            // If paging from a callback, acknowledge the old nav message first
+            if (editMessageId != null) {
+                TelegramApiClient.editMessageText(token, chatId, editMessageId, "⏳ Loading page…")
+            }
+
+            sendUploadPhoto()
+
+            // Build per-photo captions and create 400px thumbnails (kept in sync)
+            val thumbFiles = mutableListOf<File>()
+            val captions = mutableListOf<String>()
+            pageItems.forEachIndexed { i, img ->
+                val num = offset + i + 1
+                val cap = "<b>${num}. ${htmlEsc(img.title.take(55))}</b>\n" +
+                        "📐 ${img.width}×${img.height}  📦 ${humanSize(img.size)}\n" +
+                        "🕐 ${fmtTime(img.createdAt.toEpochMilliseconds())}"
+                val thumb = createImageThumbnail(img.path, 400)
+                val fileToSend = thumb ?: run {
+                    val orig = File(img.path)
+                    if (orig.exists() && orig.length() < 10 * 1024 * 1024L) orig else null
+                }
+                if (fileToSend != null) {
+                    thumbFiles.add(fileToSend)
+                    captions.add(cap)
+                }
+            }
+
+            // Send the album
+            if (thumbFiles.isNotEmpty()) {
+                TelegramApiClient.sendMediaGroup(token, chatId, thumbFiles, captions)
+            }
+
+            // Clean up temp thumbnails
+            thumbFiles.forEach { f ->
+                if (f.name.startsWith("tg_thumb_")) f.delete()
+            }
+
+            // Send nav message with download + page buttons
             val rows = mutableListOf<List<Pair<String, String>>>()
             pageItems.forEachIndexed { i, img ->
-                sb.append("${offset + i + 1}. 🖼 <b>${htmlEsc(img.title.take(60))}</b>\n")
-                sb.append("   📐 ${img.width}×${img.height}  ·  📦 ${humanSize(img.size)}\n")
-                sb.append("   🕐 ${fmtTime(img.createdAt.toEpochMilliseconds())}\n\n")
-                rows.add(listOf("📥 ${offset + i + 1}. ${img.title.take(28)}" to "img_get:${pathToken(img.path)}"))
+                rows.add(listOf("📥 ${offset + i + 1}. ${img.title.take(30)}" to "img_get:${pathToken(img.path)}"))
             }
             val nav = mutableListOf<Pair<String, String>>()
             val qTok = safeSeg(query.ifBlank { "_" })
@@ -4930,11 +4964,36 @@ object TelegramBotManager {
             if (hasMore) nav.add("Next ▶️" to "img_pg:$qTok:${offset + pageSize}")
             if (nav.isNotEmpty()) rows.add(nav)
             val markup = TelegramApiClient.inlineKeyboard(rows)
-            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
-            else sendMessage(sb.toString(), replyMarkup = markup)
+            val header = "🖼 <b>Gallery</b> · ${offset + 1}–${offset + pageItems.size}\n<i>Tap a button to send the full-resolution photo.</i>"
+            sendMessage(header, replyMarkup = markup)
         } catch (e: Exception) {
             sendMessage("❌ Could not read images: ${htmlEsc(e.message ?: "")}")
         }
+    }
+
+    private fun createImageThumbnail(sourcePath: String, maxPx: Int = 400): File? {
+        return try {
+            // Read bounds only first to compute sample size
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(sourcePath, bounds)
+            val w = bounds.outWidth; val h = bounds.outHeight
+            if (w <= 0 || h <= 0) return null
+            // Calculate sample size so decoded image is at most 2× target
+            var sample = 1
+            while ((w / sample) > maxPx * 2 || (h / sample) > maxPx * 2) sample *= 2
+            val decOpts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+            val bmp = android.graphics.BitmapFactory.decodeFile(sourcePath, decOpts) ?: return null
+            // Scale to exactly maxPx on the longest side
+            val scale = minOf(1f, maxPx.toFloat() / maxOf(bmp.width, bmp.height))
+            val tw = (bmp.width * scale).toInt().coerceAtLeast(1)
+            val th = (bmp.height * scale).toInt().coerceAtLeast(1)
+            val thumb = if (scale < 1f) android.graphics.Bitmap.createScaledBitmap(bmp, tw, th, true) else bmp
+            if (thumb !== bmp) bmp.recycle()
+            val f = File.createTempFile("tg_thumb_", ".jpg", MainApp.instance.cacheDir)
+            java.io.FileOutputStream(f).use { out -> thumb.compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, out) }
+            thumb.recycle()
+            f
+        } catch (_: Throwable) { null }
     }
 
     private suspend fun cbSendMediaImage(path: String) {

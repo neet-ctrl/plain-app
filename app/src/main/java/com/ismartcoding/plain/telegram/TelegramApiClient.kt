@@ -192,6 +192,40 @@ object TelegramApiClient {
         return multipart(token, "sendVideo", body)
     }
 
+    /**
+     * Send up to 10 photos as a Telegram album (media group).
+     * [files] and [captions] are parallel lists; captions may be empty strings.
+     * Only the first photo may carry a caption in a real album — subsequent captions are
+     * ignored by Telegram, so we put all info in the first item's caption.
+     */
+    fun sendMediaGroup(token: String, chatId: String, files: List<File>, captions: List<String>): Boolean {
+        if (files.isEmpty()) return false
+        val mediaArray = JSONArray()
+        val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
+        builder.addFormDataPart("chat_id", chatId)
+        files.forEachIndexed { i, file ->
+            val attachName = "file$i"
+            val mime = when (file.extension.lowercase()) {
+                "png" -> "image/png"
+                "webp" -> "image/webp"
+                else -> "image/jpeg"
+            }
+            builder.addFormDataPart(attachName, file.name, file.asRequestBody(mime.toMediaType()))
+            val cap = captions.getOrNull(i)?.take(1024) ?: ""
+            val item = JSONObject().apply {
+                put("type", "photo")
+                put("media", "attach://$attachName")
+                if (cap.isNotBlank()) {
+                    put("caption", cap)
+                    put("parse_mode", "HTML")
+                }
+            }
+            mediaArray.put(item)
+        }
+        builder.addFormDataPart("media", mediaArray.toString())
+        return multipart(token, "sendMediaGroup", builder.build())
+    }
+
     fun sendDocument(token: String, chatId: String, file: File, caption: String = ""): Boolean {
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("chat_id", chatId)
