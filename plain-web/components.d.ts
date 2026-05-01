@@ -280,6 +280,7 @@ declare module 'vue' {
     'ILucide:search': typeof import('~icons/lucide/search')['default']
     'ILucide:settings2': typeof import('~icons/lucide/settings2')['default']
     'ILucide:share2': typeof import('~icons/lucide/share2')['default']
+    'ILucide:shield': typeof import('~icons/lucide/shield')['default']
     'ILucide:shieldAlert': typeof import('~icons/lucide/shield-alert')['default']
     'ILucide:shieldCheck': typeof import('~icons/lucide/shield-check')['default']
     'ILucide:signal': typeof import('~icons/lucide/signal')['default']

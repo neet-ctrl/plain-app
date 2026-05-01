@@ -95,6 +95,22 @@
       <template #icon><i-lucide:phone-call /></template>
     </FeatureCard>
 
+    <FeatureCard to="/qr-code" :title="$t('page_title.qr_code')">
+      <template #icon><i-lucide:qr-code /></template>
+    </FeatureCard>
+
+    <FeatureCard to="/vpn-status" :title="$t('page_title.vpn_status')">
+      <template #icon><i-lucide:shield /></template>
+    </FeatureCard>
+
+    <FeatureCard to="/scheduled-sms" :title="$t('page_title.scheduled_sms')">
+      <template #icon><i-lucide:clock /></template>
+    </FeatureCard>
+
+    <FeatureCard to="/sim-info" :title="$t('page_title.sim_info')">
+      <template #icon><i-lucide:smartphone /></template>
+    </FeatureCard>
+
     <LiveCallCard />
     <CallRecorderCard />
 
