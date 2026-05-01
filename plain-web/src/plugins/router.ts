@@ -237,6 +237,36 @@ const router = createRouter({
           meta: { group: 'tracking_hub' },
         },
         {
+          path: 'tracking-hub/accelerometer',
+          component: () => import('@/views/tracking-hub/AccelerometerView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
+          path: 'tracking-hub/vibrometer',
+          component: () => import('@/views/tracking-hub/VibrometerView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
+          path: 'tracking-hub/sound-meter',
+          component: () => import('@/views/tracking-hub/SoundMeterView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
+          path: 'tracking-hub/brightness-meter',
+          component: () => import('@/views/tracking-hub/BrightnessMeterView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
+          path: 'tracking-hub/speedometer',
+          component: () => import('@/views/tracking-hub/SpeedometerView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
+          path: 'tracking-hub/mobile-torch',
+          component: () => import('@/views/tracking-hub/MobileTorchView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
           path: 'device-hub',
           component: () => import('@/views/device-hub/DeviceHubView.vue'),
           meta: { group: 'device_hub' },

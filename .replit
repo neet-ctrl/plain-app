@@ -12,19 +12,19 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Status Page"
+args = "Web Frontend"
 
 [[workflows.workflow]]
-name = "Status Page"
+name = "Web Frontend"
 author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python3 scripts/dev_status_server.py"
-waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd plain-web && npx vite --port 5000 --host 0.0.0.0"
+waitForPort = 5000
 
 [[ports]]
 localPort = 5000

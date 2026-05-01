@@ -105,11 +105,96 @@
         </div>
         <i-lucide:arrow-right class="card-chev" />
       </router-link>
-    </div>
 
-    <div class="future-card">
-      <i-lucide:plus-circle />
-      <span>{{ $t('hub_future_features') }}</span>
+      <router-link to="/tracking-hub/accelerometer" class="hub-card accel-card">
+        <div class="card-icon-wrap">
+          <i-lucide:activity class="card-icon" />
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">Accelerometer</h3>
+          <p class="card-desc">Measure device acceleration, gravity & tilt in all axes live.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:layers />Gravity · Motion</span>
+            <span class="chip neutral"><i-lucide:compass />Angle</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
+      <router-link to="/tracking-hub/vibrometer" class="hub-card vib-card">
+        <div class="card-icon-wrap">
+          <i-lucide:waves class="card-icon" />
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">Vibration Meter</h3>
+          <p class="card-desc">Detect and measure vibration intensity from device motion sensors.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:bar-chart-2 />m/s² Live</span>
+            <span class="chip neutral"><i-lucide:trending-up />Chart</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
+      <router-link to="/tracking-hub/sound-meter" class="hub-card sound-card">
+        <div class="card-icon-wrap">
+          <i-lucide:mic class="card-icon" />
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">Sound Meter</h3>
+          <p class="card-desc">Measure ambient sound levels around the device in decibels.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:volume-2 />dB Live</span>
+            <span class="chip neutral"><i-lucide:info />Reference</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
+      <router-link to="/tracking-hub/brightness-meter" class="hub-card bright-card">
+        <div class="card-icon-wrap">
+          <i-lucide:sun class="card-icon" />
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">Brightness Meter</h3>
+          <p class="card-desc">Measure ambient light intensity in lux from environment.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:sun />lux Live</span>
+            <span class="chip neutral"><i-lucide:gauge />Gauge</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
+      <router-link to="/tracking-hub/speedometer" class="hub-card speed-card">
+        <div class="card-icon-wrap">
+          <i-lucide:gauge class="card-icon" />
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">Speedometer</h3>
+          <p class="card-desc">GPS-based real-time speed, distance, heading & trip stats.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:navigation />GPS</span>
+            <span class="chip neutral"><i-lucide:map />km/h Live</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
+      <router-link to="/tracking-hub/mobile-torch" class="hub-card torch-card">
+        <div class="card-icon-wrap">
+          <i-lucide:zap class="card-icon" />
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">Mobile Torch</h3>
+          <p class="card-desc">Control flashlight: Normal, SOS, Blinking Signal & Screen Colors.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:zap />Flash</span>
+            <span class="chip neutral"><i-lucide:asterisk />SOS · Blink</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
     </div>
   </div>
 </template>
@@ -286,6 +371,36 @@ onUnmounted(() => {
 .shot-card {
   background: linear-gradient(135deg, rgba(56,189,248,0.10), rgba(139,92,246,0.06));
   border-color: rgba(56,189,248,0.28);
+}
+.accel-card {
+  background: linear-gradient(135deg, rgba(99,102,241,0.09), rgba(139,92,246,0.06));
+  border-color: rgba(99,102,241,0.25);
+  .card-icon { color: #6366f1; }
+}
+.vib-card {
+  background: linear-gradient(135deg, rgba(239,68,68,0.08), rgba(245,158,11,0.06));
+  border-color: rgba(239,68,68,0.22);
+  .card-icon { color: #ef4444; }
+}
+.sound-card {
+  background: linear-gradient(135deg, rgba(34,197,94,0.09), rgba(56,189,248,0.06));
+  border-color: rgba(34,197,94,0.22);
+  .card-icon { color: #16a34a; }
+}
+.bright-card {
+  background: linear-gradient(135deg, rgba(245,158,11,0.10), rgba(251,191,36,0.06));
+  border-color: rgba(245,158,11,0.25);
+  .card-icon { color: #d97706; }
+}
+.speed-card {
+  background: linear-gradient(135deg, rgba(13,148,136,0.09), rgba(56,189,248,0.06));
+  border-color: rgba(13,148,136,0.24);
+  .card-icon { color: #0d9488; }
+}
+.torch-card {
+  background: linear-gradient(135deg, rgba(251,191,36,0.10), rgba(245,158,11,0.06));
+  border-color: rgba(251,191,36,0.28);
+  .card-icon { color: #f59e0b; }
 }
 
 .card-icon-wrap {
