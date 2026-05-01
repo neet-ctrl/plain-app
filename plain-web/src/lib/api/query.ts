@@ -1108,3 +1108,7 @@ export const soundMeterRunningGQL = `
 export const torchPatternGQL = `
   query { torchPattern }
 `
+
+export const ambientLightGQL = `
+  query { ambientLight }
+`

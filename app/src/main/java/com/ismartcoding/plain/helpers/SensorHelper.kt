@@ -38,13 +38,16 @@ object SensorHelper : SensorEventListener {
     @Volatile var isSoundMeterRunning = false
         private set
 
+    @Volatile var ambientLightLux: Float = -1f
+        private set
+
     @Volatile private var sensorsStarted = false
     private var sensorManager: SensorManager? = null
     private var audioRecord: AudioRecord? = null
     private var soundThread: Thread? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // --------------- Accelerometer / Vibration ---------------
+    // --------------- Accelerometer / Vibration / Light ---------------
 
     fun ensureSensorsStarted() {
         if (sensorsStarted) return
@@ -56,6 +59,9 @@ object SensorHelper : SensorEventListener {
                 sm.registerListener(this, it, SensorManager.SENSOR_DELAY_UI, mainHandler)
             }
             sm.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)?.let {
+                sm.registerListener(this, it, SensorManager.SENSOR_DELAY_UI, mainHandler)
+            }
+            sm.getDefaultSensor(Sensor.TYPE_LIGHT)?.let {
                 sm.registerListener(this, it, SensorManager.SENSOR_DELAY_UI, mainHandler)
             }
         }
@@ -82,6 +88,9 @@ object SensorHelper : SensorEventListener {
                     motionZ = round1(v[2]),
                     vibrationMagnitude = round1(mag),
                 )
+            }
+            Sensor.TYPE_LIGHT -> {
+                ambientLightLux = v[0]
             }
         }
     }

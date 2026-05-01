@@ -42,6 +42,15 @@ fun SchemaBuilder.addSensorSchema() {
         }
     }
 
+    // ------------- Ambient Light -------------
+
+    query("ambientLight") {
+        resolver { ->
+            SensorHelper.ensureSensorsStarted()
+            SensorHelper.ambientLightLux
+        }
+    }
+
     // ------------- Sound Meter -------------
 
     query("soundLevel") {
