@@ -311,6 +311,7 @@ Added search capability and call history to multiple bot commands:
 - **`renderContactCallsPage(rawId, offset, editMessageId)`** — new suspend function that collects call logs across all phone numbers for a contact (merged + de-duped), paginated. Added "📋 Call History" button in contact detail view (`renderContactDetail`).
 - **Volatile state** vars added: `lastMessagesQuery`, `lastCallsQuery`, `lastNotifQuery`.
 - **New callbacks**: `calls_q`, `messages_q`, `messages_refresh`, `contacts_q`, `notif_q`, `notif_refresh`, `files_q`, `blockapp_q`, `c_calls`, `c_calls_pg`.
+- **🗑 Delete recording**: Each recording row in `/recordings` has a "🗑 Delete" button. Tapping it sends a confirmation message with the contact name and duration. "✅ Yes, delete" calls `CallRecorderHelper.deleteByFilename` and refreshes the list. "❌ Cancel" dismisses. Filenames are stored in a `recTokens` MD5-10 cache to stay within Telegram's 64-byte callback_data limit. New callbacks: `rec_del`, `rec_del_ok`, `rec_del_no`. New token helpers: `recToken`, `recFromToken`.
 
 ## Telegram bot — `/mutenotifs` command (April 30, 2026)
 

@@ -590,6 +590,47 @@ object TelegramBotManager {
                         pendingInput = "rec_search"
                         TelegramApiClient.answerCallbackQuery(token, cqId, "Send a name or number to search recordings (or * to show all)…")
                     }
+                    "rec_del" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val filename = recFromToken(rest)
+                        if (filename == null) {
+                            sendMessage("❌ Recording not found — please refresh the list.")
+                            return@launch
+                        }
+                        val meta = CallRecorderHelper.list().firstOrNull { it.filename == filename }
+                        val resolvedName = meta?.let {
+                            it.displayName.ifBlank { lookupContactName(it.source) }
+                        } ?: ""
+                        val label = resolvedName.ifBlank { filename }
+                        val dur = meta?.let { formatDuration(it.durationMs) } ?: ""
+                        val confirmText = "🗑 <b>Delete recording?</b>\n\n" +
+                            "<b>${htmlEsc(label)}</b>${if (dur.isNotBlank()) "  ·  $dur" else ""}\n\n" +
+                            "<i>This cannot be undone.</i>"
+                        val markup = TelegramApiClient.inlineKeyboard(listOf(
+                            listOf("✅ Yes, delete" to "rec_del_ok:$rest", "❌ Cancel" to "rec_del_no"),
+                        ))
+                        sendMessage(confirmText, replyMarkup = markup)
+                    }
+                    "rec_del_ok" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Deleting…")
+                        val filename = recFromToken(rest)
+                        if (filename == null) {
+                            if (messageId != null) TelegramApiClient.editMessageText(token, chatId, messageId, "❌ Recording not found.")
+                            return@launch
+                        }
+                        val deleted = CallRecorderHelper.deleteByFilename(filename)
+                        if (messageId != null) {
+                            TelegramApiClient.editMessageText(
+                                token, chatId, messageId,
+                                if (deleted) "✅ Recording deleted." else "❌ Could not delete the recording."
+                            )
+                        }
+                        if (deleted) renderRecordingsPage(lastRecQuery, 0, editMessageId = null)
+                    }
+                    "rec_del_no" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        if (messageId != null) TelegramApiClient.editMessageText(token, chatId, messageId, "↩️ Deletion cancelled.")
+                    }
                     "contacts_pg" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
                         val sep = rest.lastIndexOf(':')
@@ -1622,7 +1663,11 @@ object TelegramBotManager {
                 sb.append("\n   🕐 ${fmtTime(m.startedAt)}")
                 if (m.source != "unknown") sb.append("  ·  <i>${htmlEsc(m.source.ifBlank { m.appName })}</i>")
                 sb.append("\n\n")
-                rows.add(listOf("📥 ${rowIndex}. ${nameDisplay.take(18)} · $dur" to "rec_get:${m.filename.take(50)}"))
+                val tok = recToken(m.filename)
+                rows.add(listOf(
+                    "📥 ${rowIndex}. ${nameDisplay.take(16)} · $dur" to "rec_get:${m.filename.take(50)}",
+                    "🗑 Delete" to "rec_del:$tok",
+                ))
             }
             val q = if (query.isEmpty()) "_" else query
             val nav = mutableListOf<Pair<String, String>>()
@@ -1825,6 +1870,16 @@ object TelegramBotManager {
         return hex
     }
     private fun phoneFromToken(t: String): String? = phoneTokens[t]
+
+    /** Recording-filename tokens — keeps callback_data short (filenames can exceed 64-byte limit). */
+    private val recTokens = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private fun recToken(filename: String): String {
+        val md = java.security.MessageDigest.getInstance("MD5")
+        val hex = md.digest(filename.toByteArray()).joinToString("") { "%02x".format(it) }.take(10)
+        recTokens[hex] = filename
+        return hex
+    }
+    private fun recFromToken(t: String): String? = recTokens[t]
 
     /** Look up a contact display name for a given phone number via ContactsContract.PhoneLookup. */
     private fun lookupContactName(number: String): String {
