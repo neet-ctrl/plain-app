@@ -1105,3 +1105,21 @@ export const bulkDeleteLocationPointsGQL = `
     bulkDeleteLocationPoints(fromTs: $fromTs, toTs: $toTs, olderThanN: $olderThanN)
   }
 `
+
+export const startSoundMeterGQL = `
+  mutation { startSoundMeter }
+`
+
+export const stopSoundMeterGQL = `
+  mutation { stopSoundMeter }
+`
+
+export const startTorchPatternGQL = `
+  mutation startTorchPattern($type: String!, $onMs: Int!, $offMs: Int!) {
+    startTorchPattern(type: $type, onMs: $onMs, offMs: $offMs)
+  }
+`
+
+export const stopTorchPatternGQL = `
+  mutation { stopTorchPattern }
+`

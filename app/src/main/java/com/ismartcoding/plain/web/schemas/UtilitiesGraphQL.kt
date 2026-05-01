@@ -126,6 +126,25 @@ fun SchemaBuilder.addUtilitiesSchema() {
         resolver { -> UtilitiesHelper.isTorchOn() }
     }
 
+    query("torchPattern") {
+        resolver { -> UtilitiesHelper.getTorchPatternType() }
+    }
+
+    mutation("startTorchPattern") {
+        resolver { type: String, onMs: Int, offMs: Int ->
+            Permissions.checkAsync(MainApp.instance, setOf(Permission.CAMERA))
+            UtilitiesHelper.startTorchPattern(type, onMs.toLong(), offMs.toLong())
+            true
+        }
+    }
+
+    mutation("stopTorchPattern") {
+        resolver { ->
+            UtilitiesHelper.stopTorchPattern()
+            true
+        }
+    }
+
     // ---- Volume ----
 
     query("volumes") {

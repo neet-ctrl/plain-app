@@ -1086,3 +1086,25 @@ export const allPermissionsStatusGQL = `
     allPermissionsStatus { name label granted enabled category }
   }
 `
+
+export const accelerometerDataGQL = `
+  query {
+    accelerometerData {
+      gravityX gravityY gravityZ
+      motionX motionY motionZ
+      angle vibrationMagnitude
+    }
+  }
+`
+
+export const soundLevelGQL = `
+  query { soundLevel }
+`
+
+export const soundMeterRunningGQL = `
+  query { soundMeterRunning }
+`
+
+export const torchPatternGQL = `
+  query { torchPattern }
+`

@@ -167,6 +167,74 @@ object UtilitiesHelper {
         }
     }
 
+    // active pattern thread
+    @Volatile private var torchPatternThread: Thread? = null
+    @Volatile private var torchPatternType: String = "none"
+
+    fun getTorchPatternType(): String = torchPatternType
+
+    fun startTorchPattern(type: String, onMs: Long = 500L, offMs: Long = 500L) {
+        stopTorchPattern()
+        torchPatternType = type
+        when (type) {
+            "normal" -> setTorch(true)
+            "blink" -> {
+                val t = Thread {
+                    try {
+                        while (!Thread.currentThread().isInterrupted) {
+                            setTorch(true)
+                            Thread.sleep(onMs)
+                            if (Thread.currentThread().isInterrupted) break
+                            setTorch(false)
+                            Thread.sleep(offMs)
+                        }
+                    } catch (_: InterruptedException) {}
+                    setTorch(false)
+                }
+                t.isDaemon = true
+                torchPatternThread = t
+                t.start()
+            }
+            "sos" -> {
+                val dot = 200L
+                val dash = 600L
+                val gap = 200L
+                val letterGap = 500L
+                val wordGap = 1000L
+                // pattern: on/off durations alternating, starting with ON
+                val pattern = listOf(
+                    dot, gap, dot, gap, dot, letterGap,
+                    dash, gap, dash, gap, dash, letterGap,
+                    dot, gap, dot, gap, dot, wordGap,
+                )
+                val t = Thread {
+                    try {
+                        while (!Thread.currentThread().isInterrupted) {
+                            var isOn = false
+                            for (duration in pattern) {
+                                if (Thread.currentThread().isInterrupted) break
+                                isOn = !isOn
+                                setTorch(isOn)
+                                Thread.sleep(duration)
+                            }
+                        }
+                    } catch (_: InterruptedException) {}
+                    setTorch(false)
+                }
+                t.isDaemon = true
+                torchPatternThread = t
+                t.start()
+            }
+        }
+    }
+
+    fun stopTorchPattern() {
+        torchPatternType = "none"
+        torchPatternThread?.interrupt()
+        torchPatternThread = null
+        setTorch(false)
+    }
+
     // ---------------- Volume ----------------
 
     /** stream is one of "ring","music","notification","alarm","call","system" */
