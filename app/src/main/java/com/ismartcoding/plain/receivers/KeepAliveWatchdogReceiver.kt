@@ -18,6 +18,10 @@ import com.ismartcoding.plain.preferences.TelegramBotEnabledPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardCallsPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardNotificationsPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardSmsPreference
+import com.ismartcoding.plain.preferences.TelegramBotForwardGeofencePreference
+import com.ismartcoding.plain.preferences.TelegramBotForwardBatteryAlertPreference
+import com.ismartcoding.plain.preferences.TelegramBotBatteryAlertThresholdPreference
+import com.ismartcoding.plain.preferences.TelegramBotForwardStealthShotsPreference
 import com.ismartcoding.plain.preferences.TelegramBotTokenPreference
 import com.ismartcoding.plain.preferences.TelegramChatIdPreference
 import com.ismartcoding.plain.preferences.WebPreference
@@ -130,6 +134,10 @@ class KeepAliveWatchdogReceiver : BroadcastReceiver() {
                     TelegramBotManager.forwardNotifications = TelegramBotForwardNotificationsPreference.getAsync(context)
                     TelegramBotManager.forwardCalls = TelegramBotForwardCallsPreference.getAsync(context)
                     TelegramBotManager.forwardSmsEnabled = TelegramBotForwardSmsPreference.getAsync(context)
+                    TelegramBotManager.forwardGeofenceEnabled = TelegramBotForwardGeofencePreference.getAsync(context)
+                    TelegramBotManager.forwardBatteryAlertEnabled = TelegramBotForwardBatteryAlertPreference.getAsync(context)
+                    TelegramBotManager.batteryAlertThreshold = TelegramBotBatteryAlertThresholdPreference.getAsync(context)
+                    TelegramBotManager.forwardStealthShotsEnabled = TelegramBotForwardStealthShotsPreference.getAsync(context)
                     TelegramBotManager.start(botToken, chatId)
                 }
             }

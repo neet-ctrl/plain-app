@@ -5,6 +5,91 @@
       <p class="muted">{{ $t('utilities_intro') }}</p>
     </div>
 
+    <!-- System Controls Section -->
+    <div class="page-header" style="margin-top: 8px">
+      <h2>System Controls</h2>
+      <p class="muted">Toggle system settings and trigger device actions remotely.</p>
+    </div>
+    <div class="sys-controls-grid">
+      <!-- DND -->
+      <div class="sys-card">
+        <div class="sys-card-top">
+          <div class="sys-icon-wrap dnd"><i-lucide:bell-off /></div>
+          <div class="sys-info">
+            <div class="sys-name">Do Not Disturb</div>
+            <div class="sys-desc">{{ dndOn ? dndModeLabel : 'All notifications allowed' }}</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" :checked="dndOn" @change="toggleDnd(($event.target as HTMLInputElement).checked)" />
+            <span class="slider-knob"></span>
+          </label>
+        </div>
+        <div v-if="dndOn" class="sys-extra">
+          <div class="mode-btns">
+            <button v-for="m in dndModes" :key="m.value" class="mode-btn" :class="{ active: dndMode === m.value }" @click="setDndMode(m.value)">{{ m.label }}</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Airplane Mode -->
+      <div class="sys-card">
+        <div class="sys-card-top">
+          <div class="sys-icon-wrap airplane"><i-lucide:plane /></div>
+          <div class="sys-info">
+            <div class="sys-name">Airplane Mode</div>
+            <div class="sys-desc">{{ airplaneOn ? 'All radios disabled' : 'Normal connectivity' }}</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" :checked="airplaneOn" @change="toggleAirplane(($event.target as HTMLInputElement).checked)" />
+            <span class="slider-knob"></span>
+          </label>
+        </div>
+        <div class="sys-note">⚠ Requires Settings.Global write permission (WRITE_SECURE_SETTINGS)</div>
+      </div>
+
+      <!-- Hotspot -->
+      <div class="sys-card">
+        <div class="sys-card-top">
+          <div class="sys-icon-wrap hotspot"><i-lucide:wifi /></div>
+          <div class="sys-info">
+            <div class="sys-name">Mobile Hotspot</div>
+            <div class="sys-desc">{{ hotspotOn ? 'Hotspot is active' : 'Hotspot is off' }}</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" :checked="hotspotOn" @change="toggleHotspot(($event.target as HTMLInputElement).checked)" />
+            <span class="slider-knob"></span>
+          </label>
+        </div>
+        <div class="sys-note">⚠ Android 8+ may require CHANGE_NETWORK_STATE permission</div>
+      </div>
+
+      <!-- Lock Screen -->
+      <div class="sys-card">
+        <div class="sys-card-top">
+          <div class="sys-icon-wrap lock"><i-lucide:lock /></div>
+          <div class="sys-info">
+            <div class="sys-name">Lock Screen</div>
+            <div class="sys-desc">Immediately lock the device screen</div>
+          </div>
+        </div>
+        <div class="sys-note">Requires Device Admin permission. Grant in app settings.</div>
+        <button class="sys-btn danger" @click="doLock">Lock Now</button>
+      </div>
+
+      <!-- Reboot -->
+      <div class="sys-card">
+        <div class="sys-card-top">
+          <div class="sys-icon-wrap reboot"><i-lucide:power /></div>
+          <div class="sys-info">
+            <div class="sys-name">Reboot Device</div>
+            <div class="sys-desc">Restart the device immediately</div>
+          </div>
+        </div>
+        <div class="sys-note">Requires root or ADB shell access.</div>
+        <button class="sys-btn danger" @click="doReboot">Reboot</button>
+      </div>
+    </div>
+
     <div class="utilities-grid">
       <!-- Speak Message -->
       <section class="util-card">
@@ -387,8 +472,54 @@ import {
 } from '@/lib/api/query'
 import { gqlFetch } from '@/lib/api/gql-client'
 import type { IDeviceLocation, IBlockedAppsState, IVolumeLevel, ILaunchHistoryEntry } from '@/lib/interfaces'
+import {
+  setDndGQL, setAirplaneModeGQL, setHotspotGQL, lockScreenGQL, rebootDeviceGQL,
+} from '@/lib/api/mutation'
+import { dndStatusGQL, airplaneModeGQL as airplaneModeStatusGQL, hotspotStatusGQL } from '@/lib/api/query'
 
 const { t } = useI18n()
+
+// --- System Controls ---
+const dndOn = ref(false)
+const dndMode = ref(1)
+const airplaneOn = ref(false)
+const hotspotOn = ref(false)
+
+const dndModes = [
+  { label: 'All', value: 1 },
+  { label: 'Priority', value: 2 },
+  { label: 'Silent', value: 3 },
+  { label: 'Alarms', value: 4 },
+]
+const dndModeLabel = computed(() => dndModes.find(m => m.value === dndMode.value)?.label ?? 'On')
+
+const { mutate: mDnd } = initMutation({ document: setDndGQL })
+const { mutate: mAirplane } = initMutation({ document: setAirplaneModeGQL })
+const { mutate: mHotspot } = initMutation({ document: setHotspotGQL })
+const { mutate: mLock } = initMutation({ document: lockScreenGQL })
+const { mutate: mReboot } = initMutation({ document: rebootDeviceGQL })
+
+function toggleDnd(on: boolean) { mDnd({ enabled: on }).then(() => { dndOn.value = on }) }
+function setDndMode(mode: number) { dndMode.value = mode; mDnd({ enabled: dndOn.value }) }
+function toggleAirplane(on: boolean) { mAirplane({ enabled: on }).then(() => { airplaneOn.value = on }) }
+function toggleHotspot(on: boolean) { mHotspot({ enabled: on }).then(() => { hotspotOn.value = on }) }
+function doLock() { if (confirm('Lock the device screen now?')) mLock() }
+function doReboot() { if (confirm('Reboot the device now?')) mReboot() }
+
+async function loadSysState() {
+  try {
+    const d = await gqlFetch<{ dndStatus: { mode: number } }>(dndStatusGQL)
+    if (!d.errors) { dndMode.value = d.data.dndStatus.mode; dndOn.value = d.data.dndStatus.mode !== 1 }
+  } catch {}
+  try {
+    const a = await gqlFetch<{ airplaneMode: boolean }>(airplaneModeStatusGQL)
+    if (!a.errors) airplaneOn.value = a.data.airplaneMode
+  } catch {}
+  try {
+    const h = await gqlFetch<{ hotspotStatus: { enabled: boolean } }>(hotspotStatusGQL)
+    if (!h.errors) hotspotOn.value = h.data.hotspotStatus.enabled
+  } catch {}
+}
 
 // --- Speak ---
 const speakText = ref('')
@@ -588,6 +719,7 @@ onMounted(async () => {
   } catch {}
   loadState()
   loadHistory()
+  loadSysState()
   tickHandle = setInterval(() => { tickNow.value = Date.now() }, 1000)
   liveStateHandle = setInterval(() => { loadState() }, 5000)
 })
@@ -600,6 +732,75 @@ onUnmounted(() => {
 <style scoped lang="scss">
 .utilities-page { padding: 16px; overflow-y: auto; }
 .page-header { margin-bottom: 16px; h2 { margin: 0 0 4px; } .muted { color: var(--md-sys-color-on-surface-variant); font-size: 0.875rem; } }
+.sys-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.sys-card {
+  background: var(--md-sys-color-surface-container);
+  border-radius: 18px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sys-card-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.sys-icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  svg { width: 22px; height: 22px; }
+  &.dnd { background: rgba(99,102,241,0.12); color: #6366f1; }
+  &.airplane { background: rgba(56,189,248,0.12); color: #0ea5e9; }
+  &.hotspot { background: rgba(34,197,94,0.12); color: #22c55e; }
+  &.lock { background: rgba(245,158,11,0.12); color: #d97706; }
+  &.reboot { background: rgba(239,68,68,0.12); color: #ef4444; }
+}
+.sys-info { flex: 1; }
+.sys-name { font-weight: 700; font-size: 0.95rem; }
+.sys-desc { font-size: 0.78rem; color: var(--md-sys-color-on-surface-variant); }
+.sys-note { font-size: 0.75rem; color: var(--md-sys-color-on-surface-variant); padding: 6px 10px; background: rgba(0,0,0,0.04); border-radius: 8px; }
+.sys-extra { display: flex; flex-direction: column; gap: 6px; }
+.mode-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.mode-btn {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--md-sys-color-on-surface-variant);
+  transition: all 0.18s;
+  &.active {
+    background: #6366f1;
+    color: #fff;
+    border-color: #6366f1;
+  }
+}
+.sys-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  align-self: flex-start;
+  &.danger { background: #ef4444; color: #fff; &:hover { background: #dc2626; } }
+}
+
 .utilities-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

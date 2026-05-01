@@ -1112,3 +1112,166 @@ export const torchPatternGQL = `
 export const ambientLightGQL = `
   query { ambientLight }
 `
+
+// ─── New Sensor Queries ───────────────────────────────────────────────────────
+
+export const gyroscopeDataGQL = `
+  query {
+    gyroscopeData { x y z magnitude }
+  }
+`
+
+export const gyroscopeSupportedGQL = `
+  query { gyroscopeSupported }
+`
+
+export const magnetometerDataGQL = `
+  query {
+    magnetometerData { x y z heading cardinalDir }
+  }
+`
+
+export const magnetometerSupportedGQL = `
+  query { magnetometerSupported }
+`
+
+export const barometerDataGQL = `
+  query {
+    barometerData { pressureHpa altitudeMeters }
+  }
+`
+
+export const barometerSupportedGQL = `
+  query { barometerSupported }
+`
+
+export const stepCountGQL = `
+  query { stepCount }
+`
+
+export const pedometerSupportedGQL = `
+  query { pedometerSupported }
+`
+
+export const proximityDataGQL = `
+  query {
+    proximityData { near distanceCm maxRangeCm supported }
+  }
+`
+
+export const ambientTemperatureGQL = `
+  query { ambientTemperature }
+`
+
+export const temperatureSupportedGQL = `
+  query { temperatureSupported }
+`
+
+export const heartRateGQL = `
+  query { heartRate }
+`
+
+export const heartRateSupportedGQL = `
+  query { heartRateSupported }
+`
+
+// ─── New System Control Queries ───────────────────────────────────────────────
+
+export const dndStatusGQL = `
+  query {
+    dndStatus { mode modeLabel policyGranted }
+  }
+`
+
+export const airplaneModeGQL = `
+  query { airplaneMode }
+`
+
+export const hotspotStatusGQL = `
+  query {
+    hotspotStatus { enabled }
+  }
+`
+
+export const storageBreakdownGQL = `
+  query {
+    storageBreakdown {
+      totalBytes usedBytes freeBytes
+      appsBytes imagesBytes videosBytes audioBytes documentsBytes otherBytes cacheBytes
+    }
+  }
+`
+
+export const runningProcessesGQL = `
+  query {
+    runningProcesses {
+      pid processName appLabel packageName importance importanceLabel rssKb
+    }
+  }
+`
+
+export const clipboardTextGQL = `
+  query { clipboardText }
+`
+
+export const generateQrCodeGQL = `
+  query generateQrCode($text: String!) {
+    generateQrCode(text: $text)
+  }
+`
+
+export const networkInterfacesGQL = `
+  query {
+    networkInterfaces { name addresses isUp isLoopback }
+  }
+`
+
+export const triggerQrScanGQL = `
+  query { triggerQrScan }
+`
+
+export const vpnStatusGQL = `
+  query {
+    vpnStatus {
+      isConnected
+      vpnName
+      vpnPackage
+      vpnIp
+      vpnType
+      mtu
+      interfaces { name address }
+    }
+  }
+`
+
+export const scheduledSmsListGQL = `
+  query {
+    scheduledSmsList {
+      id
+      recipient
+      message
+      sendAt
+      sent
+      overdue
+    }
+  }
+`
+
+export const simInfoGQL = `
+  query {
+    simInfo {
+      slotIndex
+      carrierName
+      operatorName
+      phoneNumber
+      networkTypeName
+      mcc
+      mnc
+      isRoaming
+      isDataActive
+      signalBars
+      simState
+      iccid
+    }
+  }
+`

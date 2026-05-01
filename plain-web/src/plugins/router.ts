@@ -307,6 +307,81 @@ const router = createRouter({
           meta: { group: 'device_hub' },
         },
         {
+          path: 'tracking-hub/gyroscope',
+          component: () => import('@/views/tracking-hub/GyroscopeView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
+          path: 'tracking-hub/compass',
+          component: () => import('@/views/tracking-hub/CompassView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
+          path: 'tracking-hub/barometer',
+          component: () => import('@/views/tracking-hub/BarometerView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
+          path: 'tracking-hub/pedometer',
+          component: () => import('@/views/tracking-hub/PedometerView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
+          path: 'tracking-hub/proximity',
+          component: () => import('@/views/tracking-hub/ProximitySensorView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
+          path: 'tracking-hub/temperature',
+          component: () => import('@/views/tracking-hub/TemperatureView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
+          path: 'tracking-hub/heart-rate',
+          component: () => import('@/views/tracking-hub/HeartRateView.vue'),
+          meta: { group: 'tracking_hub' },
+        },
+        {
+          path: 'device-hub/storage-analyzer',
+          component: () => import('@/views/device-hub/StorageAnalyzerView.vue'),
+          meta: { group: 'device_hub' },
+        },
+        {
+          path: 'device-hub/process-manager',
+          component: () => import('@/views/device-hub/ProcessManagerView.vue'),
+          meta: { group: 'device_hub' },
+        },
+        {
+          path: 'device-hub/clipboard-manager',
+          component: () => import('@/views/device-hub/ClipboardManagerView.vue'),
+          meta: { group: 'device_hub' },
+        },
+        {
+          path: 'device-hub/lock-power',
+          component: () => import('@/views/device-hub/LockPowerView.vue'),
+          meta: { group: 'device_hub' },
+        },
+        {
+          path: 'qr-code',
+          component: () => import('@/views/qr-code/QRCodeView.vue'),
+          meta: { group: 'qr_code' },
+        },
+        {
+          path: 'vpn-status',
+          component: () => import('@/views/vpn/VPNStatusView.vue'),
+          meta: { group: 'vpn_status' },
+        },
+        {
+          path: 'scheduled-sms',
+          component: () => import('@/views/scheduled-sms/ScheduledSmsManagerView.vue'),
+          meta: { group: 'scheduled_sms' },
+        },
+        {
+          path: 'sim-info',
+          component: () => import('@/views/sim-info/SimInfoView.vue'),
+          meta: { group: 'sim_info' },
+        },
+        {
           path: 'app-settings',
           component: () => import('@/views/app-settings/AppSettingsView.vue'),
           meta: { group: 'app_settings' },

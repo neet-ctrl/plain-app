@@ -149,6 +149,58 @@
         </div>
         <i-lucide:arrow-right class="card-chev" />
       </router-link>
+
+      <router-link to="/device-hub/storage-analyzer" class="hub-card stor-card">
+        <div class="card-icon-wrap"><i-lucide:hard-drive class="card-icon" /></div>
+        <div class="card-body">
+          <h3 class="card-title">Storage Analyzer</h3>
+          <p class="card-desc">Visual breakdown of storage usage by category: apps, photos, videos, audio, cache.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:pie-chart />Usage</span>
+            <span class="chip neutral"><i-lucide:layers />Categories</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
+      <router-link to="/device-hub/process-manager" class="hub-card proc-card">
+        <div class="card-icon-wrap"><i-lucide:cpu class="card-icon" /></div>
+        <div class="card-body">
+          <h3 class="card-title">Process Manager</h3>
+          <p class="card-desc">View running processes, memory usage, importance level, and force-stop apps remotely.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:list />Processes</span>
+            <span class="chip neutral"><i-lucide:x-circle />Kill</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
+      <router-link to="/device-hub/clipboard-manager" class="hub-card clip-card">
+        <div class="card-icon-wrap"><i-lucide:clipboard class="card-icon" /></div>
+        <div class="card-body">
+          <h3 class="card-title">Clipboard Manager</h3>
+          <p class="card-desc">Read, write, and clear the device clipboard remotely from your browser.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:clipboard-copy />Read / Write</span>
+            <span class="chip neutral"><i-lucide:trash-2 />Clear</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
+      <router-link to="/device-hub/lock-power" class="hub-card lock-card">
+        <div class="card-icon-wrap"><i-lucide:lock class="card-icon" /></div>
+        <div class="card-body">
+          <h3 class="card-title">Lock / Power Controls</h3>
+          <p class="card-desc">Lock screen immediately or reboot device remotely. Requires device admin / root.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:lock />Lock</span>
+            <span class="chip neutral"><i-lucide:power />Reboot</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
     </div>
   </div>
 </template>
@@ -232,6 +284,10 @@ onMounted(() => { loadAll() })
 .bat-card    { --accent: #f97316; }
 .pkt-card    { --accent: #ec4899; }
 .auto-card   { --accent: #f59e0b; }
+.stor-card   { --accent: #8b5cf6; }
+.proc-card   { --accent: #06b6d4; }
+.clip-card   { --accent: #22c55e; }
+.lock-card   { --accent: #ef4444; }
 
 .card-icon-wrap {
   position: relative; flex-shrink: 0;

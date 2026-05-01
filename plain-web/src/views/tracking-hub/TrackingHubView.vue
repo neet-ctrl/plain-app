@@ -195,6 +195,97 @@
         </div>
         <i-lucide:arrow-right class="card-chev" />
       </router-link>
+
+      <router-link to="/tracking-hub/gyroscope" class="hub-card gyro-card">
+        <div class="card-icon-wrap"><i-lucide:rotate-3d class="card-icon" /></div>
+        <div class="card-body">
+          <h3 class="card-title">Gyroscope</h3>
+          <p class="card-desc">Live rotation rate on X, Y, Z axes in rad/s. Roll, Pitch & Yaw.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:activity />rad/s Live</span>
+            <span class="chip neutral"><i-lucide:layers />3-Axis</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
+      <router-link to="/tracking-hub/compass" class="hub-card compass-card">
+        <div class="card-icon-wrap"><i-lucide:compass class="card-icon" /></div>
+        <div class="card-body">
+          <h3 class="card-title">Compass</h3>
+          <p class="card-desc">Magnetic field sensor with real compass heading and cardinal direction.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:navigation />Heading</span>
+            <span class="chip neutral"><i-lucide:magnet />µT Live</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
+      <router-link to="/tracking-hub/barometer" class="hub-card baro-card">
+        <div class="card-icon-wrap"><i-lucide:cloud class="card-icon" /></div>
+        <div class="card-body">
+          <h3 class="card-title">Barometer</h3>
+          <p class="card-desc">Atmospheric pressure in hPa with altitude estimation and weather hints.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:gauge />hPa Live</span>
+            <span class="chip neutral"><i-lucide:mountain />Altitude</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
+      <router-link to="/tracking-hub/pedometer" class="hub-card pedo-card">
+        <div class="card-icon-wrap"><i-lucide:footprints class="card-icon" /></div>
+        <div class="card-body">
+          <h3 class="card-title">Pedometer</h3>
+          <p class="card-desc">Step counter since last reboot with distance and calorie estimates.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:trending-up />Steps</span>
+            <span class="chip neutral"><i-lucide:map />Distance · kcal</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
+      <router-link to="/tracking-hub/proximity" class="hub-card prox-card">
+        <div class="card-icon-wrap"><i-lucide:radar class="card-icon" /></div>
+        <div class="card-body">
+          <h3 class="card-title">Proximity Sensor</h3>
+          <p class="card-desc">Detect near/far objects from the front proximity sensor in real-time.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:scan />Near / Far</span>
+            <span class="chip neutral"><i-lucide:ruler />cm</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
+      <router-link to="/tracking-hub/temperature" class="hub-card temp-card">
+        <div class="card-icon-wrap"><i-lucide:thermometer class="card-icon" /></div>
+        <div class="card-body">
+          <h3 class="card-title">Ambient Temperature</h3>
+          <p class="card-desc">Air temperature around the device in °C and °F (select Samsung devices).</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:thermometer />°C / °F</span>
+            <span class="chip neutral"><i-lucide:sun />Comfort Level</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
+      <router-link to="/tracking-hub/heart-rate" class="hub-card hr-card">
+        <div class="card-icon-wrap"><i-lucide:heart-pulse class="card-icon" /></div>
+        <div class="card-body">
+          <h3 class="card-title">Heart Rate Monitor</h3>
+          <p class="card-desc">Optical heart rate sensor BPM reading (Samsung Galaxy / Wear OS).</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:activity />BPM Live</span>
+            <span class="chip neutral"><i-lucide:layers />Zone</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
     </div>
   </div>
 </template>
@@ -401,6 +492,41 @@ onUnmounted(() => {
   background: linear-gradient(135deg, rgba(251,191,36,0.10), rgba(245,158,11,0.06));
   border-color: rgba(251,191,36,0.28);
   .card-icon { color: #f59e0b; }
+}
+.gyro-card {
+  background: linear-gradient(135deg, rgba(139,92,246,0.09), rgba(168,85,247,0.05));
+  border-color: rgba(139,92,246,0.25);
+  .card-icon { color: #8b5cf6; }
+}
+.compass-card {
+  background: linear-gradient(135deg, rgba(245,158,11,0.09), rgba(251,191,36,0.06));
+  border-color: rgba(245,158,11,0.28);
+  .card-icon { color: #d97706; }
+}
+.baro-card {
+  background: linear-gradient(135deg, rgba(56,189,248,0.09), rgba(99,102,241,0.06));
+  border-color: rgba(56,189,248,0.25);
+  .card-icon { color: #0ea5e9; }
+}
+.pedo-card {
+  background: linear-gradient(135deg, rgba(34,197,94,0.09), rgba(16,185,129,0.06));
+  border-color: rgba(34,197,94,0.25);
+  .card-icon { color: #22c55e; }
+}
+.prox-card {
+  background: linear-gradient(135deg, rgba(239,68,68,0.08), rgba(245,158,11,0.06));
+  border-color: rgba(239,68,68,0.22);
+  .card-icon { color: #ef4444; }
+}
+.temp-card {
+  background: linear-gradient(135deg, rgba(249,115,22,0.09), rgba(239,68,68,0.06));
+  border-color: rgba(249,115,22,0.24);
+  .card-icon { color: #f97316; }
+}
+.hr-card {
+  background: linear-gradient(135deg, rgba(244,63,94,0.10), rgba(239,68,68,0.06));
+  border-color: rgba(244,63,94,0.28);
+  .card-icon { color: #f43f5e; }
 }
 
 .card-icon-wrap {

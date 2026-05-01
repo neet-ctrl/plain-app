@@ -32,6 +32,7 @@ import com.ismartcoding.plain.helpers.GeofenceAudioRecorderHelper
 import com.ismartcoding.plain.helpers.GeofencingHelper
 import com.ismartcoding.plain.helpers.LocationTrackingHelper
 import com.ismartcoding.plain.services.AppBlockHelper
+import com.ismartcoding.plain.telegram.TelegramBotManager
 import kotlinx.serialization.Serializable
 
 /**
@@ -269,6 +270,7 @@ class LocationTrackingService : Service(), LocationListener {
             lockedApps = lockedApps,
         )
         GeofencingHelper.appendEvent(event)
+        TelegramBotManager.forwardGeofenceEvent(event.geofenceName, event.type, event.lat, event.lng, event.batteryLevel)
         if (g.actionNotifyWeb) {
             try {
                 val payload = GeofenceEventPayload(

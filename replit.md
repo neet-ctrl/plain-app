@@ -351,3 +351,78 @@ Added 7 brand-new commands plus music playback controls and auto-SMS forwarding:
 
 ### New `consumePendingInput` case
 `bn_add_num` — called after user taps ➕ Block and sends a phone number; calls `BlockedNumberHelper.add(num)`.
+
+---
+
+## 33-Feature Expansion (Session 2025-05)
+
+### Android Backend
+
+**SensorHelper.kt** — Added 7 new sensor types:
+- `TYPE_GYROSCOPE` → rotation rate (rad/s) on X/Y/Z axes
+- `TYPE_MAGNETIC_FIELD` → magnetometer + compass heading calculation
+- `TYPE_PRESSURE` → barometric pressure (hPa) + altitude estimation
+- `TYPE_STEP_COUNTER` → hardware pedometer since reboot
+- `TYPE_PROXIMITY` → near/far detection with distance (cm)
+- `TYPE_AMBIENT_TEMPERATURE` → air temperature (°C)
+- `TYPE_HEART_RATE` → optical heart rate sensor (BPM)
+
+**SensorGraphQL.kt** — All new sensor queries registered.
+
+**SystemControlHelper.kt** (new) — Implements:
+- DND toggle (`NotificationManager.setInterruptionFilter`)
+- Airplane Mode toggle (`Settings.Global`)
+- Hotspot toggle (reflection `setWifiApEnabled`)
+- Lock Screen (`DevicePolicyManager.lockNow`) — requires device admin
+- Reboot (`PowerManager.reboot`) — requires root/shell
+- Clipboard read/write/clear (`ClipboardManager`)
+- Storage breakdown (MediaStore queries by category)
+- Running processes (`ActivityManager.getRunningAppProcesses`)
+- Kill process (`ActivityManager.killBackgroundProcesses`)
+
+**SystemControlGraphQL.kt** (new) — All system control queries and mutations registered in `MainGraphQL.kt`.
+
+**TelegramBotManager.kt** — New commands: `/gyroscope`, `/compass`, `/barometer`, `/steps`, `/proximity`, `/hotspot`, `/setalarm`, `/batteryalert`. Auto-forwarding: geofence events, low battery alerts, stealth screenshots.
+
+**Preferences.kt** — 4 new prefs: `ForwardGeofenceEnabled`, `ForwardBatteryAlertEnabled`, `BatteryAlertThreshold`, `ForwardStealthShotsEnabled`.
+
+**Auto-forwarding hooks:**
+- `LocationTrackingService` → `TelegramBotManager.forwardGeofenceEvent()`
+- `StealthScreenshotCapturer` → `TelegramBotManager.forwardStealthShot()`
+- `BatterySamplerService` → `TelegramBotManager.forwardBatteryAlert()`
+
+### Web Panel (plain-web)
+
+**New Tracking Hub sensor views:**
+- `GyroscopeView.vue` — 3-axis rotation rate with bars
+- `CompassView.vue` — animated compass dial + magnetic field µT
+- `BarometerView.vue` — pressure/altitude + weather condition
+- `PedometerView.vue` — step ring gauge + distance/calorie estimates
+- `ProximitySensorView.vue` — near/far indicator
+- `TemperatureView.vue` — temperature gauge + comfort label
+- `HeartRateView.vue` — animated heart + BPM zone indicator
+
+**New Device Hub tool views:**
+- `StorageAnalyzerView.vue` — segmented usage bar by category
+- `ProcessManagerView.vue` — searchable process list with kill button
+- `ClipboardManagerView.vue` — read/write/clear clipboard remotely
+- `LockPowerView.vue` — lock screen and reboot with confirmation
+
+**New standalone section views:**
+- `QRCodeView.vue` — QR code generator (qrcode npm) + device camera scan trigger
+- `VPNStatusView.vue` — VPN connection status + network interfaces
+- `ScheduledSmsManagerView.vue` — schedule/list/delete future SMS
+- `SimInfoView.vue` — dual SIM info, carrier, signal bars, roaming
+
+**Updated hubs:**
+- `TrackingHubView.vue` — 7 new sensor cards
+- `DeviceHubView.vue` — 4 new tool cards
+- `UtilitiesView.vue` — System Controls section: DND (with mode selector), Airplane Mode, Hotspot toggles + Lock/Reboot action buttons
+
+**router.ts** — 15 new routes registered.
+
+**query.ts** — All new GQL query strings added (sensors, storage, processes, clipboard, VPN, scheduled SMS, SIM info, QR scan trigger).
+
+**mutation.ts** — All new mutation strings added (DND, airplane, hotspot, lock, reboot, clipboard, kill process, schedule/delete SMS).
+
+**Build:** `npm install qrcode` required. Built with `vite build` and deployed to `app/src/main/resources/web/`.

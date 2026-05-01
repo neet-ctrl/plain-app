@@ -9,6 +9,7 @@ import android.os.IBinder
 import com.ismartcoding.lib.logcat.LogCat
 import com.ismartcoding.plain.MainApp
 import com.ismartcoding.plain.helpers.BatteryHistoryHelper
+import com.ismartcoding.plain.telegram.TelegramBotManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -42,6 +43,9 @@ class BatterySamplerService : Service() {
                         BatteryHistoryHelper.appendSample(s, context)
                     }
                     fireAutomationOnBatteryChange(context, s)
+                    if (s.plugged == 0) {
+                        TelegramBotManager.forwardBatteryAlert(s.level)
+                    }
                 }
             } catch (t: Throwable) {
                 LogCat.e("BatterySampler: ${t.message}")

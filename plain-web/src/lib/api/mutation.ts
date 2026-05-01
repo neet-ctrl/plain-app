@@ -1123,3 +1123,59 @@ export const startTorchPatternGQL = `
 export const stopTorchPatternGQL = `
   mutation { stopTorchPattern }
 `
+
+// ─── New System Control Mutations ─────────────────────────────────────────────
+
+export const setDndGQL = `
+  mutation setDnd($enabled: Boolean!) {
+    setDnd(enabled: $enabled)
+  }
+`
+
+export const setAirplaneModeGQL = `
+  mutation setAirplaneMode($enabled: Boolean!) {
+    setAirplaneMode(enabled: $enabled)
+  }
+`
+
+export const setHotspotGQL = `
+  mutation setHotspot($enabled: Boolean!) {
+    setHotspot(enabled: $enabled)
+  }
+`
+
+export const lockScreenGQL = `
+  mutation { lockScreen }
+`
+
+export const rebootDeviceGQL = `
+  mutation { rebootDevice }
+`
+
+export const setClipboardTextGQL = `
+  mutation setClipboardText($text: String!) {
+    setClipboardText(text: $text)
+  }
+`
+
+export const clearClipboardGQL = `
+  mutation { clearClipboard }
+`
+
+export const killProcessGQL = `
+  mutation killProcess($pid: Int!) {
+    killProcess(pid: $pid)
+  }
+`
+
+export const scheduleSmsGQL = `
+  mutation scheduleSms($recipient: String!, $message: String!, $sendAt: Long!) {
+    scheduleSms(recipient: $recipient, message: $message, sendAt: $sendAt)
+  }
+`
+
+export const deleteScheduledSmsGQL = `
+  mutation deleteScheduledSms($id: String!) {
+    deleteScheduledSms(id: $id)
+  }
+`
