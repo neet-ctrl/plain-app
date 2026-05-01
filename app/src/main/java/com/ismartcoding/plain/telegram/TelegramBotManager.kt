@@ -253,10 +253,13 @@ object TelegramBotManager {
                 val durSec = (meta.durationMs / 1000).toInt().coerceAtLeast(1)
                 val dirEmoji = if (meta.direction == "incoming") "📲" else "📞"
                 val dur = formatDuration(meta.durationMs)
+                // Resolve best display name: sidecar displayName, live contact lookup on source, or raw source
+                val contactName = meta.displayName.ifBlank { lookupContactName(meta.source) }
                 val caption = buildString {
                     append("$dirEmoji <b>Call Recording</b>\n")
-                    if (meta.displayName.isNotBlank()) append("👤 <code>${htmlEsc(meta.displayName)}</code>\n")
-                    append("📡 ${htmlEsc(meta.source)}")
+                    if (contactName.isNotBlank()) append("👤 <b>${htmlEsc(contactName)}</b>\n")
+                    if (meta.source.isNotBlank() && meta.source != contactName) append("📱 <code>${htmlEsc(meta.source)}</code>\n")
+                    append("📡 ${htmlEsc(if (meta.source == meta.displayName) meta.appName.ifBlank { meta.source } else meta.source)}")
                     if (meta.appName.isNotBlank() && meta.appName != meta.source) append(" · ${htmlEsc(meta.appName)}")
                     append("\n")
                     append("⏱ <i>$dur</i>  📦 ${meta.sizeBytes / 1024} KB\n")
@@ -574,6 +577,18 @@ object TelegramBotManager {
                     "rec_get" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId, "Sending recording…")
                         cbSendRecording(rest)
+                    }
+                    "rec_pg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val sep = rest.lastIndexOf(':')
+                        if (sep < 0) return@launch
+                        val q = rest.substring(0, sep).let { if (it == "_") "" else it }
+                        val off = rest.substring(sep + 1).toIntOrNull() ?: 0
+                        renderRecordingsPage(q, off, editMessageId = messageId)
+                    }
+                    "rec_q" -> {
+                        pendingInput = "rec_search"
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Send a name or number to search recordings (or * to show all)…")
                     }
                     "contacts_pg" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
@@ -1504,14 +1519,18 @@ object TelegramBotManager {
                     else -> "📞 Unknown"
                 }
                 val dur = if (c.duration > 0) " · ${c.duration}s" else ""
-                val name = if (c.name.isNotBlank()) " (${htmlEsc(c.name)})" else ""
+                // Resolve name: use cached name from CallLog, fall back to live ContactsContract lookup
+                val resolvedName = c.name.ifBlank { lookupContactName(c.number) }
                 val rowIndex = offset + i + 1
                 sb.append("${rowIndex}. $typeEmoji${dur}\n")
-                sb.append("   📱 <code>${htmlEsc(c.number)}</code>$name\n")
+                if (resolvedName.isNotBlank()) {
+                    sb.append("   👤 <b>${htmlEsc(resolvedName)}</b>\n")
+                }
+                sb.append("   📱 <code>${htmlEsc(c.number)}</code>\n")
                 sb.append("   🕐 ${fmtTime(c.startedAt.toEpochMilliseconds())}\n\n")
 
                 if (c.number.isNotBlank() && !seenNumbers.containsKey(c.number)) {
-                    seenNumbers[c.number] = rowIndex to c.name.isNotBlank()
+                    seenNumbers[c.number] = rowIndex to resolvedName.isNotBlank()
                 }
             }
 
@@ -1549,32 +1568,75 @@ object TelegramBotManager {
         }
     }
 
+    @Volatile private var lastRecQuery: String = ""
+
     private suspend fun cmdRecordings(args: List<String>) {
         sendTyping()
-        val limit = min(args.firstOrNull()?.toIntOrNull() ?: 20, 100)
+        val query = args.joinToString(" ").trim()
+        renderRecordingsPage(query, 0, editMessageId = null)
+    }
+
+    private suspend fun renderRecordingsPage(query: String, offset: Int, editMessageId: Long?) {
+        lastRecQuery = query
         try {
-            val recordings = CallRecorderHelper.list().take(limit)
-            if (recordings.isEmpty()) {
-                sendMessage("🎙️ No call recordings found. Enable call recording in PlainApp settings.")
+            val all = CallRecorderHelper.list()
+            // Filter by query: match against displayName, source (phone number), or resolved contact name
+            val filtered = if (query.isEmpty()) all else {
+                val q = query.lowercase()
+                all.filter { m ->
+                    m.displayName.lowercase().contains(q) ||
+                    m.source.lowercase().contains(q) ||
+                    lookupContactName(m.source).lowercase().contains(q)
+                }
+            }
+            if (filtered.isEmpty()) {
+                val msg = if (query.isEmpty()) "🎙️ No call recordings found. Enable call recording in PlainApp settings."
+                          else "🎙️ No recordings match \"${htmlEsc(query)}\"."
+                val rows = mutableListOf<List<Pair<String, String>>>()
+                rows.add(listOf("🔍 Search" to "rec_q", "🔄 Refresh" to "rec_pg:_:0"))
+                val markup = TelegramApiClient.inlineKeyboard(rows)
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg, replyMarkup = markup)
+                else sendMessage(msg, replyMarkup = markup)
                 return
             }
-            val sb = StringBuilder("🎙️ <b>Call Recordings</b> (${recordings.size})\n")
-            sb.append("<i>Tap a recording to download it.</i>\n\n")
+            val pageSize = 8
+            val window = filtered.drop(offset).take(pageSize + 1)
+            val hasMore = window.size > pageSize
+            val pageItems = window.take(pageSize)
+            val queryLabel = if (query.isNotEmpty()) " · 🔍 <i>${htmlEsc(query)}</i>" else ""
+            val sb = StringBuilder("🎙️ <b>Call Recordings</b>$queryLabel\n")
+            sb.append("Showing ${offset + 1}–${offset + pageItems.size} of ${filtered.size}\n")
+            sb.append("<i>Tap a button below to download that recording.</i>\n\n")
             val rows = mutableListOf<List<Pair<String, String>>>()
-            recordings.forEachIndexed { i, m ->
+            pageItems.forEachIndexed { i, m ->
                 val dirEmoji = if (m.direction == "incoming") "📲" else "📞"
                 val dur = formatDuration(m.durationMs)
-                val name = m.displayName.ifBlank { m.source }
-                sb.append("${i + 1}. $dirEmoji <b>${htmlEsc(name)}</b>\n")
-                sb.append("   ⏱ $dur  ·  📦 ${m.sizeBytes / 1024} KB\n")
-                sb.append("   🕐 ${fmtTime(m.startedAt)}  ·  <i>via ${htmlEsc(m.source)}</i>\n\n")
-                rows.add(listOf("📥 ${i + 1}. ${name.take(20)} · $dur" to "rec_get:${m.filename.take(50)}"))
-                if (sb.length > 3500) { sb.append("…truncated"); return@forEachIndexed }
+                // Resolve contact name: prefer displayName from sidecar, then live lookup on source number
+                val resolvedName = m.displayName.ifBlank { lookupContactName(m.source) }
+                val nameDisplay = resolvedName.ifBlank { m.source }
+                val rowIndex = offset + i + 1
+                sb.append("${rowIndex}. $dirEmoji")
+                if (resolvedName.isNotBlank()) sb.append(" <b>${htmlEsc(resolvedName)}</b>")
+                if (m.source.isNotBlank() && m.source != resolvedName) sb.append("\n   📱 <code>${htmlEsc(m.source)}</code>")
+                sb.append("\n   ⏱ $dur  ·  📦 ${m.sizeBytes / 1024} KB")
+                sb.append("\n   🕐 ${fmtTime(m.startedAt)}")
+                if (m.source != "unknown") sb.append("  ·  <i>${htmlEsc(m.source.ifBlank { m.appName })}</i>")
+                sb.append("\n\n")
+                rows.add(listOf("📥 ${rowIndex}. ${nameDisplay.take(18)} · $dur" to "rec_get:${m.filename.take(50)}"))
             }
-            sb.append("\n<i>💡 Recordings are auto-sent when a call ends.</i>")
-            sendMessage(sb.toString(), replyMarkup = TelegramApiClient.inlineKeyboard(rows))
+            val q = if (query.isEmpty()) "_" else query
+            val nav = mutableListOf<Pair<String, String>>()
+            if (offset > 0) nav.add("◀️ Prev" to "rec_pg:$q:${(offset - pageSize).coerceAtLeast(0)}")
+            if (hasMore) nav.add("Next ▶️" to "rec_pg:$q:${offset + pageSize}")
+            if (nav.isNotEmpty()) rows.add(nav)
+            rows.add(listOf("🔍 Search" to "rec_q", "🔄 Refresh" to "rec_pg:_:0"))
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
         } catch (e: Exception) {
-            sendMessage("❌ Could not read recordings: ${htmlEsc(e.message ?: "")}")
+            val msg = "❌ Could not read recordings: ${htmlEsc(e.message ?: "")}"
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+            else sendMessage(msg)
         }
     }
 
@@ -1763,6 +1825,22 @@ object TelegramBotManager {
         return hex
     }
     private fun phoneFromToken(t: String): String? = phoneTokens[t]
+
+    /** Look up a contact display name for a given phone number via ContactsContract.PhoneLookup. */
+    private fun lookupContactName(number: String): String {
+        if (number.isBlank()) return ""
+        val uri = android.provider.ContactsContract.PhoneLookup.CONTENT_FILTER_URI
+            .buildUpon().appendPath(number).build()
+        return try {
+            MainApp.instance.contentResolver.query(
+                uri,
+                arrayOf(android.provider.ContactsContract.PhoneLookup.DISPLAY_NAME),
+                null, null, null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) ?: "" else ""
+            } ?: ""
+        } catch (_: Exception) { "" }
+    }
 
     private fun cmdFiles(args: List<String>) {
         val path = if (args.isNotEmpty()) args.joinToString(" ") else defaultStorageRoot()
@@ -2156,6 +2234,12 @@ object TelegramBotManager {
                 val q = text.trim()
                 val query = if (q == "*" || q.isEmpty()) "" else q
                 renderAppPickerForBlock(query, 0, editMessageId = null)
+                return
+            }
+            "rec_search" -> {
+                val q = text.trim()
+                val query = if (q == "*" || q.isEmpty()) "" else q
+                renderRecordingsPage(query, 0, editMessageId = null)
                 return
             }
             "sms_to" -> {
@@ -2596,7 +2680,12 @@ object TelegramBotManager {
                     else -> "📞"
                 }
                 val dur = if (call.duration > 0) "  ⏱ ${call.duration}s" else ""
+                // Resolve the name for this specific number (contact may have multiple numbers)
+                val resolvedName = call.name.ifBlank { lookupContactName(call.number) }
                 sb.append("${offset + i + 1}. $typeEmoji$dur\n")
+                if (resolvedName.isNotBlank()) {
+                    sb.append("   👤 <b>${htmlEsc(resolvedName)}</b>\n")
+                }
                 sb.append("   📱 <code>${htmlEsc(call.number)}</code>\n")
                 sb.append("   🕐 ${fmtTime(call.startedAt.toEpochMilliseconds())}\n\n")
             }
