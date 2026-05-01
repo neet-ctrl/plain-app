@@ -252,7 +252,15 @@ object TelegramBotManager {
         }
         val txt = buildString {
             append("$emoji <b>$stateLabel</b>\n")
-            if (display.isNotBlank()) append("📱 <code>${htmlEsc(display)}</code>\n")
+            if (display.isNotBlank()) {
+                val contactName = lookupContactName(display)
+                if (contactName.isNotBlank()) {
+                    append("👤 <b>${htmlEsc(contactName)}</b>\n")
+                    append("📱 <code>${htmlEsc(display)}</code>\n")
+                } else {
+                    append("📱 <code>${htmlEsc(display)}</code>\n")
+                }
+            }
             if (source != "phone") append("📡 via <i>${htmlEsc(source)}</i>\n")
             append("🕐 <i>${ts}</i>")
         }
@@ -266,13 +274,17 @@ object TelegramBotManager {
                 val durSec = (meta.durationMs / 1000).toInt().coerceAtLeast(1)
                 val dirEmoji = if (meta.direction == "incoming") "📲" else "📞"
                 val dur = formatDuration(meta.durationMs)
-                // Resolve best display name: sidecar displayName, live contact lookup on source, or raw source
-                val contactName = meta.displayName.ifBlank { lookupContactName(meta.source) }
+                // Look up contact name from the phone number stored in meta.displayName
+                val contactName = lookupContactName(meta.displayName)
                 val caption = buildString {
                     append("$dirEmoji <b>Call Recording</b>\n")
-                    if (contactName.isNotBlank()) append("👤 <b>${htmlEsc(contactName)}</b>\n")
-                    if (meta.source.isNotBlank() && meta.source != contactName) append("📱 <code>${htmlEsc(meta.source)}</code>\n")
-                    append("📡 ${htmlEsc(if (meta.source == meta.displayName) meta.appName.ifBlank { meta.source } else meta.source)}")
+                    if (contactName.isNotBlank()) {
+                        append("👤 <b>${htmlEsc(contactName)}</b>\n")
+                        if (meta.displayName.isNotBlank()) append("📱 <code>${htmlEsc(meta.displayName)}</code>\n")
+                    } else if (meta.displayName.isNotBlank()) {
+                        append("👤 <b>${htmlEsc(meta.displayName)}</b>\n")
+                    }
+                    append("📡 ${htmlEsc(meta.source.ifBlank { meta.appName })}")
                     if (meta.appName.isNotBlank() && meta.appName != meta.source) append(" · ${htmlEsc(meta.appName)}")
                     append("\n")
                     append("⏱ <i>$dur</i>  📦 ${meta.sizeBytes / 1024} KB\n")
@@ -1737,13 +1749,13 @@ object TelegramBotManager {
         lastRecQuery = query
         try {
             val all = CallRecorderHelper.list()
-            // Filter by query: match against displayName, source (phone number), or resolved contact name
+            // Filter by query: match against displayName (phone number), source app, or resolved contact name
             val filtered = if (query.isEmpty()) all else {
                 val q = query.lowercase()
                 all.filter { m ->
                     m.displayName.lowercase().contains(q) ||
                     m.source.lowercase().contains(q) ||
-                    lookupContactName(m.source).lowercase().contains(q)
+                    lookupContactName(m.displayName).lowercase().contains(q)
                 }
             }
             if (filtered.isEmpty()) {
@@ -1768,13 +1780,17 @@ object TelegramBotManager {
             pageItems.forEachIndexed { i, m ->
                 val dirEmoji = if (m.direction == "incoming") "📲" else "📞"
                 val dur = formatDuration(m.durationMs)
-                // Resolve contact name: prefer displayName from sidecar, then live lookup on source number
-                val resolvedName = m.displayName.ifBlank { lookupContactName(m.source) }
-                val nameDisplay = resolvedName.ifBlank { m.source }
+                // m.displayName holds the phone number; look it up in contacts to get the real name
+                val contactName = lookupContactName(m.displayName)
+                val nameDisplay = contactName.ifBlank { m.displayName }
                 val rowIndex = offset + i + 1
                 sb.append("${rowIndex}. $dirEmoji")
-                if (resolvedName.isNotBlank()) sb.append(" <b>${htmlEsc(resolvedName)}</b>")
-                if (m.source.isNotBlank() && m.source != resolvedName) sb.append("\n   📱 <code>${htmlEsc(m.source)}</code>")
+                if (contactName.isNotBlank()) {
+                    sb.append(" <b>${htmlEsc(contactName)}</b>")
+                    if (m.displayName.isNotBlank()) sb.append("\n   📱 <code>${htmlEsc(m.displayName)}</code>")
+                } else if (m.displayName.isNotBlank()) {
+                    sb.append(" <b>${htmlEsc(m.displayName)}</b>")
+                }
                 sb.append("\n   ⏱ $dur  ·  📦 ${m.sizeBytes / 1024} KB")
                 sb.append("\n   🕐 ${fmtTime(m.startedAt)}")
                 if (m.source != "unknown") sb.append("  ·  <i>${htmlEsc(m.source.ifBlank { m.appName })}</i>")
@@ -4951,7 +4967,15 @@ object TelegramBotManager {
         if (s.state != "idle") {
             sb.append("Direction: <b>${s.direction}</b>\n")
             sb.append("Source: <b>${htmlEsc(if (s.appName.isNotBlank()) s.appName else s.source)}</b>\n")
-            if (s.display.isNotBlank()) sb.append("Who: <b>${htmlEsc(s.display)}</b>\n")
+            if (s.display.isNotBlank()) {
+                val contactName = lookupContactName(s.display)
+                if (contactName.isNotBlank()) {
+                    sb.append("Who: <b>${htmlEsc(contactName)}</b>\n")
+                    sb.append("📱 <code>${htmlEsc(s.display)}</code>\n")
+                } else {
+                    sb.append("Who: <b>${htmlEsc(s.display)}</b>\n")
+                }
+            }
             if (s.acceptedAt > 0) {
                 val secs = ((com.ismartcoding.plain.helpers.TimeHelper.now().toEpochMilliseconds() - s.acceptedAt) / 1000).coerceAtLeast(0)
                 sb.append("Duration: <b>${secs / 60}m ${secs % 60}s</b>\n")
