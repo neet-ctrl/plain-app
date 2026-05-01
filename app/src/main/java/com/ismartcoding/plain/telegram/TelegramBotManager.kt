@@ -463,8 +463,68 @@ object TelegramBotManager {
                     }
                     "calls_pg" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
-                        val off = rest.toIntOrNull() ?: 0
-                        renderCallsPage(off, editMessageId = messageId)
+                        // Format: "calls_pg:<query>:<offset>" where query can be "_" for all
+                        val sep = rest.lastIndexOf(':')
+                        val q: String
+                        val off: Int
+                        if (sep >= 0) {
+                            q = rest.substring(0, sep).let { if (it == "_") "" else it }
+                            off = rest.substring(sep + 1).toIntOrNull() ?: 0
+                        } else {
+                            q = ""
+                            off = rest.toIntOrNull() ?: 0
+                        }
+                        renderCallsPage(q, off, editMessageId = messageId)
+                    }
+                    "calls_q" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Send search text…")
+                        pendingInput = "calls_search"
+                        sendMessage("🔍 Send a name or number to search call logs (e.g. <code>John</code> or <code>+1555</code>), or <code>*</code> to clear.")
+                    }
+                    "messages_q" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Send search text…")
+                        pendingInput = "messages_search"
+                        sendMessage("🔍 Send a contact name or number to search SMS conversations, or <code>*</code> to clear.")
+                    }
+                    "messages_refresh" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        renderMessagesPage(lastMessagesQuery, editMessageId = messageId)
+                    }
+                    "contacts_q" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Send search text…")
+                        pendingInput = "contacts_search"
+                        sendMessage("🔍 Send a name, phone, or email to search contacts, or <code>*</code> to clear.")
+                    }
+                    "notif_q" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Send search text…")
+                        pendingInput = "notif_search"
+                        sendMessage("🔍 Send an app name or keyword to search notifications, or <code>*</code> to clear.")
+                    }
+                    "notif_refresh" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        renderNotificationsPage(lastNotifQuery, editMessageId = messageId)
+                    }
+                    "files_q" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Send search text…")
+                        pendingInput = "files_search:$rest"
+                        sendMessage("🔍 Send a filename or pattern to search this folder and all subfolders (e.g. <code>.pdf</code> or <code>photo</code>).")
+                    }
+                    "blockapp_q" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Send search text…")
+                        pendingInput = "blockapp_search"
+                        sendMessage("🔍 Send an app name to search (e.g. <code>chrome</code>), or <code>*</code> to clear.")
+                    }
+                    "c_calls" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Loading call history…")
+                        renderContactCallsPage(rest, offset = 0, editMessageId = messageId)
+                    }
+                    "c_calls_pg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val sep = rest.lastIndexOf(':')
+                        if (sep < 0) return@launch
+                        val rawId = rest.substring(0, sep)
+                        val off = rest.substring(sep + 1).toIntOrNull() ?: 0
+                        renderContactCallsPage(rawId, off, editMessageId = messageId)
                     }
                     "aud" -> {
                         if (rest == "custom") {
@@ -1306,12 +1366,24 @@ object TelegramBotManager {
 
     private suspend fun cmdMessages(args: List<String>) {
         sendTyping()
-        val limit = min(args.firstOrNull()?.toIntOrNull() ?: 20, 100)
+        val query = if (args.isNotEmpty() && args.firstOrNull()?.toIntOrNull() == null) args.joinToString(" ").trim() else ""
+        lastMessagesQuery = query
+        renderMessagesPage(query, editMessageId = null)
+    }
+
+    private suspend fun renderMessagesPage(query: String, editMessageId: Long?) {
+        lastMessagesQuery = query
         try {
-            val convs = SmsConversationHelper.searchConversationsAsync(MainApp.instance, "", limit, 0)
-            if (convs.isEmpty()) { sendMessage("💬 No SMS conversations found."); return }
-            val sb = StringBuilder("💬 <b>Recent SMS Conversations</b> (${convs.size})\n")
-            sb.append("<i>Tap a conversation to open the thread.</i>\n\n")
+            val limit = 20
+            val convs = SmsConversationHelper.searchConversationsAsync(MainApp.instance, query, limit, 0)
+            val title = if (query.isEmpty()) "💬 <b>SMS Conversations</b>" else "💬 <b>SMS Conversations</b> · <i>${htmlEsc(query)}</i>"
+            if (convs.isEmpty()) {
+                val msg = "$title\n\nNo conversations found."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+                else sendMessage(msg)
+                return
+            }
+            val sb = StringBuilder("$title (${convs.size})\n<i>Tap a conversation to open the thread.</i>\n\n")
             val rows = mutableListOf<List<Pair<String, String>>>()
             convs.forEachIndexed { i, c ->
                 val addr = c.address.ifBlank { "Thread ${c.id}" }
@@ -1322,9 +1394,14 @@ object TelegramBotManager {
                 val label = "${i + 1}. ${addr.take(20)}"
                 rows.add(listOf(label to "sms_open:${c.id}"))
             }
-            sendMessage(sb.toString(), replyMarkup = TelegramApiClient.inlineKeyboard(rows))
+            rows.add(listOf("🔍 Search messages" to "messages_q", "🔄 Refresh" to "messages_refresh"))
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
         } catch (e: Exception) {
-            sendMessage("❌ Could not read SMS: ${htmlEsc(e.message ?: "")}")
+            val msg = "❌ Could not read SMS: ${htmlEsc(e.message ?: "")}"
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+            else sendMessage(msg)
         }
     }
 
@@ -1386,18 +1463,19 @@ object TelegramBotManager {
 
     private suspend fun cmdCalls(args: List<String>) {
         sendTyping()
-        // Optional explicit offset: /calls 20
-        val off = args.firstOrNull()?.toIntOrNull()?.coerceAtLeast(0) ?: 0
-        renderCallsPage(off, editMessageId = null)
+        val query = if (args.isNotEmpty() && args.firstOrNull()?.toIntOrNull() == null) args.joinToString(" ").trim() else ""
+        lastCallsQuery = query
+        renderCallsPage(query, offset = 0, editMessageId = null)
     }
 
-    private suspend fun renderCallsPage(offset: Int, editMessageId: Long?) {
+    private suspend fun renderCallsPage(query: String, offset: Int, editMessageId: Long?) {
+        lastCallsQuery = query
         try {
             val pageSize = 10
             // CallLog provider ignores QUERY_ARG_OFFSET on most devices, so the same
             // first page would otherwise repeat. Slice client-side for reliable paging.
             val fetchCap = offset + pageSize + 1
-            val all = CallMediaStoreHelper.searchAsync(MainApp.instance, "", fetchCap, 0)
+            val all = CallMediaStoreHelper.searchAsync(MainApp.instance, query, fetchCap, 0)
             val window = all.drop(offset).take(pageSize + 1)
             val hasMore = window.size > pageSize
             val pageItems = window.take(pageSize)
@@ -1407,7 +1485,8 @@ object TelegramBotManager {
                 else sendMessage(msg)
                 return
             }
-            val sb = StringBuilder("📞 <b>Recent Calls</b> · Showing ${offset + 1}–${offset + pageItems.size}\n")
+            val queryLabel = if (query.isNotEmpty()) " · search: <i>${htmlEsc(query)}</i>" else ""
+            val sb = StringBuilder("📞 <b>Recent Calls</b>$queryLabel · Showing ${offset + 1}–${offset + pageItems.size}\n")
             sb.append("<i>Tap a number's row below to call, text, or save it.</i>\n\n")
 
             // Track which numbers we've already issued a button row for, so a number
@@ -1453,10 +1532,12 @@ object TelegramBotManager {
                 ))
             }
 
+            val q = if (query.isEmpty()) "_" else query
             val nav = mutableListOf<Pair<String, String>>()
-            if (offset > 0) nav.add("◀️ Prev" to "calls_pg:${(offset - pageSize).coerceAtLeast(0)}")
-            if (hasMore) nav.add("Next ▶️" to "calls_pg:${offset + pageSize}")
+            if (offset > 0) nav.add("◀️ Prev" to "calls_pg:$q:${(offset - pageSize).coerceAtLeast(0)}")
+            if (hasMore) nav.add("Next ▶️" to "calls_pg:$q:${offset + pageSize}")
             if (nav.isNotEmpty()) rows.add(nav)
+            rows.add(listOf("🔍 Search calls" to "calls_q", "🔄 Refresh" to "calls_pg:_:0"))
 
             val markup = if (rows.isNotEmpty()) TelegramApiClient.inlineKeyboard(rows) else null
             if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
@@ -1500,6 +1581,9 @@ object TelegramBotManager {
     /** Last list state, used so the contact-detail "Back to list" button restores the right page. */
     @Volatile private var lastContactsQuery: String = ""
     @Volatile private var lastContactsOffset: Int = 0
+    @Volatile private var lastMessagesQuery: String = ""
+    @Volatile private var lastCallsQuery: String = ""
+    @Volatile private var lastNotifQuery: String = ""
 
     private suspend fun cmdContacts(args: List<String>) {
         sendTyping()
@@ -1550,6 +1634,7 @@ object TelegramBotManager {
             if (offset > 0) nav.add("◀️ Prev" to "contacts_pg:$q:${(offset - pageSize).coerceAtLeast(0)}")
             if (hasMore) nav.add("Next ▶️" to "contacts_pg:$q:${offset + pageSize}")
             if (nav.isNotEmpty()) rows.add(nav)
+            rows.add(listOf("🔍 Search contacts" to "contacts_q", "🔄 Refresh" to "contacts_pg:_:0"))
             val markup = TelegramApiClient.inlineKeyboard(rows)
             if (editMessageId != null) {
                 TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
@@ -1562,10 +1647,29 @@ object TelegramBotManager {
     }
 
     private fun cmdNotifications(args: List<String>) {
-        val limit = min(args.firstOrNull()?.toIntOrNull() ?: 15, 50)
-        val list = NotificationLogHelper.all().takeLast(limit).reversed()
-        if (list.isEmpty()) { sendMessage("🔔 No recent notifications."); return }
-        val sb = StringBuilder("🔔 <b>Recent Notifications</b> (${list.size})\n\n")
+        val queryArg = if (args.isNotEmpty() && args.firstOrNull()?.toIntOrNull() == null) args.joinToString(" ").trim() else ""
+        lastNotifQuery = queryArg
+        renderNotificationsPage(queryArg, editMessageId = null)
+    }
+
+    private fun renderNotificationsPage(query: String, editMessageId: Long?) {
+        lastNotifQuery = query
+        val limit = 50
+        val all = NotificationLogHelper.all().reversed()
+        val filtered = if (query.isEmpty()) all else all.filter { n ->
+            n.appName.contains(query, ignoreCase = true) ||
+            n.title?.contains(query, ignoreCase = true) == true ||
+            n.body?.contains(query, ignoreCase = true) == true
+        }
+        val list = filtered.take(limit)
+        val qLabel = if (query.isNotEmpty()) " · search: <i>${htmlEsc(query)}</i>" else ""
+        if (list.isEmpty()) {
+            val msg = "🔔 No notifications found$qLabel."
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+            else sendMessage(msg)
+            return
+        }
+        val sb = StringBuilder("🔔 <b>Recent Notifications</b>$qLabel (${list.size})\n\n")
         list.forEachIndexed { i, n ->
             sb.append("${i + 1}. 📱 <code>${htmlEsc(n.appName)}</code>\n")
             if (!n.title.isNullOrBlank()) sb.append("   📌 <b>${htmlEsc(n.title.take(80))}</b>\n")
@@ -1573,7 +1677,11 @@ object TelegramBotManager {
             sb.append("   🕐 ${fmtTime(n.time.toEpochMilliseconds())}\n\n")
             if (sb.length > 3500) { sb.append("…truncated"); return@forEachIndexed }
         }
-        sendMessage(sb.toString())
+        val markup = TelegramApiClient.inlineKeyboard(listOf(
+            listOf("🔍 Search notifications" to "notif_q", "🔄 Refresh" to "notif_refresh"),
+        ))
+        if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+        else sendMessage(sb.toString(), replyMarkup = markup)
     }
 
     /**
@@ -1716,6 +1824,7 @@ object TelegramBotManager {
             if (offset == 0 && parent == null) {
                 rows.add(listOf("🏠 /sdcard" to "files_pg:${pathToken("/sdcard")}:0"))
             }
+            rows.add(listOf("🔍 Search files" to "files_q:${pathToken(path)}"))
 
             val markup = TelegramApiClient.inlineKeyboard(rows)
             if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
@@ -1755,6 +1864,54 @@ object TelegramBotManager {
         val markup = TelegramApiClient.inlineKeyboard(rows)
         if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
         else sendMessage(sb.toString(), replyMarkup = markup)
+    }
+
+    /** Recursively search for files matching [query] under [root]. Returns up to [max] results. */
+    private fun searchFilesRecursive(root: File, query: String, max: Int): List<File> {
+        val results = mutableListOf<File>()
+        fun walk(dir: File) {
+            if (results.size >= max) return
+            val entries = try { dir.listFiles() ?: return } catch (_: SecurityException) { return }
+            for (f in entries) {
+                if (results.size >= max) return
+                if (f.name.contains(query, ignoreCase = true)) results.add(f)
+                if (f.isDirectory) walk(f)
+            }
+        }
+        walk(root)
+        return results
+    }
+
+    private fun renderFileSearchResults(rootPath: String, query: String, editMessageId: Long?) {
+        try {
+            val root = File(rootPath)
+            val hits = searchFilesRecursive(root, query, 30)
+            val sb = StringBuilder("🔍 <b>File Search</b> · <i>${htmlEsc(query)}</i> in <code>${htmlEsc(rootPath)}</code>\n")
+            if (hits.isEmpty()) {
+                sb.append("\nNo files found matching <i>${htmlEsc(query)}</i>.")
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString())
+                else sendMessage(sb.toString())
+                return
+            }
+            sb.append("Found ${hits.size} result(s) (top 30)\n\n")
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            hits.forEachIndexed { i, f ->
+                val icon = if (f.isDirectory) "📁" else fileIcon(f.name)
+                val size = if (f.isFile) " · ${humanSize(f.length())}" else ""
+                sb.append("${i + 1}. $icon <code>${htmlEsc(f.absolutePath.take(80))}</code>$size\n")
+                val tok = pathToken(f.absolutePath)
+                val cb = if (f.isDirectory) "files_pg:$tok:0" else "file_view:$tok"
+                rows.add(listOf("$icon ${(i + 1)}. ${f.name.take(28)}" to cb))
+            }
+            rows.add(listOf("📂 Back to folder" to "files_pg:${pathToken(rootPath)}:0"))
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            val msg = "❌ Search failed: ${htmlEsc(e.message ?: "")}"
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+            else sendMessage(msg)
+        }
     }
 
     private suspend fun cbSendFile(path: String) {
@@ -1958,6 +2115,47 @@ object TelegramBotManager {
                 val q = text.trim()
                 lastAppsQuery = if (q == "*" || q.isEmpty()) "" else q
                 renderAppsPickerPage(lastAppsQuery, offset = 0, editMessageId = null)
+                return
+            }
+            "contacts_search" -> {
+                val q = text.trim()
+                val query = if (q == "*" || q.isEmpty()) "" else "text:$q"
+                renderContactsPage(query, 0, editMessageId = null)
+                return
+            }
+            "messages_search" -> {
+                val q = text.trim()
+                val query = if (q == "*" || q.isEmpty()) "" else q
+                renderMessagesPage(query, editMessageId = null)
+                return
+            }
+            "calls_search" -> {
+                val q = text.trim()
+                val query = if (q == "*" || q.isEmpty()) "" else q
+                renderCallsPage(query, 0, editMessageId = null)
+                return
+            }
+            "notif_search" -> {
+                val q = text.trim()
+                val query = if (q == "*" || q.isEmpty()) "" else q
+                renderNotificationsPage(query, editMessageId = null)
+                return
+            }
+            "files_search" -> {
+                val pathTok = parts.getOrNull(1) ?: ""
+                val rootPath = if (pathTok.isNotEmpty()) pathFromToken(pathTok) ?: defaultStorageRoot() else defaultStorageRoot()
+                val q = text.trim()
+                if (q.isEmpty() || q == "*") {
+                    renderFolderPage(rootPath, 0, editMessageId = null)
+                } else {
+                    renderFileSearchResults(rootPath, q, editMessageId = null)
+                }
+                return
+            }
+            "blockapp_search" -> {
+                val q = text.trim()
+                val query = if (q == "*" || q.isEmpty()) "" else q
+                renderAppPickerForBlock(query, 0, editMessageId = null)
                 return
             }
             "sms_to" -> {
@@ -2261,7 +2459,7 @@ object TelegramBotManager {
                 sb.append("<b>📝 Note</b>\n   ${htmlEsc(c.notes.take(500))}\n\n")
             }
 
-            // Action keyboard: per-phone Call + SMS rows, then Share + Back.
+            // Action keyboard: per-phone Call + SMS rows, then Share + Call History + Back.
             val rows = mutableListOf<List<Pair<String, String>>>()
             c.phoneNumbers.take(5).forEach { ph ->
                 val tok = phoneToken(ph.value)
@@ -2272,7 +2470,10 @@ object TelegramBotManager {
                 ))
             }
             if (c.phoneNumbers.isNotEmpty()) {
-                rows.add(listOf("📤 Share contact card" to "c_share:$rawId"))
+                rows.add(listOf(
+                    "📤 Share contact card" to "c_share:$rawId",
+                    "📋 Call History" to "c_calls:$rawId",
+                ))
             }
             rows.add(listOf("⬅️ Back to list" to "c_back"))
             val markup = TelegramApiClient.inlineKeyboard(rows)
@@ -2346,6 +2547,73 @@ object TelegramBotManager {
         val phone = c.phoneNumbers.firstOrNull()?.value?.trim().orEmpty()
         if (phone.isNotEmpty()) return phone
         return "(no name)"
+    }
+
+    /** Render call log entries that match any of this contact's phone numbers. */
+    private suspend fun renderContactCallsPage(rawId: String, offset: Int, editMessageId: Long?) {
+        try {
+            val c = ContactMediaStoreHelper.getByIdAsync(MainApp.instance, rawId)
+            if (c == null) {
+                val msg = "❌ Contact not found."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+                else sendMessage(msg)
+                return
+            }
+            val display = contactDisplayName(c)
+            val phones = c.phoneNumbers.map { it.value.filter { ch -> ch.isDigit() } }.filter { it.isNotEmpty() }
+            if (phones.isEmpty()) {
+                val msg = "📞 <b>${htmlEsc(display)}</b> has no phone numbers — no call history available."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+                else sendMessage(msg)
+                return
+            }
+            val pageSize = 15
+            // Fetch call logs for each phone number and merge results client-side
+            val allCalls = mutableListOf<DCall>()
+            for (phone in phones) {
+                val results = try { CallMediaStoreHelper.searchAsync(MainApp.instance, phone, 200, 0) } catch (_: Exception) { emptyList() }
+                allCalls.addAll(results)
+            }
+            // De-duplicate by ID and sort newest first
+            val deduped = allCalls.distinctBy { it.id }.sortedByDescending { it.startedAt.toEpochMilliseconds() }
+            val window = deduped.drop(offset).take(pageSize + 1)
+            val hasMore = window.size > pageSize
+            val pageItems = window.take(pageSize)
+            if (pageItems.isEmpty()) {
+                val msg = if (offset == 0) "📞 No call history found for <b>${htmlEsc(display)}</b>." else "📞 No more entries."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+                else sendMessage(msg)
+                return
+            }
+            val sb = StringBuilder("📋 <b>Call History — ${htmlEsc(display)}</b>\n")
+            sb.append("Showing ${offset + 1}–${offset + pageItems.size}\n\n")
+            pageItems.forEachIndexed { i, call ->
+                val typeEmoji = when (call.type) {
+                    CallLog.Calls.INCOMING_TYPE -> "📲 Incoming"
+                    CallLog.Calls.OUTGOING_TYPE -> "📤 Outgoing"
+                    CallLog.Calls.MISSED_TYPE -> "❌ Missed"
+                    CallLog.Calls.REJECTED_TYPE -> "🚫 Rejected"
+                    else -> "📞"
+                }
+                val dur = if (call.duration > 0) "  ⏱ ${call.duration}s" else ""
+                sb.append("${offset + i + 1}. $typeEmoji$dur\n")
+                sb.append("   📱 <code>${htmlEsc(call.number)}</code>\n")
+                sb.append("   🕐 ${fmtTime(call.startedAt.toEpochMilliseconds())}\n\n")
+            }
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            val nav = mutableListOf<Pair<String, String>>()
+            if (offset > 0) nav.add("◀️ Prev" to "c_calls_pg:$rawId:${(offset - pageSize).coerceAtLeast(0)}")
+            if (hasMore) nav.add("Next ▶️" to "c_calls_pg:$rawId:${offset + pageSize}")
+            if (nav.isNotEmpty()) rows.add(nav)
+            rows.add(listOf("⬅️ Back to contact" to "c_view:$rawId:_:0"))
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            val msg = "❌ Could not load call history: ${htmlEsc(e.message ?: "")}"
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg)
+            else sendMessage(msg)
+        }
     }
 
     /** Free-form text query the user is currently scrolling. Empty = all apps. */
@@ -2558,6 +2826,7 @@ object TelegramBotManager {
             if (offset > 0) nav.add("◀️ Prev" to "block_list:${(offset - pageSize).coerceAtLeast(0)}")
             if (hasMore) nav.add("Next ▶️" to "block_list:${offset + pageSize}")
             if (nav.isNotEmpty()) rows.add(nav)
+            rows.add(listOf("🔍 Search apps" to "blockapp_q", "🔄 Refresh" to "block_list:0"))
             val markup = TelegramApiClient.inlineKeyboard(rows)
             if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
             else sendMessage(sb.toString(), replyMarkup = markup)

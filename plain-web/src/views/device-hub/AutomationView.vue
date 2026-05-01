@@ -417,7 +417,7 @@ const dayLabels = [
   { v: 5, l: 'Fr' }, { v: 6, l: 'Sa' }, { v: 7, l: 'Su' },
 ]
 
-const filteredRules = computed(() => rules.value.filter(r => tab.value === 'schedules' ? r.kind === 'schedule' : r.kind !== 'schedule'))
+const filteredRules = computed(() => (rules.value ?? []).filter(r => tab.value === 'schedules' ? r.kind === 'schedule' : r.kind !== 'schedule'))
 
 function triggerTypes(kind: string) { return kind === 'schedule' ? triggerTypesSched : triggerTypesAll }
 
@@ -428,9 +428,9 @@ async function load() {
     gqlFetch(automationRulesGQL, {}),
     gqlFetch(automationRunsGQL, { limit: 50 }),
   ])
-  if (s.status === 'fulfilled' && !(s.value as any).errors) state.value = (s.value as any).data.automationState
-  if (r.status === 'fulfilled' && !(r.value as any).errors) rules.value = (r.value as any).data.automationRules
-  if (h.status === 'fulfilled' && !(h.value as any).errors) runs.value = (h.value as any).data.automationRuns
+  if (s.status === 'fulfilled' && !(s.value as any).errors) state.value = (s.value as any).data?.automationState ?? null
+  if (r.status === 'fulfilled' && !(r.value as any).errors) rules.value = (r.value as any).data?.automationRules ?? []
+  if (h.status === 'fulfilled' && !(h.value as any).errors) runs.value = (h.value as any).data?.automationRuns ?? []
 }
 
 onMounted(load)

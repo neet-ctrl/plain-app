@@ -292,6 +292,26 @@ Re-imagined `/apps` as an interactive Telegram inline-keyboard browser instead o
 
 New callback prefixes added: `apps_pg`, `apps_q`, `appd`, `appl`, `appst`, `appblock`, `appunblock`, `applimit`, `appclim`, `appapk`, `appicn`, `appcp`, `appu`, `appuok`. New pending-input action: `appsearch`.
 
+## Web panel — AutomationView null-safety fix (May 2026)
+
+Fixed the Automation page in Device Control Hub where clicking "New rule" / "New schedule" would show an empty/blank modal.
+
+- `plain-web/src/views/device-hub/AutomationView.vue`: Added null-safety (`?.` and `?? []`) to the `load()` function when extracting `automationRules` and `runs` from GQL response, preventing JavaScript crashes when GQL returns `null` data. Also guarded `filteredRules` computed with `?? []` on `rules.value`.
+
+## Telegram bot — Search + Contact Call History (May 2026)
+
+Added search capability and call history to multiple bot commands:
+
+- **🔍 Search buttons** added to `/contacts`, `/messages`, `/calls`, `/files`, `/blockapp`, `/notifications` — tapping sets `pendingInput` to the matching action token; the user's next text message is consumed as the search query.
+- **`consumePendingInput` cases** added for: `contacts_search`, `messages_search`, `calls_search`, `notif_search`, `files_search:<pathToken>`, `blockapp_search`.
+- **`renderMessagesPage(query, editMessageId)`** — new suspend function replacing direct `cmdMessages` send; filters SMS conversations by contact name or number.
+- **`renderCallsPage(query, offset, editMessageId)`** — existing function extended with a `query` parameter; callback format updated to `calls_pg:<query>:<offset>`.
+- **`renderNotificationsPage(query, editMessageId)`** — new regular function replacing `cmdNotifications` send; filters notification log by app/title/text.
+- **`renderFileSearchResults(rootPath, query, editMessageId)`** — new regular function using `searchFilesRecursive` to do a depth-limited recursive file search within a folder.
+- **`renderContactCallsPage(rawId, offset, editMessageId)`** — new suspend function that collects call logs across all phone numbers for a contact (merged + de-duped), paginated. Added "📋 Call History" button in contact detail view (`renderContactDetail`).
+- **Volatile state** vars added: `lastMessagesQuery`, `lastCallsQuery`, `lastNotifQuery`.
+- **New callbacks**: `calls_q`, `messages_q`, `messages_refresh`, `contacts_q`, `notif_q`, `notif_refresh`, `files_q`, `blockapp_q`, `c_calls`, `c_calls_pg`.
+
 ## Telegram bot — `/mutenotifs` command (April 30, 2026)
 
 Added a one-shot mute switch for the notification forwarding stream so the user can shush the bot without disabling the underlying NotificationListener service.
