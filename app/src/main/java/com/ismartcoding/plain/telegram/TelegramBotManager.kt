@@ -749,11 +749,13 @@ object TelegramBotManager {
                     "np_play" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
                         AudioPlayer.play()
+                        kotlinx.coroutines.delay(200)
                         renderNowPlaying(editMessageId = messageId)
                     }
                     "np_pause" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
                         AudioPlayer.pause()
+                        kotlinx.coroutines.delay(200)
                         renderNowPlaying(editMessageId = messageId)
                     }
                     "np_next" -> {
@@ -5584,8 +5586,10 @@ object TelegramBotManager {
 
     private suspend fun renderNowPlaying(editMessageId: Long?) {
         try {
-            val isPlaying = AudioPlayer.isPlaying()
-            val pos = AudioPlayer.playerProgress
+            // MediaController requires all property reads on the main thread
+            val (isPlaying, pos) = withContext(kotlinx.coroutines.Dispatchers.Main) {
+                AudioPlayer.isPlaying() to AudioPlayer.playerProgress
+            }
             val ctx = MainApp.instance
             val playingPath = com.ismartcoding.plain.preferences.AudioPlayingPreference.getValueAsync(ctx)
             val sb = StringBuilder("🎵 <b>Now Playing</b>\n━━━━━━━━━━━━━━━━━━━━\n")
