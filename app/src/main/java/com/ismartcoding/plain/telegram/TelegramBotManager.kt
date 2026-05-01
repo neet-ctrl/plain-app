@@ -6473,9 +6473,9 @@ object TelegramBotManager {
             val rows = mutableListOf<List<Pair<String, String>>>()
             pageItems.forEachIndexed { i, doc ->
                 val ext = doc.path.substringAfterLast('.').uppercase().take(6)
-                sb.append("${offset + i + 1}. 📄 <b>${htmlEsc(doc.title.take(55))}</b>\n")
-                sb.append("   [$ext] · ${humanSize(doc.size)} · ${fmtTime(doc.createdAt.toEpochMilliseconds())}\n\n")
-                rows.add(listOf("📥 ${offset + i + 1}. ${doc.title.take(28)}" to "doc_get:${pathToken(doc.path)}"))
+                sb.append("${offset + i + 1}. 📄 <b>${htmlEsc(doc.name.take(55))}</b>\n")
+                sb.append("   [$ext] · ${humanSize(doc.size)} · ${fmtTime((doc.createdAt ?: doc.updatedAt).toEpochMilliseconds())}\n\n")
+                rows.add(listOf("📥 ${offset + i + 1}. ${doc.name.take(28)}" to "doc_get:${pathToken(doc.path)}"))
             }
             val qSeg = safeSeg(query.ifBlank { "_" })
             val nav = mutableListOf<Pair<String, String>>()
