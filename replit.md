@@ -323,3 +323,31 @@ Added a one-shot mute switch for the notification forwarding stream so the user 
 - Aliases for the command itself: `/mutenotif`, `/mutenotifications`, `/shutup`, `/silence`
 - Toggle is volatile (in-memory `forwardNotifications` flag in `TelegramBotManager`) and survives until the bot process is restarted; it does NOT touch the device's notification listener — `/notifications` and `/logs` continue to work and the local notification log keeps recording.
 - Confirmation messages include an inline-keyboard button ("🔔 Resume forwards" / "🔕 Mute again") wired to `notif_mute` / `notif_unmute` callbacks for one-tap reverse.
+
+## Telegram bot — Mass new features batch (May 2026)
+
+Added 7 brand-new commands plus music playback controls and auto-SMS forwarding:
+
+### New commands
+- **`/storage`** (`disk`) — Shows internal storage, SD card, and USB disk usage as a visual bar-chart (used/free/total, filled/empty blocks).
+- **`/sim`** (`siminfo`, `carrier`) — Lists all SIM cards detected via `SimHelper.getAll()` (label, phone number/address).
+- **`/dnd [on|off|toggle]`** (`donotdisturb`) — Reads/sets Do Not Disturb interruption filter via `NotificationManager.setInterruptionFilter`. Shows ✅ confirmation with inline ON/OFF toggle buttons. If DND access not granted, shows actionable instructions.
+- **`/screentime [days]`** (`usagestats`, `usage`) — Queries `UsageStatsManager.INTERVAL_DAILY` for foreground time per app, shows top 20 apps sorted by usage. Handles missing `PACKAGE_USAGE_STATS` permission gracefully.
+- **`/blocknumber [number]`** (`blocknum`, `blockcall`) — Interactive blocked-number manager using `BlockedNumberHelper`. With a number arg: toggles block/unblock. Without args: shows paginated list with 🗑 Unblock buttons (each button stores the phone number in `phoneTokens` map to stay under 64-byte Telegram limit). ➕ Block a number button sets `pendingInput = "bn_add_num"` for free-text entry.
+- **`/nowplaying`** (`np`, `player`) — Shows currently playing audio track (title from filename, position, play/pause state) from `AudioPlayingPreference.getValueAsync()`. Renders inline keyboard with ⏮ Prev / ▶️Play|⏸Pause / ⏭ Next / 🔄 Refresh buttons.
+- **`/forwardsms [on|off]`** (`smsfwd`) — Toggles `forwardSmsEnabled` flag. When ON, every incoming SMS is forwarded to the Telegram chat (see `SmsForwardReceiver`).
+
+### Music page playback controls
+`renderMusicPage()` now adds a persistent playback control row at the bottom: ⏮ / ▶️Play|⏸Pause / ⏭ / 🎵 Now Playing — all wired to the same `np_*` callbacks as `/nowplaying`.
+
+### Auto-forward incoming SMS
+- **`RECEIVE_SMS`** permission added to `AndroidManifest.xml`.
+- **`SmsForwardReceiver`** (`app/.../receivers/SmsForwardReceiver.kt`) — `BroadcastReceiver` registered in manifest with `android.provider.Telephony.SMS_RECEIVED` action (priority 999). Calls `TelegramBotManager.forwardSms(sender, body)` when `forwardSmsEnabled == true`.
+- **`forwardSms(sender, body)`** in `TelegramBotManager` — resolves sender phone to contact name via `lookupContactName`, builds a rich HTML message (`📩 Incoming SMS` + 👤 name + 📱 number + 🕐 timestamp + body), and sends it to the configured chat.
+- **`forwardSmsEnabled` `@Volatile var`** — default `false`, toggled by `/forwardsms`.
+
+### New callbacks
+`bn_del`, `bn_add`, `bn_pg`, `np_play`, `np_pause`, `np_next`, `np_prev`, `np_refresh`, `music_cmd`, `smsfwd_on`, `smsfwd_off`, `dnd_on`, `dnd_off`.
+
+### New `consumePendingInput` case
+`bn_add_num` — called after user taps ➕ Block and sends a phone number; calls `BlockedNumberHelper.add(num)`.

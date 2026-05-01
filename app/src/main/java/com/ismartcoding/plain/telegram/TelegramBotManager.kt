@@ -27,7 +27,12 @@ import com.ismartcoding.plain.features.NoteHelper
 import com.ismartcoding.plain.features.BookmarkHelper
 import com.ismartcoding.plain.features.feed.FeedHelper
 import com.ismartcoding.plain.features.feed.FeedEntryHelper
+import com.ismartcoding.plain.features.AudioPlayer
+import com.ismartcoding.plain.features.call.BlockedNumberHelper
+import com.ismartcoding.plain.features.call.SimHelper
 import com.ismartcoding.plain.features.file.FileSortBy
+import com.ismartcoding.plain.features.file.FileSystemHelper
+import com.ismartcoding.plain.preferences.AudioPlayingPreference
 import com.ismartcoding.plain.features.media.CallMediaStoreHelper
 import com.ismartcoding.plain.features.media.ContactMediaStoreHelper
 import com.ismartcoding.plain.features.media.AudioMediaStoreHelper
@@ -87,6 +92,7 @@ object TelegramBotManager {
     @Volatile var isRunning: Boolean = false
     @Volatile var forwardNotifications: Boolean = true
     @Volatile var forwardCalls: Boolean = true
+    @Volatile var forwardSmsEnabled: Boolean = false
     @Volatile private var lastUpdateId: Long = 0L
     @Volatile private var lastForwardedCallState: String = "idle"
 
@@ -157,6 +163,13 @@ object TelegramBotManager {
         "livecall" to "📞 Live call hub — accept / mute / end ongoing calls",
         "wifi" to "📶 Wi-Fi state / toggle — /wifi [on|off]",
         "netusage" to "📊 Network usage — /netusage [days]",
+        "storage" to "💾 Storage usage — internal, SD card, USB",
+        "sim" to "📡 SIM card & carrier info",
+        "dnd" to "🔇 Do Not Disturb — /dnd [on|off|toggle]",
+        "screentime" to "⏱ App screen time — /screentime [days]",
+        "blocknumber" to "🚫 Block/unblock incoming calls — /blocknumber [number]",
+        "nowplaying" to "🎵 Now-playing status + playback controls",
+        "forwardsms" to "📩 Toggle auto-forwarding of incoming SMS to this chat",
         "commands" to "📝 List all commands with details",
         "stop" to "⛔ Stop the bot",
     )
@@ -269,6 +282,21 @@ object TelegramBotManager {
             } catch (e: Exception) {
                 LogCat.e("TelegramBot forwardCallRecording failed: ${e.message}")
             }
+        }
+    }
+
+    /** Called by SmsForwardReceiver when an SMS arrives and forwardSmsEnabled == true. */
+    fun forwardSms(sender: String, body: String) {
+        if (!isRunning || !forwardSmsEnabled || token.isBlank() || chatId.isBlank()) return
+        scope.launch {
+            val contactName = lookupContactName(sender)
+            val sb = StringBuilder("📩 <b>Incoming SMS</b>\n")
+            if (contactName.isNotBlank()) sb.append("👤 <b>${htmlEsc(contactName)}</b>\n")
+            sb.append("📱 <code>${htmlEsc(sender)}</code>\n")
+            sb.append("🕐 $ts\n\n")
+            sb.append(htmlEsc(body))
+            try { TelegramApiClient.sendMessage(token, chatId, sb.toString()) }
+            catch (e: Exception) { LogCat.e("TelegramBot forwardSms failed: ${e.message}") }
         }
     }
 
@@ -423,6 +451,13 @@ object TelegramBotManager {
                     "livecall", "calltracker" -> cmdLiveCall()
                     "wifi" -> cmdWifi(args)
                     "netusage", "datausage" -> cmdNetUsage(args)
+                    "storage", "disk" -> cmdStorage()
+                    "sim", "siminfo", "carrier" -> cmdSim()
+                    "dnd", "donotdisturb" -> cmdDnd(args)
+                    "screentime", "usagestats", "usage" -> cmdScreenTime(args)
+                    "blocknumber", "blocknum", "blockcall" -> cmdBlockNumber(args)
+                    "nowplaying", "np", "player" -> cmdNowPlaying()
+                    "forwardsms", "smsfwd" -> cmdForwardSms(args)
                     "commands" -> cmdCommands()
                     "stop" -> { sendMessage("⛔ Bot stopped. Restart it from the PlainApp settings."); stop() }
                     else -> sendMessage("❓ Unknown command: <code>$command</code>\n\nSend /help for all commands.")
@@ -630,6 +665,87 @@ object TelegramBotManager {
                     "rec_del_no" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
                         if (messageId != null) TelegramApiClient.editMessageText(token, chatId, messageId, "↩️ Deletion cancelled.")
+                    }
+                    // ---------- Now Playing controls ----------
+                    "np_play" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        AudioPlayer.play()
+                        renderNowPlaying(editMessageId = messageId)
+                    }
+                    "np_pause" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        AudioPlayer.pause()
+                        renderNowPlaying(editMessageId = messageId)
+                    }
+                    "np_next" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        AudioPlayer.skipToNext()
+                        kotlinx.coroutines.delay(400)
+                        renderNowPlaying(editMessageId = messageId)
+                    }
+                    "np_prev" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        AudioPlayer.skipToPrevious()
+                        kotlinx.coroutines.delay(400)
+                        renderNowPlaying(editMessageId = messageId)
+                    }
+                    // ---------- Block number controls ----------
+                    "bn_del" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val num = phoneFromToken(rest) ?: run {
+                            sendMessage("❌ Number not found — refresh the list."); return@launch
+                        }
+                        BlockedNumberHelper.delete(num)
+                        renderBlockNumberPage(editMessageId = messageId)
+                    }
+                    "bn_add" -> {
+                        pendingInput = "bn_add_num"
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Send the phone number to block…")
+                    }
+                    "bn_pg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        renderBlockNumberPage(editMessageId = messageId)
+                    }
+                    // ---------- Now Playing refresh ----------
+                    "np_refresh" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        renderNowPlaying(editMessageId = messageId)
+                    }
+                    "music_cmd" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        renderMusicPage("", 0, editMessageId = null)
+                    }
+                    // ---------- SMS forward toggle ----------
+                    "smsfwd_on" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        forwardSmsEnabled = true
+                        val markup = TelegramApiClient.inlineKeyboard(listOf(listOf("✅ Enable" to "smsfwd_on", "🔕 Disable" to "smsfwd_off")))
+                        if (messageId != null) TelegramApiClient.editMessageText(token, chatId, messageId, "📩 <b>SMS Forwarding</b>\nStatus: ✅ <b>ON</b> — incoming SMS will be forwarded to this chat", replyMarkup = markup)
+                    }
+                    "smsfwd_off" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        forwardSmsEnabled = false
+                        val markup = TelegramApiClient.inlineKeyboard(listOf(listOf("✅ Enable" to "smsfwd_on", "🔕 Disable" to "smsfwd_off")))
+                        if (messageId != null) TelegramApiClient.editMessageText(token, chatId, messageId, "📩 <b>SMS Forwarding</b>\nStatus: 🔕 <b>OFF</b> — SMS forwarding is paused", replyMarkup = markup)
+                    }
+                    // ---------- DND toggle ----------
+                    "dnd_on" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val nm = MainApp.instance.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                        if (nm.isNotificationPolicyAccessGranted) {
+                            nm.setInterruptionFilter(android.app.NotificationManager.INTERRUPTION_FILTER_NONE)
+                            val markup = TelegramApiClient.inlineKeyboard(listOf(listOf("🔇 DND On" to "dnd_on", "🔔 DND Off" to "dnd_off")))
+                            if (messageId != null) TelegramApiClient.editMessageText(token, chatId, messageId, "🔇 <b>Do Not Disturb</b>\nStatus: 🔇 <b>ON</b> (all calls and notifications silenced)", replyMarkup = markup)
+                        }
+                    }
+                    "dnd_off" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val nm = MainApp.instance.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                        if (nm.isNotificationPolicyAccessGranted) {
+                            nm.setInterruptionFilter(android.app.NotificationManager.INTERRUPTION_FILTER_ALL)
+                            val markup = TelegramApiClient.inlineKeyboard(listOf(listOf("🔇 DND On" to "dnd_on", "🔔 DND Off" to "dnd_off")))
+                            if (messageId != null) TelegramApiClient.editMessageText(token, chatId, messageId, "🔇 <b>Do Not Disturb</b>\nStatus: 🔔 <b>OFF</b> (notifications active)", replyMarkup = markup)
+                        }
                     }
                     "contacts_pg" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
@@ -2295,6 +2411,17 @@ object TelegramBotManager {
                 val q = text.trim()
                 val query = if (q == "*" || q.isEmpty()) "" else q
                 renderRecordingsPage(query, 0, editMessageId = null)
+                return
+            }
+            "bn_add_num" -> {
+                val num = text.trim()
+                if (num.isBlank()) { sendMessage("❌ Please send a valid phone number."); return }
+                try {
+                    BlockedNumberHelper.add(num)
+                    sendMessage("✅ <code>${htmlEsc(num)}</code> is now blocked.")
+                } catch (e: Exception) {
+                    sendMessage("❌ Could not block number: ${htmlEsc(e.message ?: "")}")
+                }
                 return
             }
             "sms_to" -> {
@@ -4332,6 +4459,10 @@ object TelegramBotManager {
             if (offset > 0) nav.add("◀️ Prev" to "mus_pg:$qTok:${(offset - pageSize).coerceAtLeast(0)}")
             if (hasMore) nav.add("Next ▶️" to "mus_pg:$qTok:${offset + pageSize}")
             if (nav.isNotEmpty()) rows.add(nav)
+            // Playback controls row
+            val isPlaying = AudioPlayer.isPlaying()
+            val playPauseBtn = if (isPlaying) "⏸ Pause" to "np_pause" else "▶️ Play" to "np_play"
+            rows.add(listOf("⏮" to "np_prev", playPauseBtn, "⏭" to "np_next", "🎵 Now Playing" to "np_refresh"))
             val markup = TelegramApiClient.inlineKeyboard(rows)
             if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
             else sendMessage(sb.toString(), replyMarkup = markup)
@@ -4904,5 +5035,219 @@ object TelegramBotManager {
         } catch (e: Exception) {
             sendMessage("❌ Net usage error: ${htmlEsc(e.message ?: "")}")
         }
+    }
+
+    // ==================== /storage ====================
+
+    private fun cmdStorage() {
+        sendTyping()
+        try {
+            val ctx = MainApp.instance
+            val internal = FileSystemHelper.getInternalStorageStats()
+            val sb = StringBuilder("💾 <b>Storage</b>\n━━━━━━━━━━━━━━━━━━━━\n")
+            fun formatLine(label: String, s: com.ismartcoding.plain.features.file.DStorageStatsItem) {
+                val used = s.totalBytes - s.freeBytes
+                val pct = if (s.totalBytes > 0) (used * 100 / s.totalBytes).toInt() else 0
+                val bar = "█".repeat(pct / 10) + "░".repeat(10 - pct / 10)
+                sb.append("$label\n")
+                sb.append("  $bar $pct%\n")
+                sb.append("  Used: <b>${humanSize(used)}</b>  Free: <b>${humanSize(s.freeBytes)}</b>  Total: ${humanSize(s.totalBytes)}\n\n")
+            }
+            formatLine("📱 Internal", internal)
+            val sd = FileSystemHelper.getSDCardStorageStats(ctx)
+            if (sd.totalBytes > 0) formatLine("💳 SD Card", sd)
+            val usbs = FileSystemHelper.getUSBStorageStats()
+            usbs.forEachIndexed { i, u -> if (u.totalBytes > 0) formatLine("🔌 USB ${i + 1}", u) }
+            sendMessage(sb.toString())
+        } catch (e: Exception) {
+            sendMessage("❌ Storage error: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    // ==================== /sim ====================
+
+    private fun cmdSim() {
+        sendTyping()
+        try {
+            val sims = SimHelper.getAll()
+            if (sims.isEmpty()) {
+                sendMessage("📡 No SIM cards detected.")
+                return
+            }
+            val sb = StringBuilder("📡 <b>SIM Cards</b>\n━━━━━━━━━━━━━━━━━━━━\n")
+            sims.forEachIndexed { i, s ->
+                sb.append("${i + 1}. 📶 <b>${htmlEsc(s.label.ifBlank { "SIM ${i + 1}" })}</b>\n")
+                sb.append("   📱 <code>${htmlEsc(s.address.ifBlank { "(number hidden)" })}</code>\n\n")
+            }
+            sendMessage(sb.toString())
+        } catch (e: Exception) {
+            sendMessage("❌ SIM error: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    // ==================== /dnd ====================
+
+    private fun cmdDnd(args: List<String>) {
+        val nm = MainApp.instance.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        if (!nm.isNotificationPolicyAccessGranted) {
+            sendMessage("❌ DND access not granted.\n\nGo to <b>Settings → Apps → Special app access → Do Not Disturb access</b> and enable PlainApp.")
+            return
+        }
+        val currentOn = nm.currentInterruptionFilter == android.app.NotificationManager.INTERRUPTION_FILTER_NONE
+        val setOn = when (args.firstOrNull()?.lowercase()) {
+            "on", "1", "true", "enable" -> true
+            "off", "0", "false", "disable" -> false
+            "toggle" -> !currentOn
+            else -> null
+        }
+        if (setOn != null) {
+            nm.setInterruptionFilter(if (setOn) android.app.NotificationManager.INTERRUPTION_FILTER_NONE else android.app.NotificationManager.INTERRUPTION_FILTER_ALL)
+        }
+        val isOn = nm.currentInterruptionFilter == android.app.NotificationManager.INTERRUPTION_FILTER_NONE
+        val state = if (isOn) "🔇 <b>ON</b> (all calls and notifications silenced)" else "🔔 <b>OFF</b> (notifications active)"
+        val rows = listOf(listOf("🔇 DND On" to "dnd_on", "🔔 DND Off" to "dnd_off"))
+        val markup = TelegramApiClient.inlineKeyboard(rows)
+        sendMessage("🔇 <b>Do Not Disturb</b>\nStatus: $state", replyMarkup = markup)
+    }
+
+    // ==================== /screentime ====================
+
+    private fun cmdScreenTime(args: List<String>) {
+        sendTyping()
+        val days = (args.firstOrNull()?.toIntOrNull() ?: 1).coerceIn(1, 7)
+        try {
+            val usm = MainApp.instance.getSystemService(android.content.Context.USAGE_STATS_SERVICE) as android.app.usage.UsageStatsManager
+            val now = System.currentTimeMillis()
+            val start = now - days.toLong() * 24 * 60 * 60 * 1000
+            val stats = usm.queryUsageStats(android.app.usage.UsageStatsManager.INTERVAL_DAILY, start, now)
+            if (stats.isNullOrEmpty()) {
+                sendMessage("⏱ No usage data. Make sure PlainApp has <b>Usage Access</b> permission (Settings → Apps → Special app access → Usage access).")
+                return
+            }
+            val merged = mutableMapOf<String, Long>()
+            stats.forEach { s ->
+                if (s.totalTimeInForeground > 0) {
+                    merged[s.packageName] = (merged[s.packageName] ?: 0L) + s.totalTimeInForeground
+                }
+            }
+            val sorted = merged.entries.sortedByDescending { it.value }.take(20)
+            val sb = StringBuilder("⏱ <b>Screen Time</b> · last $days day(s)\n━━━━━━━━━━━━━━━━━━━━\n")
+            sorted.forEachIndexed { i, (pkg, ms) ->
+                val appLabel = try { MainApp.instance.packageManager.getApplicationLabel(MainApp.instance.packageManager.getApplicationInfo(pkg, 0)).toString() } catch (_: Exception) { pkg }
+                val h = ms / 3600000; val m = (ms % 3600000) / 60000
+                val timeStr = if (h > 0) "${h}h ${m}m" else "${m}m"
+                sb.append("${i + 1}. <b>${htmlEsc(appLabel.take(28))}</b>  $timeStr\n")
+            }
+            sendMessage(sb.toString())
+        } catch (e: Exception) {
+            sendMessage("❌ Screen time error: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    // ==================== /blocknumber ====================
+
+    private suspend fun cmdBlockNumber(args: List<String>) {
+        sendTyping()
+        if (args.isNotEmpty()) {
+            val num = args.joinToString(" ").trim()
+            val existing = BlockedNumberHelper.getAll()
+            val match = existing.firstOrNull { it.number == num || it.normalizedNumber == num }
+            if (match != null) {
+                BlockedNumberHelper.delete(match.number)
+                sendMessage("✅ Unblocked: <code>${htmlEsc(num)}</code>")
+            } else {
+                BlockedNumberHelper.add(num)
+                sendMessage("🚫 Blocked: <code>${htmlEsc(num)}</code>")
+            }
+            return
+        }
+        renderBlockNumberPage(editMessageId = null)
+    }
+
+    private suspend fun renderBlockNumberPage(editMessageId: Long?) {
+        try {
+            val blocked = BlockedNumberHelper.getAll()
+            val sb = StringBuilder("🚫 <b>Blocked Numbers</b> (${blocked.size})\n")
+            if (blocked.isEmpty()) {
+                sb.append("\n<i>No blocked numbers.</i>\n\nUse /blocknumber &lt;number&gt; to block one.")
+                val rows = listOf(listOf("➕ Block a number" to "bn_add"))
+                val markup = TelegramApiClient.inlineKeyboard(rows)
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+                else sendMessage(sb.toString(), replyMarkup = markup)
+                return
+            }
+            sb.append("<i>Tap 🗑 to unblock immediately.</i>\n\n")
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            blocked.take(20).forEachIndexed { i, b ->
+                val name = lookupContactName(b.number)
+                sb.append("${i + 1}. 🚫 <code>${htmlEsc(b.number)}</code>")
+                if (name.isNotBlank()) sb.append("  <b>${htmlEsc(name)}</b>")
+                sb.append("\n")
+                val label = if (name.isNotBlank()) "${name.take(14)} (${b.number.takeLast(8)})" else b.number.take(24)
+                rows.add(listOf("🗑 Unblock $label" to "bn_del:${phoneToken(b.number)}"))
+            }
+            if (blocked.size > 20) sb.append("\n<i>… and ${blocked.size - 20} more.</i>")
+            rows.add(listOf("➕ Block a number" to "bn_add", "🔄 Refresh" to "bn_pg"))
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            val msg = "❌ Could not read blocked numbers: ${htmlEsc(e.message ?: "")}"
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+        }
+    }
+
+    // ==================== /nowplaying ====================
+
+    private suspend fun cmdNowPlaying() {
+        sendTyping()
+        renderNowPlaying(editMessageId = null)
+    }
+
+    private suspend fun renderNowPlaying(editMessageId: Long?) {
+        try {
+            val isPlaying = AudioPlayer.isPlaying()
+            val pos = AudioPlayer.playerProgress
+            val ctx = MainApp.instance
+            val playingPath = com.ismartcoding.plain.preferences.AudioPlayingPreference.getValueAsync(ctx)
+            val sb = StringBuilder("🎵 <b>Now Playing</b>\n━━━━━━━━━━━━━━━━━━━━\n")
+            if (playingPath.isBlank()) {
+                sb.append("<i>Nothing is loaded yet.</i>\n\nUse /music to browse the library.")
+                val markup = TelegramApiClient.inlineKeyboard(listOf(listOf("🎵 Music library" to "music_cmd")))
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+                else sendMessage(sb.toString(), replyMarkup = markup)
+                return
+            }
+            val fileName = java.io.File(playingPath).nameWithoutExtension
+            sb.append("🎵 <b>${htmlEsc(fileName)}</b>\n")
+            val posStr = "${pos / 60000}:${((pos % 60000) / 1000).toString().padStart(2, '0')}"
+            sb.append("⏱ Position: $posStr\n")
+            sb.append("Status: ${if (isPlaying) "▶️ Playing" else "⏸ Paused"}\n")
+            val playPause = if (isPlaying) "⏸ Pause" to "np_pause" else "▶️ Play" to "np_play"
+            val rows = listOf(
+                listOf("⏮ Prev" to "np_prev", playPause, "⏭ Next" to "np_next"),
+                listOf("🔄 Refresh" to "np_refresh"),
+            )
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            val msg = "❌ Player error: ${htmlEsc(e.message ?: "")}"
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+        }
+    }
+
+    // ==================== /forwardsms ====================
+
+    private fun cmdForwardSms(args: List<String>) {
+        val setEnabled = when (args.firstOrNull()?.lowercase()) {
+            "on", "1", "true", "enable" -> true
+            "off", "0", "false", "disable" -> false
+            else -> null
+        }
+        if (setEnabled != null) forwardSmsEnabled = setEnabled else forwardSmsEnabled = !forwardSmsEnabled
+        val state = if (forwardSmsEnabled) "✅ <b>ON</b> — incoming SMS will be forwarded to this chat" else "🔕 <b>OFF</b> — SMS forwarding is paused"
+        val rows = listOf(listOf("✅ Enable" to "smsfwd_on", "🔕 Disable" to "smsfwd_off"))
+        sendMessage("📩 <b>SMS Forwarding</b>\nStatus: $state", replyMarkup = TelegramApiClient.inlineKeyboard(rows))
     }
 }
