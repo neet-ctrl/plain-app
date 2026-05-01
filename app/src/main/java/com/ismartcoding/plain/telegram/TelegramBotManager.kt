@@ -68,6 +68,9 @@ import com.ismartcoding.plain.services.TimelineHelper
 import com.ismartcoding.plain.events.HttpApiEvents
 import com.ismartcoding.lib.channel.sendEvent
 import com.ismartcoding.plain.preferences.PomodoroSettingsPreference
+import com.ismartcoding.plain.preferences.TelegramBotEnabledPreference
+import com.ismartcoding.plain.preferences.TelegramBotTokenPreference
+import com.ismartcoding.plain.preferences.TelegramChatIdPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardSmsPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardGeofencePreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardBatteryAlertPreference
@@ -374,6 +377,38 @@ object TelegramBotManager {
             try { TelegramApiClient.sendMessage(token, chatId, sb.toString()) }
             catch (e: Exception) { LogCat.e("TelegramBot forwardSms failed: ${e.message}") }
         }
+    }
+
+    /**
+     * Standalone SMS forwarder — works even when the bot polling loop is NOT running.
+     * Reads all config from DataStore preferences directly. Called by SmsForwardReceiver
+     * via goAsync() so it is safe to do I/O here.
+     */
+    suspend fun forwardSmsStandalone(context: Context, sender: String, body: String) {
+        val ctx = context.applicationContext
+        if (!TelegramBotEnabledPreference.getAsync(ctx)) return
+        if (!TelegramBotForwardSmsPreference.getAsync(ctx)) return
+        val tok = TelegramBotTokenPreference.getAsync(ctx)
+        val cid = TelegramChatIdPreference.getAsync(ctx)
+        if (tok.isBlank() || cid.isBlank()) return
+        fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        val contactName = try {
+            val uri = android.provider.ContactsContract.PhoneLookup.CONTENT_FILTER_URI
+                .buildUpon().appendPath(sender).build()
+            ctx.contentResolver.query(
+                uri,
+                arrayOf(android.provider.ContactsContract.PhoneLookup.DISPLAY_NAME),
+                null, null, null
+            )?.use { cur -> if (cur.moveToFirst()) cur.getString(0) ?: "" else "" } ?: ""
+        } catch (_: Exception) { "" }
+        val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        val sb = StringBuilder("📩 <b>Incoming SMS</b>\n")
+        if (contactName.isNotBlank()) sb.append("👤 <b>${esc(contactName)}</b>\n")
+        sb.append("📱 <code>${esc(sender)}</code>\n")
+        sb.append("🕐 $stamp\n\n")
+        sb.append(esc(body))
+        try { TelegramApiClient.sendMessage(tok, cid, sb.toString()) }
+        catch (e: Exception) { LogCat.e("forwardSmsStandalone failed: ${e.message}") }
     }
 
     fun sendCrashReport(throwable: Throwable, timestamp: String) {
