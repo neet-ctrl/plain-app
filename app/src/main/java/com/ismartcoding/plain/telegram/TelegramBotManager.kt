@@ -5774,7 +5774,9 @@ object TelegramBotManager {
     private fun simStateStr(s: Int): String = when (s) {
         android.telephony.TelephonyManager.SIM_STATE_READY -> "ready"
         android.telephony.TelephonyManager.SIM_STATE_ABSENT -> "absent"
-        android.telephony.TelephonyManager.SIM_STATE_LOCKED -> "locked"
+        android.telephony.TelephonyManager.SIM_STATE_PIN_REQUIRED -> "PIN required"
+        android.telephony.TelephonyManager.SIM_STATE_PUK_REQUIRED -> "PUK required"
+        android.telephony.TelephonyManager.SIM_STATE_NETWORK_LOCKED -> "network locked"
         else -> "other"
     }
 
@@ -6105,8 +6107,8 @@ object TelegramBotManager {
         val rows = mutableListOf<List<Pair<String, String>>>()
         page.forEachIndexed { i, ai ->
             val label = pm.getApplicationLabel(ai).toString()
-            val cacheDir = ai.cacheDir
-            val cacheSize = if (cacheDir != null && cacheDir.exists()) dirSize(cacheDir) else 0L
+            val cacheDir = java.io.File(ai.dataDir, "cache")
+            val cacheSize = if (cacheDir.exists()) dirSize(cacheDir) else 0L
             val sizeStr = if (cacheSize > 0) " (${formatBytes(cacheSize)})" else ""
             sb.append("${offset + i + 1}. <b>${htmlEsc(label.take(40))}</b>$sizeStr\n")
             val tok = pkgToken(ai.packageName)
@@ -6127,8 +6129,8 @@ object TelegramBotManager {
         val ctx = MainApp.instance
         return try {
             val ai = ctx.packageManager.getApplicationInfo(packageName, 0)
-            val cacheDir = ai.cacheDir
-            if (cacheDir != null && cacheDir.exists()) {
+            val cacheDir = java.io.File(ai.dataDir, "cache")
+            if (cacheDir.exists()) {
                 cacheDir.deleteRecursively()
                 true
             } else {
