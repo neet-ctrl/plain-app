@@ -14,6 +14,7 @@ import com.ismartcoding.lib.logcat.LogCat
 import com.ismartcoding.plain.preferences.TelegramBotEnabledPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardCallsPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardNotificationsPreference
+import com.ismartcoding.plain.preferences.TelegramBotForwardSmsPreference
 import com.ismartcoding.plain.preferences.TelegramBotTokenPreference
 import com.ismartcoding.plain.preferences.TelegramChatIdPreference
 import com.ismartcoding.plain.preferences.WebPreference
@@ -51,6 +52,7 @@ class KeepAliveJobService : JobService() {
                             LogCat.d("KeepAliveJobService: TelegramBot dead — restarting")
                             TelegramBotManager.forwardNotifications = TelegramBotForwardNotificationsPreference.getAsync(ctx)
                             TelegramBotManager.forwardCalls = TelegramBotForwardCallsPreference.getAsync(ctx)
+                            TelegramBotManager.forwardSmsEnabled = TelegramBotForwardSmsPreference.getAsync(ctx)
                             TelegramBotManager.start(botToken, chatId)
                         }
                     }

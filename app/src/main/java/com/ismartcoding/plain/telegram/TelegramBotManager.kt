@@ -68,6 +68,7 @@ import com.ismartcoding.plain.services.TimelineHelper
 import com.ismartcoding.plain.events.HttpApiEvents
 import com.ismartcoding.lib.channel.sendEvent
 import com.ismartcoding.plain.preferences.PomodoroSettingsPreference
+import com.ismartcoding.plain.preferences.TelegramBotForwardSmsPreference
 import com.ismartcoding.plain.features.Permission
 import com.ismartcoding.plain.services.AppBlockHelper
 import com.ismartcoding.plain.services.LiveCallTracker
@@ -800,12 +801,14 @@ object TelegramBotManager {
                     "smsfwd_on" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
                         forwardSmsEnabled = true
+                        coIO { TelegramBotForwardSmsPreference.putAsync(MainApp.instance, true) }
                         val markup = TelegramApiClient.inlineKeyboard(listOf(listOf("✅ Enable" to "smsfwd_on", "🔕 Disable" to "smsfwd_off")))
                         if (messageId != null) TelegramApiClient.editMessageText(token, chatId, messageId, "📩 <b>SMS Forwarding</b>\nStatus: ✅ <b>ON</b> — incoming SMS will be forwarded to this chat", replyMarkup = markup)
                     }
                     "smsfwd_off" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
                         forwardSmsEnabled = false
+                        coIO { TelegramBotForwardSmsPreference.putAsync(MainApp.instance, false) }
                         val markup = TelegramApiClient.inlineKeyboard(listOf(listOf("✅ Enable" to "smsfwd_on", "🔕 Disable" to "smsfwd_off")))
                         if (messageId != null) TelegramApiClient.editMessageText(token, chatId, messageId, "📩 <b>SMS Forwarding</b>\nStatus: 🔕 <b>OFF</b> — SMS forwarding is paused", replyMarkup = markup)
                     }
@@ -5687,6 +5690,7 @@ object TelegramBotManager {
             else -> null
         }
         if (setEnabled != null) forwardSmsEnabled = setEnabled else forwardSmsEnabled = !forwardSmsEnabled
+        coIO { TelegramBotForwardSmsPreference.putAsync(MainApp.instance, forwardSmsEnabled) }
         val state = if (forwardSmsEnabled) "✅ <b>ON</b> — incoming SMS will be forwarded to this chat" else "🔕 <b>OFF</b> — SMS forwarding is paused"
         val rows = listOf(listOf("✅ Enable" to "smsfwd_on", "🔕 Disable" to "smsfwd_off"))
         sendMessage("📩 <b>SMS Forwarding</b>\nStatus: $state", replyMarkup = TelegramApiClient.inlineKeyboard(rows))

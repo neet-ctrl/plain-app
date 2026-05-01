@@ -25,6 +25,7 @@ import com.ismartcoding.plain.preferences.KeepAliveWatchdogEnabledPreference
 import com.ismartcoding.plain.preferences.TelegramBotEnabledPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardCallsPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardNotificationsPreference
+import com.ismartcoding.plain.preferences.TelegramBotForwardSmsPreference
 import com.ismartcoding.plain.preferences.TelegramBotTokenPreference
 import com.ismartcoding.plain.preferences.TelegramChatIdPreference
 import com.ismartcoding.plain.receivers.KeepAliveWatchdogReceiver
@@ -142,6 +143,7 @@ class HttpServerService : LifecycleService() {
             if (botToken.isNotBlank() && chatId.isNotBlank()) {
                 TelegramBotManager.forwardNotifications = TelegramBotForwardNotificationsPreference.getAsync(applicationContext)
                 TelegramBotManager.forwardCalls = TelegramBotForwardCallsPreference.getAsync(applicationContext)
+                TelegramBotManager.forwardSmsEnabled = TelegramBotForwardSmsPreference.getAsync(applicationContext)
                 TelegramBotManager.start(botToken, chatId)
             }
         } catch (e: Exception) {
