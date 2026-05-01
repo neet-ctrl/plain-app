@@ -78,8 +78,6 @@ import com.ismartcoding.plain.preferences.TelegramBotBatteryAlertThresholdPrefer
 import com.ismartcoding.plain.preferences.TelegramBotForwardStealthShotsPreference
 import com.ismartcoding.plain.helpers.SensorHelper
 import com.ismartcoding.plain.helpers.SystemControlHelper
-import com.ismartcoding.plain.helpers.GeofencingHelper
-import com.ismartcoding.plain.helpers.StealthScreenshotCapturer
 import com.ismartcoding.plain.features.Permission
 import com.ismartcoding.plain.services.AppBlockHelper
 import com.ismartcoding.plain.services.LiveCallTracker
