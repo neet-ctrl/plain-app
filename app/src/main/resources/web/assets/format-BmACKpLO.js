@@ -1,1 +1,0 @@
-import{bI as e}from"./index-CJkG5PUk.js";function o(a){let s="";e(a.firstName)||e(a.lastName)?s=`${a.lastName}${a.middleName}${a.firstName}`:s=[a.firstName,a.middleName,a.lastName].filter(r=>r).join(" ");const n=a.suffix?`, ${a.suffix}`:"",f=`${a.prefix} ${s} ${n}`.trim();return f||(a.emails.length?a.emails[0].value:"")}export{o as g};

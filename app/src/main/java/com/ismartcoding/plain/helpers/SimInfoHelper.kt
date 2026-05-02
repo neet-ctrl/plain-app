@@ -52,7 +52,7 @@ object SimInfoHelper {
         }
 
         val activeDataSubId = try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) sm.defaultDataSubscriptionId else -1
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) SubscriptionManager.getDefaultDataSubscriptionId() else -1
         } catch (_: Exception) { -1 }
 
         for (sub in subs) {
@@ -71,9 +71,7 @@ object SimInfoHelper {
                 else sub.mnc.toString()
             } catch (_: Exception) { "" }
             val simState = try {
-                val state = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) sm.getSimState(sub.simSlotIndex)
-                            else tmForSub.simState
-                simStateToString(state)
+                simStateToString(tmForSub.simState)
             } catch (_: Exception) { "UNKNOWN" }
             val signalBars = try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) tmForSub.signalStrength?.level ?: 0 else 0

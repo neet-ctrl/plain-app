@@ -1275,3 +1275,18 @@ export const simInfoGQL = `
     }
   }
 `
+
+export const protectedPermissionsStatusGQL = `
+  query {
+    protectedPermissionsStatus {
+      name
+      label
+      description
+      features
+      adbCommand
+      grantType
+      granted
+      settingsPath
+    }
+  }
+`

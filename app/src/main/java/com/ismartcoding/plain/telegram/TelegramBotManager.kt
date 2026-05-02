@@ -3906,6 +3906,7 @@ object TelegramBotManager {
 
     private fun cmdPermissions() {
         val ctx = MainApp.instance
+        val pkg = ctx.packageName
         val all = Permission.entries.filter { it != Permission.NONE }
         val granted = mutableListOf<Permission>()
         val denied = mutableListOf<Permission>()
@@ -3948,6 +3949,96 @@ object TelegramBotManager {
         }
         sb.append("🕐 ${ts}")
         sendMessage(sb.toString())
+
+        // ── Protected / ADB permissions (separate message) ──
+        data class AdbPerm(val name: String, val label: String, val granted: Boolean, val cmd: String)
+
+        fun pmCheck(perm: String) = ctx.checkSelfPermission(perm) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        fun appOpsGranted(): Boolean = try {
+            val ao = ctx.getSystemService(android.content.Context.APP_OPS_SERVICE) as android.app.AppOpsManager
+            val mode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q)
+                ao.unsafeCheckOpNoThrow("android:get_usage_stats", android.os.Process.myUid(), pkg)
+            else @Suppress("DEPRECATION") ao.checkOpNoThrow("android:get_usage_stats", android.os.Process.myUid(), pkg)
+            mode == android.app.AppOpsManager.MODE_ALLOWED
+        } catch (_: Exception) { false }
+        fun dndGranted(): Boolean = try {
+            (ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager)
+                .isNotificationPolicyAccessGranted
+        } catch (_: Exception) { false }
+        fun deviceAdminGranted(): Boolean = try {
+            val dpm = ctx.getSystemService(android.content.Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+            val cn = android.content.ComponentName(ctx, com.ismartcoding.plain.receivers.PlainDeviceAdminReceiver::class.java)
+            dpm.isAdminActive(cn)
+        } catch (_: Exception) { false }
+        fun notifListenerGranted(): Boolean = try {
+            val cn = android.content.ComponentName(ctx, com.ismartcoding.plain.services.PNotificationListenerService::class.java)
+            val enabled = android.provider.Settings.Secure.getString(ctx.contentResolver, "enabled_notification_listeners") ?: ""
+            enabled.contains(cn.flattenToString())
+        } catch (_: Exception) { false }
+
+        val adbPerms = listOf(
+            AdbPerm("WRITE_SECURE_SETTINGS", "Modify Secure Settings (Airplane Mode)",
+                pmCheck("android.permission.WRITE_SECURE_SETTINGS"),
+                "adb shell pm grant $pkg android.permission.WRITE_SECURE_SETTINGS"),
+            AdbPerm("TETHER_PRIVILEGED", "Hotspot / Tethering Control",
+                pmCheck("android.permission.TETHER_PRIVILEGED"),
+                "adb shell pm grant $pkg android.permission.TETHER_PRIVILEGED"),
+            AdbPerm("READ_CLIPBOARD_IN_BACKGROUND", "Read Clipboard in Background",
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q)
+                    pmCheck("android.permission.READ_CLIPBOARD_IN_BACKGROUND") else true,
+                "adb shell pm grant $pkg android.permission.READ_CLIPBOARD_IN_BACKGROUND"),
+            AdbPerm("PACKAGE_USAGE_STATS", "Usage Access (Screen Time)",
+                appOpsGranted(),
+                "adb shell appops set $pkg GET_USAGE_STATS allow"),
+            AdbPerm("NOTIFICATION_POLICY_ACCESS", "Do Not Disturb Access",
+                dndGranted(),
+                "adb shell cmd notification allow_dnd $pkg"),
+            AdbPerm("NOTIFICATION_LISTENER", "Notification Listener",
+                notifListenerGranted(),
+                "adb shell cmd notification allow_listener $pkg/.services.PNotificationListenerService"),
+            AdbPerm("WRITE_SETTINGS", "Modify System Settings (Brightness/Volume)",
+                android.provider.Settings.System.canWrite(ctx),
+                "adb shell pm grant $pkg android.permission.WRITE_SETTINGS"),
+            AdbPerm("SYSTEM_ALERT_WINDOW", "Display Over Other Apps",
+                android.provider.Settings.canDrawOverlays(ctx),
+                "adb shell appops set $pkg SYSTEM_ALERT_WINDOW allow"),
+            AdbPerm("ACCESSIBILITY_SERVICE", "Accessibility Service (Keystrokes)",
+                com.ismartcoding.plain.services.PlainAccessibilityService.isEnabled(ctx),
+                "adb shell settings put secure enabled_accessibility_services $pkg/.services.PlainAccessibilityService"),
+            AdbPerm("DEVICE_ADMIN", "Device Administrator (Screen Lock)",
+                deviceAdminGranted(),
+                "adb shell dpm set-active-admin $pkg/.receivers.PlainDeviceAdminReceiver"),
+        )
+
+        val adbGranted = adbPerms.count { it.granted }
+        val adbMissing = adbPerms.filter { !it.granted }
+
+        val sb2 = StringBuilder()
+        sb2.append("🔐 <b>Protected Permissions (ADB)</b>\n")
+        sb2.append("━━━━━━━━━━━━━━━━━━━\n")
+        sb2.append("✅ Granted: <b>$adbGranted</b>  ·  ❌ Missing: <b>${adbMissing.size}</b>  ·  Total ${adbPerms.size}\n\n")
+
+        adbPerms.forEach { p ->
+            val icon = if (p.granted) "✅" else "❌"
+            sb2.append("$icon <b>${p.label}</b>\n")
+            sb2.append("   <code>${p.name}</code>\n")
+            if (!p.granted) sb2.append("   📋 <code>${p.cmd}</code>\n")
+            sb2.append("\n")
+        }
+
+        if (adbMissing.isNotEmpty()) {
+            sb2.append("━━━━━━━━━━━━━━━━━━━\n")
+            sb2.append("📋 <b>Grant all missing — run in terminal:</b>\n\n")
+            adbMissing.forEach { p ->
+                sb2.append("<code>${p.cmd}</code>\n")
+            }
+            sb2.append("\n⚠️ Requires USB Debugging enabled.\n")
+            sb2.append("Permissions persist until app is uninstalled.\n")
+        } else {
+            sb2.append("🎉 All protected permissions are granted!\n")
+        }
+        sb2.append("\n🕐 ${ts}")
+        sendMessage(sb2.toString())
     }
 
     // ========== AUTOMATION ==========
