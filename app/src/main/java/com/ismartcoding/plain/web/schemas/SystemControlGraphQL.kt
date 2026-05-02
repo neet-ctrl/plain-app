@@ -3,10 +3,9 @@ package com.ismartcoding.plain.web.schemas
 import android.app.NotificationManager
 import com.ismartcoding.lib.kgraphql.schema.dsl.SchemaBuilder
 import com.ismartcoding.plain.helpers.QrCodeGenerateHelper
-import com.ismartcoding.plain.helpers.RunningProcess
-import com.ismartcoding.plain.helpers.StorageBreakdown
+import com.ismartcoding.plain.helpers.SimInfoHelper
 import com.ismartcoding.plain.helpers.SystemControlHelper
-import com.ismartcoding.plain.helpers.NetworkInterface as NetIface
+import com.ismartcoding.plain.helpers.VpnStatusHelper
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -33,6 +32,36 @@ data class DndStatusModel(val mode: Int, val modeLabel: String, val policyGrante
 @Serializable
 data class HotspotStatusModel(val enabled: Boolean)
 
+@Serializable
+data class VpnInterfaceModel(val name: String, val address: String)
+
+@Serializable
+data class VpnStatusModel(
+    val isConnected: Boolean,
+    val vpnName: String,
+    val vpnPackage: String,
+    val vpnIp: String,
+    val vpnType: String,
+    val mtu: Int,
+    val interfaces: List<VpnInterfaceModel>,
+)
+
+@Serializable
+data class SimInfoModel(
+    val slotIndex: Int,
+    val carrierName: String,
+    val operatorName: String,
+    val phoneNumber: String,
+    val networkTypeName: String,
+    val mcc: String,
+    val mnc: String,
+    val isRoaming: Boolean,
+    val isDataActive: Boolean,
+    val signalBars: Int,
+    val simState: String,
+    val iccid: String,
+)
+
 fun SchemaBuilder.addSystemControlSchema() {
 
     type<StorageBreakdownModel>()
@@ -40,6 +69,9 @@ fun SchemaBuilder.addSystemControlSchema() {
     type<NetworkInterfaceModel>()
     type<DndStatusModel>()
     type<HotspotStatusModel>()
+    type<VpnInterfaceModel>()
+    type<VpnStatusModel>()
+    type<SimInfoModel>()
 
     // ---------- DND ----------
     query("dndStatus") {
@@ -94,6 +126,44 @@ fun SchemaBuilder.addSystemControlSchema() {
     mutation("setHotspot") {
         resolver { enabled: Boolean ->
             SystemControlHelper.setHotspotEnabled(enabled)
+        }
+    }
+
+    // ---------- VPN Status ----------
+    query("vpnStatus") {
+        resolver { ->
+            val info = VpnStatusHelper.getVpnStatus()
+            VpnStatusModel(
+                isConnected = info.isConnected,
+                vpnName = info.vpnName,
+                vpnPackage = info.vpnPackage,
+                vpnIp = info.vpnIp,
+                vpnType = info.vpnType,
+                mtu = info.mtu,
+                interfaces = info.interfaces.map { VpnInterfaceModel(it.name, it.address) },
+            )
+        }
+    }
+
+    // ---------- SIM Info ----------
+    query("simInfo") {
+        resolver { ->
+            SimInfoHelper.getAll().map { s ->
+                SimInfoModel(
+                    slotIndex = s.slotIndex,
+                    carrierName = s.carrierName,
+                    operatorName = s.operatorName,
+                    phoneNumber = s.phoneNumber,
+                    networkTypeName = s.networkTypeName,
+                    mcc = s.mcc,
+                    mnc = s.mnc,
+                    isRoaming = s.isRoaming,
+                    isDataActive = s.isDataActive,
+                    signalBars = s.signalBars,
+                    simState = s.simState,
+                    iccid = s.iccid,
+                )
+            }
         }
     }
 

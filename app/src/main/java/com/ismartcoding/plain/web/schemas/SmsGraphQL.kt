@@ -23,6 +23,17 @@ import com.ismartcoding.plain.web.models.Message
 import com.ismartcoding.plain.web.models.toModel
 import java.io.File
 import kotlin.time.Instant
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class ScheduledSmsModel(
+    val id: String,
+    val recipient: String,
+    val message: String,
+    val sendAt: Long,
+    val sent: Boolean,
+    val overdue: Boolean,
+)
 
 fun SchemaBuilder.addSmsSchema() {
     query("sms") {
@@ -142,6 +153,38 @@ fun SchemaBuilder.addSmsSchema() {
                 e.printStackTrace()
                 throw GraphQLError(e.message ?: "Failed to launch SMS app for MMS")
             }
+        }
+    }
+
+    // ---------- Scheduled SMS ----------
+    type<ScheduledSmsModel>()
+
+    query("scheduledSmsList") {
+        resolver { ->
+            com.ismartcoding.plain.helpers.ScheduledSmsHelper.getAll().map { s ->
+                ScheduledSmsModel(
+                    id = s.id,
+                    recipient = s.recipient,
+                    message = s.message,
+                    sendAt = s.sendAt,
+                    sent = s.sent,
+                    overdue = s.overdue,
+                )
+            }
+        }
+    }
+
+    mutation("scheduleSms") {
+        resolver { recipient: String, message: String, sendAt: Long ->
+            Permission.SEND_SMS.checkAsync(MainApp.instance)
+            com.ismartcoding.plain.helpers.ScheduledSmsHelper.add(recipient, message, sendAt)
+            true
+        }
+    }
+
+    mutation("deleteScheduledSms") {
+        resolver { id: String ->
+            com.ismartcoding.plain.helpers.ScheduledSmsHelper.delete(id)
         }
     }
 }

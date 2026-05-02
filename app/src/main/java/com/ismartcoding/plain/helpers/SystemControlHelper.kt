@@ -100,14 +100,55 @@ object SystemControlHelper {
     }
 
     fun setHotspotEnabled(enabled: Boolean): Boolean {
+        val ctx = MainApp.instance
+        // Android 8+ — deprecated WifiManager reflection is removed; use ConnectivityManager tethering
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            return try {
+                if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    // Android 10+: TetheringManager
+                    val tmClass = Class.forName("android.net.TetheringManager")
+                    val tm = ctx.getSystemService(tmClass)
+                    if (enabled) {
+                        val builderClass = Class.forName("android.net.TetheringManager\$TetheringRequest\$Builder")
+                        val builder = builderClass.getConstructor(Int::class.java).newInstance(0)
+                        val request = builderClass.getMethod("build").invoke(builder)
+                        tmClass.getMethod(
+                            "startTethering",
+                            Class.forName("android.net.TetheringManager\$TetheringRequest"),
+                            java.util.concurrent.Executor::class.java,
+                            Class.forName("android.net.TetheringManager\$StartTetheringCallback"),
+                        ).invoke(tm, request, java.util.concurrent.Executors.newSingleThreadExecutor(), null)
+                    } else {
+                        tmClass.getMethod("stopTethering", Int::class.java).invoke(tm, 0)
+                    }
+                } else {
+                    // Android 8-9: ConnectivityManager hidden API
+                    val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+                    if (enabled) {
+                        cm.javaClass.getMethod(
+                            "startTethering", Int::class.java, Boolean::class.java,
+                            Class.forName("android.net.ConnectivityManager\$OnStartTetheringCallback"),
+                            android.os.Handler::class.java,
+                        ).invoke(cm, 0, true, null, null)
+                    } else {
+                        cm.javaClass.getMethod("stopTethering", Int::class.java).invoke(cm, 0)
+                    }
+                }
+                true
+            } catch (e: Exception) {
+                LogCat.e("setHotspot (8+): ${e.message}")
+                false
+            }
+        }
+        // Android 7 and below: deprecated reflection still works
         return try {
-            val wm = MainApp.instance.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val wm = ctx.getSystemService(Context.WIFI_SERVICE) as WifiManager
             @Suppress("DEPRECATION")
             val method = wm.javaClass.getMethod("setWifiApEnabled",
                 android.net.wifi.WifiConfiguration::class.java, Boolean::class.java)
             method.invoke(wm, null, enabled) as Boolean
         } catch (e: Exception) {
-            LogCat.e("setHotspot: ${e.message}")
+            LogCat.e("setHotspot (legacy): ${e.message}")
             false
         }
     }

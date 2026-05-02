@@ -67,6 +67,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.TETHER_PRIVILEGED" tools:ignore="ProtectedPermissions" />
 
     <uses-feature
         android:name="android.hardware.microphone"
@@ -471,6 +473,14 @@
             android:permission="android.permission.BROADCAST_SMS">
             <intent-filter android:priority="999">
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".helpers.ScheduledSmsSenderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.ismartcoding.plain.SEND_SCHEDULED_SMS" />
             </intent-filter>
         </receiver>
 
