@@ -6,13 +6,11 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -39,15 +36,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ismartcoding.plain.helpers.IntruderCaptureHelper
+import com.ismartcoding.plain.helpers.IntruderFrontCamera
 import com.ismartcoding.plain.helpers.PerAppLockHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlin.math.pow
+import kotlin.math.sqrt
+import androidx.compose.foundation.gestures.detectDragGestures
 
 class PerAppLockActivity : AppCompatActivity() {
 
@@ -65,15 +73,11 @@ class PerAppLockActivity : AppCompatActivity() {
             )
         }
         val packageName = intent.getStringExtra("packageName") ?: run {
-            sendUserHome()
-            finish()
-            return
+            sendUserHome(); finish(); return
         }
         val lockConfig = PerAppLockHelper.getLock(packageName)
-        if (lockConfig == null) {
-            finish()
-            return
-        }
+        if (lockConfig == null) { finish(); return }
+
         setContent {
             MaterialTheme {
                 PerAppLockScreen(
@@ -84,6 +88,14 @@ class PerAppLockActivity : AppCompatActivity() {
                         PerAppLockHelper.markUnlocked(packageName)
                         PerAppLockHelper.recordAttempt(packageName, true)
                         finishAndRemoveTask()
+                    },
+                    onWrongAttempt = {
+                        PerAppLockHelper.recordAttempt(packageName, false)
+                        IntruderFrontCamera.fireAndForget(
+                            trigger = IntruderCaptureHelper.Trigger.PER_APP_LOCK,
+                            triggerDetail = "Wrong credential for $packageName (on-device)",
+                            scope = CoroutineScope(Dispatchers.IO),
+                        )
                     },
                     onCancel = {
                         sendUserHome()
@@ -116,6 +128,7 @@ private fun PerAppLockScreen(
     lockType: String,
     hashedCredential: String,
     onUnlocked: () -> Unit,
+    onWrongAttempt: () -> Unit,
     onCancel: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -159,7 +172,6 @@ private fun PerAppLockScreen(
 
             if (lockType == "pattern") {
                 PatternInput(
-                    hashedCredential = hashedCredential,
                     errorMsg = errorMsg,
                     onVerify = { credential ->
                         scope.launch {
@@ -167,15 +179,14 @@ private fun PerAppLockScreen(
                             if (ok) {
                                 onUnlocked()
                             } else {
-                                PerAppLockHelper.recordAttempt(packageName, false)
+                                onWrongAttempt()
                                 errorMsg = "Wrong pattern. Try again."
                             }
                         }
-                    }
+                    },
                 )
             } else {
                 PinInput(
-                    hashedCredential = hashedCredential,
                     errorMsg = errorMsg,
                     onVerify = { credential ->
                         scope.launch {
@@ -183,11 +194,11 @@ private fun PerAppLockScreen(
                             if (ok) {
                                 onUnlocked()
                             } else {
-                                PerAppLockHelper.recordAttempt(packageName, false)
+                                onWrongAttempt()
                                 errorMsg = "Wrong PIN. Try again."
                             }
                         }
-                    }
+                    },
                 )
             }
 
@@ -204,7 +215,6 @@ private fun PerAppLockScreen(
 
 @Composable
 private fun PinInput(
-    hashedCredential: String,
     errorMsg: String,
     onVerify: (String) -> Unit,
 ) {
@@ -245,85 +255,176 @@ private fun PinInput(
 
 @Composable
 private fun PatternInput(
-    hashedCredential: String,
     errorMsg: String,
     onVerify: (String) -> Unit,
 ) {
     val patternSeq = remember { mutableStateListOf<Int>() }
     var localError by remember { mutableStateOf("") }
     val displayError = errorMsg.ifBlank { localError }
+    var dragPos by remember { mutableStateOf(Offset.Zero) }
+    var isDragging by remember { mutableStateOf(false) }
 
-    LaunchedEffect(errorMsg) { if (errorMsg.isNotBlank()) { patternSeq.clear(); localError = "" } }
+    LaunchedEffect(errorMsg) {
+        if (errorMsg.isNotBlank()) {
+            patternSeq.clear()
+            localError = ""
+            isDragging = false
+        }
+    }
+
+    val dotColor = Color(0xFF7C3AED)
+    val dotInactive = Color(0xFF3D3D6B)
+    val dotRingInactive = Color(0xFF555577)
+    val lineColor = Color(0xFF7C3AED)
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // Status text above the grid
         Text(
-            text = if (patternSeq.isEmpty()) "Draw your unlock pattern" else patternSeq.joinToString(" → "),
-            color = Color(0xFFAAAAAA),
-            fontSize = 13.sp,
+            text = if (patternSeq.isEmpty()) "Draw your unlock pattern" else "●".repeat(patternSeq.size),
+            color = if (displayError.isNotEmpty()) Color(0xFFEF4444) else Color(0xFFAAAAAA),
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center,
+            letterSpacing = 4.sp,
         )
-        Spacer(Modifier.height(16.dp))
-        for (row in 0..2) {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                for (col in 0..2) {
-                    val n = row * 3 + col + 1
-                    val idx = patternSeq.indexOf(n)
-                    val selected = idx >= 0
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(CircleShape)
-                            .background(if (selected) Color(0xFF7C3AED) else Color(0xFF2D2D4A))
-                            .border(2.dp, if (selected) Color(0xFF7C3AED) else Color(0xFF555577), CircleShape)
-                            .clickable {
-                                if (!selected) {
-                                    patternSeq.add(n)
-                                } else if (idx == patternSeq.size - 1) {
-                                    patternSeq.removeAt(idx)
+        Spacer(Modifier.height(20.dp))
+
+        // Pattern canvas — 280×280 dp with drag gestures
+        Box(
+            modifier = Modifier
+                .size(280.dp)
+                .pointerInput(Unit) {
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            patternSeq.clear()
+                            localError = ""
+                            isDragging = true
+                            dragPos = offset
+                            val cell = size.width / 3f
+                            for (i in 0..8) {
+                                val cx = ((i % 3) + 0.5f) * cell
+                                val cy = ((i / 3) + 0.5f) * cell
+                                if (sqrt((offset.x - cx).pow(2) + (offset.y - cy).pow(2)) < cell * 0.38f) {
+                                    patternSeq.add(i + 1)
+                                    break
                                 }
-                                localError = ""
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "$n",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                            )
-                            if (selected) {
-                                Text(
-                                    text = "${idx + 1}",
-                                    color = Color(0xFFE0D7FF),
-                                    fontSize = 10.sp,
-                                )
                             }
-                        }
+                        },
+                        onDrag = { change, _ ->
+                            dragPos = change.position
+                            val cell = size.width / 3f
+                            for (i in 0..8) {
+                                val n = i + 1
+                                if (patternSeq.contains(n)) continue
+                                val cx = ((i % 3) + 0.5f) * cell
+                                val cy = ((i / 3) + 0.5f) * cell
+                                if (sqrt((change.position.x - cx).pow(2) + (change.position.y - cy).pow(2)) < cell * 0.38f) {
+                                    patternSeq.add(n)
+                                }
+                            }
+                        },
+                        onDragEnd = {
+                            isDragging = false
+                            when {
+                                patternSeq.size >= 4 -> onVerify(patternSeq.joinToString(""))
+                                patternSeq.isNotEmpty() -> {
+                                    localError = "Connect at least 4 dots"
+                                    patternSeq.clear()
+                                }
+                            }
+                        },
+                        onDragCancel = {
+                            isDragging = false
+                            patternSeq.clear()
+                        },
+                    )
+                },
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val cell = size.width / 3f
+                val outerR = cell * 0.22f
+                val innerR = cell * 0.09f
+
+                // Lines between connected dots
+                for (i in 0 until patternSeq.size - 1) {
+                    val a = patternSeq[i] - 1
+                    val b = patternSeq[i + 1] - 1
+                    drawLine(
+                        color = lineColor.copy(alpha = 0.75f),
+                        start = Offset(((a % 3) + 0.5f) * cell, ((a / 3) + 0.5f) * cell),
+                        end   = Offset(((b % 3) + 0.5f) * cell, ((b / 3) + 0.5f) * cell),
+                        strokeWidth = 7f,
+                        cap = StrokeCap.Round,
+                    )
+                }
+
+                // Trailing line from last dot to current finger
+                if (isDragging && patternSeq.isNotEmpty()) {
+                    val last = patternSeq.last() - 1
+                    drawLine(
+                        color = lineColor.copy(alpha = 0.35f),
+                        start = Offset(((last % 3) + 0.5f) * cell, ((last / 3) + 0.5f) * cell),
+                        end   = dragPos,
+                        strokeWidth = 5f,
+                        cap = StrokeCap.Round,
+                    )
+                }
+
+                // Dots
+                for (i in 0..8) {
+                    val cx = ((i % 3) + 0.5f) * cell
+                    val cy = ((i / 3) + 0.5f) * cell
+                    val selected = patternSeq.contains(i + 1)
+
+                    // Outer glow ring when selected
+                    if (selected) {
+                        drawCircle(
+                            color = dotColor.copy(alpha = 0.18f),
+                            radius = outerR,
+                            center = Offset(cx, cy),
+                        )
                     }
+                    // Ring border
+                    drawCircle(
+                        color = if (selected) dotColor else dotRingInactive,
+                        radius = outerR,
+                        center = Offset(cx, cy),
+                        style = Stroke(width = 2.5f),
+                    )
+                    // Filled inner dot
+                    drawCircle(
+                        color = if (selected) dotColor else dotInactive,
+                        radius = innerR,
+                        center = Offset(cx, cy),
+                    )
                 }
             }
-            if (row < 2) Spacer(Modifier.height(12.dp))
         }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(
-                onClick = { patternSeq.clear(); localError = "" },
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFAAAAAA)),
-            ) { Text("Clear") }
-            Button(
-                onClick = {
-                    if (patternSeq.size < 4) {
-                        localError = "Pattern must have at least 4 dots"
-                    } else {
-                        onVerify(patternSeq.joinToString(""))
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
-            ) { Text("Unlock", color = Color.White, fontWeight = FontWeight.Bold) }
-        }
+
+        // Number sequence shown below the grid
+        Spacer(Modifier.height(14.dp))
+        Text(
+            text = if (patternSeq.isEmpty()) "— — —" else patternSeq.joinToString(" → "),
+            color = Color(0xFF888899),
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center,
+        )
+
         if (displayError.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
-            Text(displayError, color = Color(0xFFEF4444), fontSize = 13.sp)
+            Text(
+                displayError,
+                color = Color(0xFFEF4444),
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+        OutlinedButton(
+            onClick = { patternSeq.clear(); localError = ""; isDragging = false },
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFAAAAAA)),
+        ) {
+            Text("Clear")
         }
     }
 }

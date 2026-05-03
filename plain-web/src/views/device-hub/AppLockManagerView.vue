@@ -261,29 +261,67 @@
             </div>
           </div>
 
-          <!-- Pattern entry -->
+          <!-- Pattern entry — real drag-to-connect pattern -->
           <div v-if="bulkLock.lockType === 'pattern'" class="modal-section">
-            <div class="modal-label">Draw Pattern <span class="modal-label-hint">(min 4 dots)</span></div>
+            <div class="modal-label">
+              Draw Pattern <span class="modal-label-hint">(min 4 dots, drag to connect)</span>
+            </div>
             <div class="pattern-grid-wrap">
-              <div class="pattern-grid">
-                <button
-                  v-for="n in 9" :key="n"
-                  class="pattern-dot"
-                  :class="{
-                    selected: bulkLock.patternSeq.includes(n),
-                    last: bulkLock.patternSeq[bulkLock.patternSeq.length - 1] === n
-                  }"
-                  @click="toggleBulkPattern(n)"
-                  type="button"
+              <div class="pattern-canvas-wrap">
+                <svg
+                  class="pattern-svg"
+                  width="210" height="210"
+                  @mousedown.prevent="patternStart($event)"
+                  @mousemove.prevent="patternMove($event)"
+                  @mouseup.prevent="patternEnd"
+                  @mouseleave="patternEnd"
+                  @touchstart.prevent="patternTouchStart($event)"
+                  @touchmove.prevent="patternTouchMove($event)"
+                  @touchend.prevent="patternEnd"
+                  @touchcancel.prevent="patternEnd"
                 >
-                  <span class="dot-label">{{ n }}</span>
-                  <span v-if="bulkLock.patternSeq.includes(n)" class="dot-order">
-                    {{ bulkLock.patternSeq.indexOf(n) + 1 }}
-                  </span>
-                </button>
+                  <!-- Lines between connected dots -->
+                  <line
+                    v-for="(seg, i) in patternLines"
+                    :key="'line'+i"
+                    :x1="dotCenter(seg[0]).x" :y1="dotCenter(seg[0]).y"
+                    :x2="dotCenter(seg[1]).x" :y2="dotCenter(seg[1]).y"
+                    stroke="#7c3aed" stroke-width="5" stroke-linecap="round" opacity="0.75"
+                  />
+                  <!-- Trailing line from last dot to finger -->
+                  <line
+                    v-if="patternDragging && bulkLock.patternSeq.length && patternCursor"
+                    :x1="dotCenter(bulkLock.patternSeq[bulkLock.patternSeq.length - 1]).x"
+                    :y1="dotCenter(bulkLock.patternSeq[bulkLock.patternSeq.length - 1]).y"
+                    :x2="patternCursor.x" :y2="patternCursor.y"
+                    stroke="#7c3aed" stroke-width="3" stroke-linecap="round" opacity="0.35"
+                  />
+                  <!-- Dots -->
+                  <g v-for="n in 9" :key="'dot'+n">
+                    <!-- Glow when selected -->
+                    <circle
+                      v-if="bulkLock.patternSeq.includes(n)"
+                      :cx="dotCenter(n).x" :cy="dotCenter(n).y" r="22"
+                      fill="rgba(124,58,237,0.15)"
+                    />
+                    <!-- Outer ring -->
+                    <circle
+                      :cx="dotCenter(n).x" :cy="dotCenter(n).y" r="17"
+                      fill="none"
+                      :stroke="bulkLock.patternSeq.includes(n) ? '#7c3aed' : 'var(--md-sys-color-outline-variant)'"
+                      stroke-width="2.5"
+                    />
+                    <!-- Inner filled dot -->
+                    <circle
+                      :cx="dotCenter(n).x" :cy="dotCenter(n).y" r="7"
+                      :fill="bulkLock.patternSeq.includes(n) ? '#7c3aed' : 'var(--md-sys-color-on-surface-variant)'"
+                    />
+                  </g>
+                </svg>
               </div>
+              <!-- Number sequence below the grid -->
               <div class="pattern-preview-row">
-                <span class="mono">{{ bulkLock.patternSeq.length ? bulkLock.patternSeq.join(' → ') : '–' }}</span>
+                <span class="mono">{{ bulkLock.patternSeq.length ? bulkLock.patternSeq.join(' → ') : '—' }}</span>
                 <button v-if="bulkLock.patternSeq.length" class="link-btn" @click="bulkLock.patternSeq = []">Clear</button>
               </div>
             </div>
@@ -549,10 +587,83 @@ function openBulkLock() {
   bulkLock.saving = false
   bulkLock.progress = 0
 }
-function toggleBulkPattern(n: number) {
-  const idx = bulkLock.patternSeq.indexOf(n)
-  if (idx >= 0) bulkLock.patternSeq = bulkLock.patternSeq.slice(0, idx)
-  else bulkLock.patternSeq = [...bulkLock.patternSeq, n]
+/* ── Pattern drag logic ── */
+const patternDragging = ref(false)
+const patternCursor = ref<{ x: number; y: number } | null>(null)
+
+const patternLines = computed(() => {
+  const lines: [number, number][] = []
+  for (let i = 0; i < bulkLock.patternSeq.length - 1; i++)
+    lines.push([bulkLock.patternSeq[i], bulkLock.patternSeq[i + 1]])
+  return lines
+})
+
+function dotCenter(n: number): { x: number; y: number } {
+  const col = (n - 1) % 3
+  const row = Math.floor((n - 1) / 3)
+  return { x: col * 70 + 35, y: row * 70 + 35 }
+}
+
+function svgPos(el: SVGSVGElement, clientX: number, clientY: number) {
+  const rect = el.getBoundingClientRect()
+  return {
+    x: ((clientX - rect.left) / rect.width) * 210,
+    y: ((clientY - rect.top) / rect.height) * 210,
+  }
+}
+
+function hitDot(pos: { x: number; y: number }): number | null {
+  for (let n = 1; n <= 9; n++) {
+    const c = dotCenter(n)
+    const dx = pos.x - c.x, dy = pos.y - c.y
+    if (Math.sqrt(dx * dx + dy * dy) < 26) return n
+  }
+  return null
+}
+
+function patternStart(e: MouseEvent) {
+  bulkLock.patternSeq = []
+  patternDragging.value = true
+  const svg = (e.currentTarget as SVGSVGElement)
+  const pos = svgPos(svg, e.clientX, e.clientY)
+  patternCursor.value = pos
+  const n = hitDot(pos)
+  if (n) bulkLock.patternSeq = [n]
+}
+
+function patternMove(e: MouseEvent) {
+  if (!patternDragging.value) return
+  const svg = (e.currentTarget as SVGSVGElement)
+  const pos = svgPos(svg, e.clientX, e.clientY)
+  patternCursor.value = pos
+  const n = hitDot(pos)
+  if (n && !bulkLock.patternSeq.includes(n)) bulkLock.patternSeq = [...bulkLock.patternSeq, n]
+}
+
+function patternEnd() {
+  patternDragging.value = false
+  patternCursor.value = null
+}
+
+function patternTouchStart(e: TouchEvent) {
+  bulkLock.patternSeq = []
+  patternDragging.value = true
+  const touch = e.touches[0]
+  const svg = (e.currentTarget as SVGSVGElement)
+  const pos = svgPos(svg, touch.clientX, touch.clientY)
+  patternCursor.value = pos
+  const n = hitDot(pos)
+  if (n) bulkLock.patternSeq = [n]
+}
+
+function patternTouchMove(e: TouchEvent) {
+  if (!patternDragging.value) return
+  const touch = e.touches[0]
+  const svg = (e.currentTarget as SVGSVGElement)
+  const pos = svgPos(svg, touch.clientX, touch.clientY)
+  patternCursor.value = pos
+  const n = hitDot(pos)
+  if (n && !bulkLock.patternSeq.includes(n)) bulkLock.patternSeq = [...bulkLock.patternSeq, n]
 }
 async function confirmBulkLock() {
   const cred = bulkLock.lockType === 'pattern' ? bulkLock.patternSeq.join('') : bulkLock.credential
@@ -1058,24 +1169,21 @@ onUnmounted(() => { if (sessionTimer) clearInterval(sessionTimer) })
 }
 .type-ico { width: 16px; height: 16px; }
 
-/* Pattern grid (bulk lock modal) */
-.pattern-grid-wrap { display: flex; flex-direction: column; gap: 10px; }
-.pattern-grid { display: grid; grid-template-columns: repeat(3, 56px); gap: 8px; }
-.pattern-dot {
-  width: 56px; height: 56px; border-radius: 50%; position: relative;
-  background: var(--md-sys-color-surface-container-high);
-  border: 2px solid var(--md-sys-color-outline-variant);
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  font-size: 0.85rem; font-weight: 600; color: var(--md-sys-color-on-surface-variant);
-  transition: all .15s;
-  &.selected { background: linear-gradient(135deg,#7c3aed,#4f46e5); border-color: #7c3aed; color: #fff; }
-  &.last { box-shadow: 0 0 0 3px rgba(124,58,237,0.4); }
+/* Pattern grid (bulk lock modal) — SVG drag-based */
+.pattern-grid-wrap { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.pattern-canvas-wrap {
+  border-radius: 16px;
+  background: var(--md-sys-color-surface-container);
+  border: 1.5px solid var(--md-sys-color-outline-variant);
+  padding: 10px;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
 }
-.dot-label { font-size: 0.85rem; font-weight: 600; }
-.dot-order {
-  position: absolute; top: -5px; right: -5px;
-  background: #4f46e5; color: #fff; border-radius: 99px;
-  font-size: 0.6rem; font-weight: 700; padding: 0 3px; min-width: 14px; text-align: center;
+.pattern-svg {
+  display: block;
+  cursor: crosshair;
+  width: 210px; height: 210px;
 }
 .pattern-preview-row { display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: var(--md-sys-color-on-surface-variant); }
 .link-btn { background: none; border: none; cursor: pointer; color: #7c3aed; font-size: 0.82rem; padding: 0; }
