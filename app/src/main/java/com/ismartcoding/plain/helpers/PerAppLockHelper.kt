@@ -36,6 +36,7 @@ object PerAppLockHelper {
     )
 
     private val sessionUnlocked = mutableMapOf<String, Long>()
+    private val sessionDuration = mutableMapOf<String, Long>()
 
     private fun sha256(input: String): String {
         val bytes = MessageDigest.getInstance("SHA-256").digest(
@@ -118,18 +119,26 @@ object PerAppLockHelper {
         val lock = getLock(pkg) ?: return false
         if (lock.hashedCredential.isEmpty()) return false
         val unlockedAt = sessionUnlocked[pkg] ?: return true
-        return System.currentTimeMillis() - unlockedAt > SESSION_UNLOCK_MS
+        val duration = sessionDuration[pkg] ?: SESSION_UNLOCK_MS
+        return System.currentTimeMillis() - unlockedAt > duration
     }
 
     fun markUnlocked(pkg: String) {
         sessionUnlocked[pkg] = System.currentTimeMillis()
+        sessionDuration.remove(pkg)
+    }
+
+    fun markUnlockedFor(pkg: String, durationMs: Long) {
+        sessionUnlocked[pkg] = System.currentTimeMillis()
+        sessionDuration[pkg] = durationMs
     }
 
     fun getSessionSecondsRemaining(pkg: String): Int {
         val unlockedAt = sessionUnlocked[pkg] ?: return 0
+        val duration = sessionDuration[pkg] ?: SESSION_UNLOCK_MS
         val elapsed = System.currentTimeMillis() - unlockedAt
-        if (elapsed >= SESSION_UNLOCK_MS) return 0
-        return ((SESSION_UNLOCK_MS - elapsed) / 1000).toInt()
+        if (elapsed >= duration) return 0
+        return ((duration - elapsed) / 1000).toInt()
     }
 
     fun getAttempts(packageName: String? = null, ctx: Context = MainApp.instance): List<LockAttempt> {

@@ -157,6 +157,14 @@ fun SchemaBuilder.addPerAppLockSchema() {
         }
     }
 
+    mutation("forceUnlockPerApp") {
+        resolver { packageName: String, durationMinutes: Int ->
+            val durationMs = durationMinutes.coerceIn(1, 1440) * 60 * 1000L
+            PerAppLockHelper.markUnlockedFor(packageName, durationMs)
+            true
+        }
+    }
+
     mutation("setTelegramBotPassword") {
         resolver { enabled: Boolean, password: String ->
             val ctx = MainApp.instance

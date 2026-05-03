@@ -23,6 +23,8 @@ import com.ismartcoding.plain.preferences.TelegramBotForwardCallsPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardNotificationsPreference
 import com.ismartcoding.plain.preferences.TelegramBotTokenPreference
 import com.ismartcoding.plain.preferences.TelegramChatIdPreference
+import com.ismartcoding.plain.preferences.TelegramBotPasswordEnabledPreference
+import com.ismartcoding.plain.preferences.TelegramBotPasswordPreference
 import com.ismartcoding.plain.telegram.TelegramBotManager
 import com.ismartcoding.plain.ui.base.BottomSpace
 import com.ismartcoding.plain.ui.base.PCard
@@ -48,6 +50,8 @@ fun TelegramBotPage(navController: NavHostController) {
     var chatId by remember { mutableStateOf(TelegramChatIdPreference.default) }
     var forwardNotifications by remember { mutableStateOf(TelegramBotForwardNotificationsPreference.default) }
     var forwardCalls by remember { mutableStateOf(TelegramBotForwardCallsPreference.default) }
+    var botPwdEnabled by remember { mutableStateOf(TelegramBotPasswordEnabledPreference.default) }
+    var botPwdNew by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         withIO {
@@ -57,6 +61,7 @@ fun TelegramBotPage(navController: NavHostController) {
             chatId = TelegramChatIdPreference.get(prefs)
             forwardNotifications = TelegramBotForwardNotificationsPreference.get(prefs)
             forwardCalls = TelegramBotForwardCallsPreference.get(prefs)
+            botPwdEnabled = TelegramBotPasswordEnabledPreference.get(prefs)
         }
     }
 
@@ -151,6 +156,47 @@ fun TelegramBotPage(navController: NavHostController) {
                                 withIO { TelegramBotForwardCallsPreference.putAsync(context, enable) }
                             }
                         }
+                    }
+                }
+                VerticalSpace(dp = 16.dp)
+            }
+            item {
+                Subtitle(text = "Bot Password Protection")
+                PCard {
+                    PListItem(title = "Require password to chat") {
+                        PSwitch(activated = botPwdEnabled) { enable ->
+                            botPwdEnabled = enable
+                            TelegramBotManager.botPasswordEnabled = enable
+                            scope.launch {
+                                withIO {
+                                    TelegramBotPasswordEnabledPreference.putAsync(context, enable)
+                                }
+                            }
+                        }
+                    }
+                    PTextField(
+                        readOnly = false,
+                        value = botPwdNew,
+                        label = "Bot Password (set or change)",
+                        placeholder = "Enter new password…",
+                        isPassword = true,
+                        onValueChange = { v -> botPwdNew = v },
+                    )
+                    if (botPwdNew.isNotBlank()) {
+                        PListItem(title = "Tap to save password", showMore = true, action = {
+                            androidx.compose.material3.TextButton(onClick = {
+                                val pwd = botPwdNew.trim()
+                                botPwdNew = ""
+                                scope.launch {
+                                    withIO {
+                                        TelegramBotPasswordPreference.putAsync(context, pwd)
+                                        TelegramBotManager.botPassword = pwd
+                                    }
+                                }
+                            }) {
+                                androidx.compose.material3.Text("Save")
+                            }
+                        })
                     }
                 }
                 VerticalSpace(dp = 16.dp)

@@ -180,6 +180,18 @@
             android:taskAffinity=""
             android:theme="@style/Theme.PlainActivity" />
 
+        <!-- Full-screen lock overlay launched by PlainAccessibilityService when the user
+             tries to open a per-app locked application. Prompts for the app's PIN or
+             pattern before allowing access. -->
+        <activity
+            android:name=".ui.PerAppLockActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.PlainActivity" />
+
         <!-- Full-screen lock that PlainAccessibilityService launches whenever a system Settings
              "App info" / app-details screen comes to the foreground (long-press on a launcher
              icon → App info, or Settings → Apps → <any app>). Requires the in-app PIN

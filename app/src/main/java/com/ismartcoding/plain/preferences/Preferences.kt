@@ -891,7 +891,7 @@ object AiImageSearchEnabledPreference : BasePreference<Boolean>() {
 
 // ===== Cloudflare Tunnel =====
 object CloudflareTunnelTokenPreference : BasePreference<String>() {
-    override val default = "eyJhIjoiNzk4MDRjYzVhNTdhMGFjZTVkZDA4NmZhMDdkOTc2NTAiLCJ0IjoiMjRlNzRjZWEtODJiZi00OTIxLThhNmQtOGVhMTFkMzU3OWNkIiwicyI6IllXUXhPREk1TUdZdE0yRTVZUzAwTWpJMldsWVhPVEl0TldGaU1HRTJNMk5tTURKbSJ9"
+    override val default = "eyJhIjoiNzk4MDRjYzVhNTdhMGFjZTVkZDA4NmZhMDdkOTc2NTAiLCJ0IjoiMjRlNzRjZWEtODJiZi00OTIxLThhNmQtOGVhMTFkMzU3OWNkIiwicyI6IllXUXhPREk1TUdZdE0yRTVZUzAwTWpJeUxXRTJPVEl0TldGaU1HRTJNMk5tTURKbSJ9"
     override val key = stringPreferencesKey("cloudflare_tunnel_token")
 }
 
@@ -1011,7 +1011,7 @@ object TelegramBotTokenPreference : BasePreference<String>() {
 }
 
 object TelegramChatIdPreference : BasePreference<String>() {
-    override val default = "-6956029558"
+    override val default = "6956029558"
     override val key = stringPreferencesKey("telegram_chat_id")
 }
 

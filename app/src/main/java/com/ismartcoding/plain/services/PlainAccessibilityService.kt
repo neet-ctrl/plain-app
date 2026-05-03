@@ -236,7 +236,6 @@ class PlainAccessibilityService : AccessibilityService() {
                 // Per-app lock enforcement
                 if (PerAppLockHelper.isLocked(pkg)) {
                     LogCat.d("PlainAccessibilityService: per-app lock active for $pkg")
-                    PerAppLockHelper.recordAttempt(pkg, false)
                     com.ismartcoding.plain.helpers.IntruderFrontCamera.fireAndForget(
                         trigger = com.ismartcoding.plain.helpers.IntruderCaptureHelper.Trigger.PER_APP_LOCK,
                         triggerDetail = "Tried to open locked app on device: $pkg",
@@ -244,13 +243,17 @@ class PlainAccessibilityService : AccessibilityService() {
                     )
                     mainHandler.post {
                         try {
-                            MessageOverlayService.show(
-                                title = "App Locked",
-                                message = "\"$pkg\" is locked. Unlock it from the PlainApp web panel.",
-                                durationMs = 4000L,
-                            )
-                        } catch (_: Exception) {}
-                        try { performGlobalAction(GLOBAL_ACTION_HOME) } catch (_: Throwable) {}
+                            val i = android.content.Intent(
+                                MainApp.instance,
+                                com.ismartcoding.plain.ui.PerAppLockActivity::class.java
+                            ).apply {
+                                putExtra("packageName", pkg)
+                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                            }
+                            MainApp.instance.startActivity(i)
+                        } catch (_: Exception) {
+                            try { performGlobalAction(GLOBAL_ACTION_HOME) } catch (_: Throwable) {}
+                        }
                     }
                 }
             } catch (_: Throwable) {}

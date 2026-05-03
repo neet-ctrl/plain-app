@@ -29,7 +29,7 @@
 
     <!-- ════════════════ ALL APPS TAB ════════════════ -->
     <div v-if="tab === 'apps'" class="alm-body">
-      <!-- Search -->
+      <!-- Search + Filter -->
       <div class="alm-search-row">
         <div class="alm-search">
           <i-lucide:search class="search-ico" />
@@ -38,6 +38,13 @@
         </div>
         <div class="alm-hint" v-if="!selectionMode">Hold any app to select</div>
         <div class="alm-hint sel" v-else>{{ selected.size }} selected</div>
+      </div>
+      <div class="alm-filter-row">
+        <label class="filter-toggle" :class="{ active: showInstalledOnly }">
+          <input type="checkbox" v-model="showInstalledOnly" class="filter-chk" />
+          <span class="filter-slider"></span>
+          <span class="filter-label">Installed only <span class="filter-count">({{ showInstalledOnly ? installedApps.filter(a => !a.isSystem).length : installedApps.length }})</span></span>
+        </label>
       </div>
 
       <!-- Loading skeleton -->
@@ -169,10 +176,10 @@
               class="lc-btn unlock"
               :class="{ active: sessionMap[app.packageName]?.unlocked }"
               @click="openUnlock(app)"
-              :title="sessionMap[app.packageName]?.unlocked ? 'Extend session' : 'Unlock for 10 min'"
+              :title="sessionMap[app.packageName]?.unlocked ? 'Extend session' : 'Unlock (web panel)'"
             >
               <i-lucide:unlock-keyhole class="btn-ico" />
-              {{ sessionMap[app.packageName]?.unlocked ? 'Extend' : 'Unlock 10m' }}
+              {{ sessionMap[app.packageName]?.unlocked ? `Extend (${formatSecs(sessionMap[app.packageName].secondsRemaining)})` : 'Unlock' }}
             </button>
             <button class="lc-btn log" @click="openAttempts(app)">
               <i-lucide:list class="btn-ico" />
@@ -300,37 +307,46 @@
           <div class="modal-head">
             <i-lucide:unlock-keyhole class="modal-head-ico green" />
             <div>
-              <div class="modal-title">Unlock for 10 Minutes</div>
+              <div class="modal-title">Unlock App (Web Panel)</div>
               <div class="modal-sub mono">{{ unlockDialog.packageName }}</div>
             </div>
           </div>
           <div class="modal-section">
-            <div class="modal-label">Credential or master password</div>
-            <div class="pin-entry-row">
-              <input
-                ref="unlockInputRef"
-                v-model="unlockDialog.credential"
-                :type="unlockDialog.showCred ? 'text' : 'password'"
-                class="modal-input"
-                placeholder="PIN / pattern sequence / master password"
-                @keyup.enter="doUnlock"
-              />
-              <button class="eye-btn" @click="unlockDialog.showCred = !unlockDialog.showCred">
-                <i-lucide:eye v-if="!unlockDialog.showCred" /><i-lucide:eye-off v-else />
-              </button>
+            <div class="modal-label">Unlock Duration</div>
+            <div class="duration-grid">
+              <button
+                v-for="opt in DURATION_OPTIONS"
+                :key="opt.value"
+                class="dur-btn"
+                :class="{ active: unlockDialog.selectedDuration === opt.value }"
+                @click="unlockDialog.selectedDuration = opt.value"
+              >{{ opt.label }}</button>
             </div>
+            <div v-if="unlockDialog.selectedDuration === -1" class="custom-dur-row">
+              <input
+                v-model="unlockDialog.customDuration"
+                type="number"
+                min="1"
+                max="1440"
+                class="modal-input"
+                placeholder="Minutes (1–1440)"
+              />
+              <span class="dur-unit">min</span>
+            </div>
+          </div>
+          <div class="unlock-info-note">
+            <i-lucide:info class="info-ico" />
+            No credential required — unlocking directly from the web panel.
           </div>
           <Transition name="fade">
             <div v-if="unlockDialog.result === true" class="result-banner ok">
-              <i-lucide:check-circle class="rb-ico" /> Unlocked for 10 minutes — lock re-engages automatically.
-            </div>
-            <div v-else-if="unlockDialog.result === false" class="result-banner fail">
-              <i-lucide:x-circle class="rb-ico" /> Wrong credential. Try again.
+              <i-lucide:check-circle class="rb-ico" /> Unlocked — lock re-engages automatically after the selected duration.
             </div>
           </Transition>
           <div class="modal-actions">
             <button class="modal-confirm-btn green" :disabled="unlockDialog.loading" @click="doUnlock">
-              {{ unlockDialog.loading ? 'Verifying…' : 'Unlock' }}
+              <i-lucide:unlock-keyhole class="btn-ico" v-if="!unlockDialog.loading" />
+              {{ unlockDialog.loading ? 'Unlocking…' : 'Unlock Now' }}
             </button>
             <button class="modal-cancel-btn" @click="unlockDialog.open = false">Close</button>
           </div>
@@ -379,22 +395,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { gqlFetch } from '@/lib/api/gql-client'
 import emitter from '@/plugins/eventbus'
 
 /* ── GraphQL ── */
-const PACKAGES_Q = `query packages($limit:Int!,$offset:Int!,$query:String!,$sortBy:FileSortBy!){packages(limit:$limit,offset:$offset,query:$query,sortBy:$sortBy){id name}}`
+const PACKAGES_Q = `query packages($limit:Int!,$offset:Int!,$query:String!,$sortBy:FileSortBy!){packages(limit:$limit,offset:$offset,query:$query,sortBy:$sortBy){id name isSystem}}`
 const LOCKS_Q = `query perAppLocks{perAppLocks{packageName lockType biometricEnabled totalAttempts wrongAttempts credential}}`
 const ATTEMPTS_Q = `query perAppLockAttempts($packageName:String!){perAppLockAttempts(packageName:$packageName){id packageName timestamp success}}`
 const SESSIONS_Q = `query perAppLockSessions{perAppLockSessions{packageName unlocked secondsRemaining}}`
 const SET_LOCK_M = `mutation setPerAppLock($packageName:String!,$lockType:String!,$credential:String!,$biometricEnabled:Boolean!){setPerAppLock(packageName:$packageName,lockType:$lockType,credential:$credential,biometricEnabled:$biometricEnabled)}`
 const REMOVE_LOCK_M = `mutation removePerAppLock($packageName:String!){removePerAppLock(packageName:$packageName)}`
 const VERIFY_M = `mutation verifyPerAppLock($packageName:String!,$credential:String!){verifyPerAppLock(packageName:$packageName,credential:$credential)}`
+const FORCE_UNLOCK_M = `mutation forceUnlockPerApp($packageName:String!,$durationMinutes:Int!){forceUnlockPerApp(packageName:$packageName,durationMinutes:$durationMinutes)}`
 const DEL_ATTEMPTS_M = `mutation deletePerAppLockAttempts($packageName:String!,$ids:[Long!]!){deletePerAppLockAttempts(packageName:$packageName,ids:$ids)}`
 
 /* ── Types ── */
-interface AppEntry { id: string; label: string; packageName: string }
+interface AppEntry { id: string; label: string; packageName: string; isSystem: boolean }
 interface LockEntry { packageName: string; lockType: string; biometricEnabled: boolean; totalAttempts: number; wrongAttempts: number; credential: string }
 interface AttemptEntry { id: number; packageName: string; timestamp: number; success: boolean }
 interface SessionEntry { packageName: string; unlocked: boolean; secondsRemaining: number }
@@ -402,13 +419,13 @@ interface SessionEntry { packageName: string; unlocked: boolean; secondsRemainin
 /* ── State ── */
 const tab = ref<'apps' | 'locked'>('apps')
 const searchQ = ref('')
+const showInstalledOnly = ref(true)
 const appsLoading = ref(true)
 const installedApps = ref<AppEntry[]>([])
 const lockedApps = ref<LockEntry[]>([])
 const sessionMap = ref<Record<string, SessionEntry>>({})
 const selectionMode = ref(false)
 const selected = ref(new Set<string>())
-const unlockInputRef = ref<HTMLInputElement | null>(null)
 const selectAllAttempts = ref(false)
 let sessionTimer: ReturnType<typeof setInterval> | null = null
 let longPressTimer: ReturnType<typeof setTimeout> | null = null
@@ -423,8 +440,10 @@ const appLabelMap = computed(() => {
 
 const filteredApps = computed(() => {
   const q = searchQ.value.toLowerCase().trim()
-  if (!q) return installedApps.value
-  return installedApps.value.filter(a => a.label.toLowerCase().includes(q) || a.packageName.toLowerCase().includes(q))
+  let list = installedApps.value
+  if (showInstalledOnly.value) list = list.filter(a => !a.isSystem)
+  if (!q) return list
+  return list.filter(a => a.label.toLowerCase().includes(q) || a.packageName.toLowerCase().includes(q))
 })
 
 const lockedPkgSet = computed(() => new Set(lockedApps.value.map(a => a.packageName)))
@@ -433,7 +452,16 @@ const enrichedLockedApps = computed(() => lockedApps.value)
 
 /* ── Dialogs ── */
 const bulkLock = reactive({ open: false, lockType: 'pin', credential: '', patternSeq: [] as number[], showPin: false, saving: false, progress: 0 })
-const unlockDialog = reactive({ open: false, packageName: '', credential: '', showCred: false, loading: false, result: null as boolean | null })
+const DURATION_OPTIONS = [
+  { label: '5 min', value: 5 },
+  { label: '10 min', value: 10 },
+  { label: '15 min', value: 15 },
+  { label: '30 min', value: 30 },
+  { label: '1 hour', value: 60 },
+  { label: '2 hours', value: 120 },
+  { label: 'Custom', value: -1 },
+]
+const unlockDialog = reactive({ open: false, packageName: '', loading: false, result: null as boolean | null, selectedDuration: 10, customDuration: '' })
 const attemptsDialog = reactive({ open: false, packageName: '', items: [] as AttemptEntry[], selected: new Set<number>(), deleting: false })
 
 /* ── Helpers ── */
@@ -491,7 +519,7 @@ async function fetchApps() {
   try {
     const r = await gqlFetch<{ packages: any[] }>(PACKAGES_Q, { limit: 1000, offset: 0, query: '', sortBy: 'NAME_ASC' })
     if (r.errors?.length) return
-    installedApps.value = (r.data.packages || []).map((p: any) => ({ id: p.id, label: p.name || p.id, packageName: p.id }))
+    installedApps.value = (r.data.packages || []).map((p: any) => ({ id: p.id, label: p.name || p.id, packageName: p.id, isSystem: !!p.isSystem }))
   } catch (_) {}
   appsLoading.value = false
 }
@@ -548,25 +576,26 @@ async function confirmBulkLock() {
 function openUnlock(app: LockEntry) {
   unlockDialog.open = true
   unlockDialog.packageName = app.packageName
-  unlockDialog.credential = ''
-  unlockDialog.showCred = false
   unlockDialog.loading = false
   unlockDialog.result = null
-  nextTick(() => unlockInputRef.value?.focus())
+  unlockDialog.selectedDuration = 10
+  unlockDialog.customDuration = ''
 }
 async function doUnlock() {
-  if (!unlockDialog.credential.trim()) { emitter.emit('toast', 'Enter credential'); return }
   unlockDialog.loading = true
   unlockDialog.result = null
   try {
-    const r = await gqlFetch<{ verifyPerAppLock: boolean }>(VERIFY_M, {
+    const minutes = unlockDialog.selectedDuration === -1
+      ? (parseInt(unlockDialog.customDuration) || 10)
+      : unlockDialog.selectedDuration
+    const r = await gqlFetch<{ forceUnlockPerApp: boolean }>(FORCE_UNLOCK_M, {
       packageName: unlockDialog.packageName,
-      credential: unlockDialog.credential.trim(),
+      durationMinutes: Math.max(1, Math.min(1440, minutes)),
     })
     if (r.errors?.length) { emitter.emit('toast', r.errors[0].message); return }
-    const ok = r.data.verifyPerAppLock
-    unlockDialog.result = ok
-    if (ok) { unlockDialog.credential = ''; await fetchSessions(); await fetchLocks() }
+    unlockDialog.result = true
+    await fetchSessions()
+    await fetchLocks()
   } catch (e: any) {
     emitter.emit('toast', e?.message ?? 'error')
   } finally {
@@ -717,18 +746,45 @@ onUnmounted(() => { if (sessionTimer) clearInterval(sessionTimer) })
 }
 .alm-hint { font-size: 0.75rem; color: var(--md-sys-color-on-surface-variant); white-space: nowrap; &.sel { color: #7c3aed; font-weight: 600; } }
 
+/* ── Filter row ── */
+.alm-filter-row {
+  display: flex; align-items: center; margin-bottom: 10px;
+}
+.filter-toggle {
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  user-select: none; padding: 6px 10px 6px 6px;
+  border-radius: 20px; background: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  transition: all .15s;
+  &.active { border-color: #7c3aed; background: rgba(124,58,237,0.08); }
+}
+.filter-chk { display: none; }
+.filter-slider {
+  position: relative; width: 36px; height: 20px;
+  background: var(--md-sys-color-outline-variant); border-radius: 99px;
+  flex-shrink: 0; transition: background .2s;
+  &::after {
+    content: ''; position: absolute; top: 3px; left: 3px;
+    width: 14px; height: 14px; background: #fff; border-radius: 50%;
+    transition: transform .2s;
+  }
+  .filter-toggle.active & { background: #7c3aed; &::after { transform: translateX(16px); } }
+}
+.filter-label { font-size: 0.82rem; font-weight: 500; color: var(--md-sys-color-on-surface); }
+.filter-count { font-size: 0.75rem; color: var(--md-sys-color-on-surface-variant); }
+
 /* ── App Grid ── */
 .app-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
 }
 .app-card {
   position: relative; display: flex; flex-direction: column; align-items: center;
-  padding: 14px 8px 10px;
+  padding: 16px 8px 12px;
   background: var(--md-sys-color-surface-container);
   border: 1.5px solid transparent;
-  border-radius: 16px; cursor: pointer; user-select: none;
+  border-radius: 18px; cursor: pointer; user-select: none;
   transition: all .15s;
   &:hover { border-color: var(--md-sys-color-outline-variant); transform: translateY(-1px); }
   &.locked { border-color: rgba(124,58,237,0.3); background: rgba(124,58,237,0.05); }
@@ -1021,6 +1077,31 @@ onUnmounted(() => { if (sessionTimer) clearInterval(sessionTimer) })
 }
 .pattern-preview-row { display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: var(--md-sys-color-on-surface-variant); }
 .link-btn { background: none; border: none; cursor: pointer; color: #7c3aed; font-size: 0.82rem; padding: 0; }
+
+/* Duration picker */
+.duration-grid {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px;
+}
+.dur-btn {
+  padding: 7px 14px; border-radius: 20px; border: 1.5px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface-container); cursor: pointer;
+  font-size: 0.82rem; font-weight: 500; color: var(--md-sys-color-on-surface-variant);
+  transition: all .15s;
+  &.active { border-color: #059669; background: #d1fae5; color: #065f46; }
+  &:hover:not(.active) { border-color: var(--md-sys-color-outline); }
+}
+.custom-dur-row {
+  display: flex; align-items: center; gap: 8px; margin-top: 8px;
+  input { flex: 1; }
+}
+.dur-unit { font-size: 0.85rem; color: var(--md-sys-color-on-surface-variant); white-space: nowrap; }
+.unlock-info-note {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-radius: 10px;
+  background: rgba(5,150,105,0.08); border: 1px solid rgba(5,150,105,0.2);
+  color: #065f46; font-size: 0.82rem; margin-bottom: 10px;
+}
+.info-ico { width: 15px; height: 15px; flex-shrink: 0; }
 
 /* Result banners */
 .result-banner {
