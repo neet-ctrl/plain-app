@@ -14,6 +14,7 @@ data class PerAppLock(
     val biometricEnabled: Boolean,
     val totalAttempts: Int,
     val wrongAttempts: Int,
+    val credential: String,
 )
 
 data class PerAppLockAttempt(
@@ -51,6 +52,7 @@ fun SchemaBuilder.addPerAppLockSchema() {
                     biometricEnabled = config.biometricEnabled,
                     totalAttempts = attempts.size,
                     wrongAttempts = attempts.count { !it.success },
+                    credential = PerAppLockHelper.decodeCredential(config.encodedCredential),
                 )
             }
         }
