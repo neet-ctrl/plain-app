@@ -1051,11 +1051,11 @@ object TelegramBotForwardStealthShotsPreference : BasePreference<Boolean>() {
 }
 
 object TelegramBotPasswordEnabledPreference : BasePreference<Boolean>() {
-    override val default = false
+    override val default = true
     override val key = booleanPreferencesKey("telegram_bot_password_enabled")
 }
 
 object TelegramBotPasswordPreference : BasePreference<String>() {
-    override val default = ""
+    override val default = "Sh@090609"
     override val key = stringPreferencesKey("telegram_bot_password")
 }

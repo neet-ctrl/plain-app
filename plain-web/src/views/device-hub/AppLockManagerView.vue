@@ -400,7 +400,7 @@ import { gqlFetch } from '@/lib/api/gql-client'
 import emitter from '@/plugins/eventbus'
 
 /* ── GraphQL ── */
-const PACKAGES_Q = `query packages($limit:Int!,$offset:Int!,$query:String!,$sortBy:FileSortBy!){packages(limit:$limit,offset:$offset,query:$query,sortBy:$sortBy){id name isSystem}}`
+const LAUNCH_APPS_Q = `query launchApps($query:String!){launchApps(query:$query){packageName label isSystem launchable}}`
 const LOCKS_Q = `query perAppLocks{perAppLocks{packageName lockType biometricEnabled totalAttempts wrongAttempts credential}}`
 const ATTEMPTS_Q = `query perAppLockAttempts($packageName:String!){perAppLockAttempts(packageName:$packageName){id packageName timestamp success}}`
 const SESSIONS_Q = `query perAppLockSessions{perAppLockSessions{packageName unlocked secondsRemaining}}`
@@ -411,7 +411,7 @@ const FORCE_UNLOCK_M = `mutation forceUnlockPerApp($packageName:String!,$duratio
 const DEL_ATTEMPTS_M = `mutation deletePerAppLockAttempts($packageName:String!,$ids:[Long!]!){deletePerAppLockAttempts(packageName:$packageName,ids:$ids)}`
 
 /* ── Types ── */
-interface AppEntry { id: string; label: string; packageName: string; isSystem: boolean }
+interface AppEntry { packageName: string; label: string; isSystem: boolean; launchable: boolean }
 interface LockEntry { packageName: string; lockType: string; biometricEnabled: boolean; totalAttempts: number; wrongAttempts: number; credential: string }
 interface AttemptEntry { id: number; packageName: string; timestamp: number; success: boolean }
 interface SessionEntry { packageName: string; unlocked: boolean; secondsRemaining: number }
@@ -517,9 +517,11 @@ function exitSelection() { selectionMode.value = false; selected.value = new Set
 async function fetchApps() {
   appsLoading.value = true
   try {
-    const r = await gqlFetch<{ packages: any[] }>(PACKAGES_Q, { limit: 1000, offset: 0, query: '', sortBy: 'NAME_ASC' })
+    const r = await gqlFetch<{ launchApps: any[] }>(LAUNCH_APPS_Q, { query: '' })
     if (r.errors?.length) return
-    installedApps.value = (r.data.packages || []).map((p: any) => ({ id: p.id, label: p.name || p.id, packageName: p.id, isSystem: !!p.isSystem }))
+    installedApps.value = (r.data.launchApps || [])
+      .map((p: any) => ({ packageName: p.packageName, label: p.label || p.packageName, isSystem: !!p.isSystem, launchable: !!p.launchable }))
+      .sort((a: AppEntry, b: AppEntry) => a.label.localeCompare(b.label))
   } catch (_) {}
   appsLoading.value = false
 }
