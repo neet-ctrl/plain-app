@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import com.ismartcoding.lib.logcat.LogCat
 import com.ismartcoding.plain.MainApp
+import com.ismartcoding.plain.telegram.TelegramBotManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -148,7 +149,7 @@ object IntruderFrontCamera {
             try {
                 val photo = capture()
                 val (lat, lng, hasLoc) = getLastLocation()
-                IntruderCaptureHelper.save(
+                val capture = IntruderCaptureHelper.save(
                     trigger = trigger,
                     triggerDetail = triggerDetail,
                     photoFile = photo,
@@ -156,6 +157,9 @@ object IntruderFrontCamera {
                     lng = lng,
                     hasLocation = hasLoc,
                 )
+                if (capture != null) {
+                    TelegramBotManager.forwardIntruderCapture(capture)
+                }
             } catch (e: Throwable) {
                 LogCat.e("IntruderFrontCamera.fireAndForget failed: ${e.message}")
             }

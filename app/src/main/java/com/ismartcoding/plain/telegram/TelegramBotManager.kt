@@ -77,6 +77,8 @@ import com.ismartcoding.plain.preferences.TelegramBotForwardBatteryAlertPreferen
 import com.ismartcoding.plain.preferences.TelegramBotBatteryAlertThresholdPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardStealthShotsPreference
 import com.ismartcoding.plain.helpers.SensorHelper
+import com.ismartcoding.plain.helpers.IntruderCaptureHelper
+import com.ismartcoding.plain.helpers.PerAppLockHelper
 import com.ismartcoding.plain.helpers.SystemControlHelper
 import com.ismartcoding.plain.features.Permission
 import com.ismartcoding.plain.services.AppBlockHelper
@@ -295,6 +297,44 @@ object TelegramBotManager {
         if (token.isBlank() || chatId.isBlank()) return
         scope.launch {
             TelegramApiClient.sendMessage(token, chatId, text, replyMarkup = replyMarkup)
+        }
+    }
+
+    fun forwardIntruderCapture(capture: IntruderCaptureHelper.Capture) {
+        if (token.isBlank() || chatId.isBlank()) return
+        scope.launch {
+            try {
+                val triggerLabel = when (capture.trigger) {
+                    IntruderCaptureHelper.Trigger.PER_APP_LOCK -> "🔐 Per-App Lock"
+                    IntruderCaptureHelper.Trigger.APP_PIN -> "📌 App PIN"
+                    IntruderCaptureHelper.Trigger.SECURITY_QA -> "🔒 Security Q&A"
+                    IntruderCaptureHelper.Trigger.TELEGRAM_BOT -> "🤖 Telegram Bot Password"
+                    else -> capture.trigger
+                }
+                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                val caption = buildString {
+                    append("🚨 <b>Intruder Detected!</b>\n\n")
+                    append("🎯 <b>Trigger:</b> $triggerLabel\n")
+                    if (capture.triggerDetail.isNotBlank()) append("📋 <b>Detail:</b> ${htmlEsc(capture.triggerDetail)}\n")
+                    append("🕐 <b>Time:</b> ${sdf.format(java.util.Date(capture.timestamp))}\n")
+                    if (capture.hasLocation) {
+                        append("📍 <b>Location:</b> <a href=\"https://maps.google.com/?q=${capture.lat},${capture.lng}\">${"%.6f".format(capture.lat)}, ${"%.6f".format(capture.lng)}</a>")
+                    } else {
+                        append("📍 <b>Location:</b> Not available")
+                    }
+                }
+                val photoFile = if (capture.absPath.isNotEmpty()) {
+                    val f = java.io.File(capture.absPath)
+                    if (f.exists() && f.length() > 0) f else null
+                } else null
+                if (photoFile != null) {
+                    TelegramApiClient.sendPhoto(token, chatId, photoFile, caption)
+                } else {
+                    sendMessage(caption)
+                }
+            } catch (e: Exception) {
+                LogCat.e("TelegramBot forwardIntruderCapture failed: ${e.message}")
+            }
         }
     }
 
@@ -647,6 +687,8 @@ object TelegramBotManager {
                     "batteryalert", "batalert", "lowbattery" -> cmdBatteryAlert(args)
                     "forwardgeofence", "geofencefwd", "gffwd" -> cmdForwardGeofence(args)
                     "forwardshots", "shotsfwd", "autoshare" -> cmdForwardShots(args)
+                    "applocker", "lockapps", "applock", "perapplock" -> cmdAppLocker(args)
+                    "intruders", "captures", "intrudercaptures" -> scope.launch { cmdIntruderCaptures(args) }
                     "commands" -> cmdCommands()
                     "stop" -> { sendMessage("⛔ Bot stopped. Restart it from the PlainApp settings."); stop() }
                     else -> sendMessage("❓ Unknown command: <code>$command</code>\n\nSend /help for all commands.")
@@ -1868,6 +1910,115 @@ object TelegramBotManager {
                         val off = rest.toIntOrNull() ?: 0
                         renderMmsPage(off, editMessageId = messageId)
                     }
+                    // ---- Per-App Locker ----
+                    "alk_home" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        renderAppLockerHome(editMessageId = messageId)
+                    }
+                    "alk_pg" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val off = rest.toIntOrNull() ?: 0
+                        renderAppLockerPicker("", off, editMessageId = messageId)
+                    }
+                    "alk_q" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Send app name…")
+                        pendingInput = "alk_search"
+                        sendMessage("🔍 Type an app name to search (e.g. <code>WhatsApp</code>), or <code>*</code> to browse all:")
+                    }
+                    "alk_sel" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) sendMessage("⚠️ Session expired. Send /applocker to start over.")
+                        else renderAppLockMenu(pkg, editMessageId = messageId)
+                    }
+                    "alk_pin" -> {
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Session expired", true)
+                        } else {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Send new password…")
+                            pendingInput = "alk_setpin:${pkgToken(pkg)}"
+                            sendMessage("🔑 Send the new PIN or password for this app (e.g. <code>1234</code> or any text):")
+                        }
+                    }
+                    "alk_view" -> {
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Session expired", true)
+                        } else {
+                            val lock = PerAppLockHelper.getLock(pkg)
+                            if (lock == null) {
+                                TelegramApiClient.answerCallbackQuery(token, cqId, "No lock set for this app", true)
+                            } else {
+                                val cred = PerAppLockHelper.decodeCredential(lock.encodedCredential)
+                                TelegramApiClient.answerCallbackQuery(token, cqId, "🔑 Password: $cred", true)
+                            }
+                        }
+                    }
+                    "alk_rm" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            sendMessage("⚠️ Session expired. Send /applocker to start over.")
+                        } else {
+                            PerAppLockHelper.removeLock(pkg)
+                            val name = try { PackageHelper.getLabel(pkg).ifEmpty { pkg } } catch (_: Throwable) { pkg }
+                            sendMessage(
+                                "🗑 Lock removed for <b>${htmlEsc(name)}</b>.\n\nThe app is now accessible without a password.",
+                                replyMarkup = TelegramApiClient.inlineKeyboard(listOf(listOf("◀️ Back to App Locker" to "alk_home")))
+                            )
+                        }
+                    }
+                    "alk_unlock" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Unlocked for 10 min")
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            sendMessage("⚠️ Session expired. Send /applocker to start over.")
+                        } else {
+                            PerAppLockHelper.markUnlocked(pkg)
+                            renderAppLockMenu(pkg, editMessageId = messageId)
+                        }
+                    }
+                    "alk_status" -> {
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "Session expired", true)
+                        } else {
+                            val secs = PerAppLockHelper.getSessionSecondsRemaining(pkg)
+                            val msg = if (secs > 0) {
+                                val m = secs / 60; val s = secs % 60
+                                "⏱ Unlocked — ${m}m ${s}s remaining"
+                            } else {
+                                "🔒 Locked — no active session"
+                            }
+                            TelegramApiClient.answerCallbackQuery(token, cqId, msg, true)
+                        }
+                    }
+                    "alk_attempts" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        val pkg = pkgFromToken(rest)
+                        if (pkg == null) {
+                            sendMessage("⚠️ Session expired. Send /applocker to start over.")
+                        } else {
+                            val attempts = PerAppLockHelper.getAttempts(pkg).take(10)
+                            val name = try { PackageHelper.getLabel(pkg).ifEmpty { pkg } } catch (_: Throwable) { pkg }
+                            val sdf = SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault())
+                            val sb = buildString {
+                                append("📋 <b>Attempt Log — ${htmlEsc(name)}</b>\n\n")
+                                if (attempts.isEmpty()) {
+                                    append("<i>No attempts recorded yet.</i>")
+                                } else {
+                                    attempts.forEach { a ->
+                                        val icon = if (a.success) "✅" else "❌"
+                                        append("$icon ${sdf.format(java.util.Date(a.timestamp))}\n")
+                                    }
+                                }
+                            }
+                            sendMessage(sb, replyMarkup = TelegramApiClient.inlineKeyboard(listOf(
+                                listOf("◀️ Back" to "alk_sel:${pkgToken(pkg)}")
+                            )))
+                        }
+                    }
                     else -> TelegramApiClient.answerCallbackQuery(token, cqId)
                 }
             } catch (e: Exception) {
@@ -2798,6 +2949,32 @@ object TelegramBotManager {
     private suspend fun consumePendingInput(action: String, text: String) {
         val parts = action.split(":")
         when (parts[0]) {
+            "alk_search" -> {
+                val q = text.trim()
+                val query = if (q == "*" || q.isEmpty()) "" else q
+                renderAppLockerPicker(query, 0, editMessageId = null)
+                return
+            }
+            "alk_setpin" -> {
+                val tok = parts.getOrNull(1) ?: return
+                val pkg = pkgFromToken(tok)
+                if (pkg == null) { sendMessage("⚠️ Session expired. Send /applocker to start over."); return }
+                val pin = text.trim()
+                if (pin.isBlank()) {
+                    sendMessage("❌ Password cannot be empty. Send the new password:")
+                    pendingInput = action
+                    return
+                }
+                PerAppLockHelper.setLock(pkg, "pin", pin, false)
+                val name = try { PackageHelper.getLabel(pkg).ifEmpty { pkg } } catch (_: Throwable) { pkg }
+                sendMessage(
+                    "✅ Lock set for <b>${htmlEsc(name)}</b>\n🔑 Password: <code>${htmlEsc(pin)}</code>",
+                    replyMarkup = TelegramApiClient.inlineKeyboard(listOf(
+                        listOf("🔐 Manage Lock" to "alk_sel:${pkgToken(pkg)}", "🏠 App Locker" to "alk_home")
+                    ))
+                )
+                return
+            }
             "audio_duration" -> {
                 val n = text.trim().toIntOrNull()
                 if (n == null || n !in 1..300) {
@@ -3594,6 +3771,165 @@ object TelegramBotManager {
 
     private fun cmdBlockedApps() {
         scope.launch { renderUnblockPicker(editMessageId = null) }
+    }
+
+    // ─────────────────────────── Per-App Locker ───────────────────────────
+
+    private fun cmdAppLocker(args: List<String>) {
+        scope.launch {
+            if (args.isNotEmpty()) renderAppLockerPicker(args.joinToString(" "), 0, editMessageId = null)
+            else renderAppLockerHome(editMessageId = null)
+        }
+    }
+
+    private suspend fun renderAppLockerHome(editMessageId: Long?) {
+        sendTyping()
+        try {
+            val locks = PerAppLockHelper.getAllLocks()
+            val sb = buildString {
+                append("🔐 <b>Per-App Locker</b>\n")
+                append("Protect individual apps with a password.\n\n")
+                if (locks.isEmpty()) {
+                    append("<i>No apps locked yet. Tap ➕ Lock an App to get started.</i>")
+                } else {
+                    append("<b>${locks.size} locked app${if (locks.size != 1) "s" else ""}:</b>\n\n")
+                    locks.forEach { lock ->
+                        val name = try { PackageHelper.getLabel(lock.packageName).ifEmpty { lock.packageName } } catch (_: Throwable) { lock.packageName }
+                        val typeLabel = lock.lockType.uppercase()
+                        val secs = PerAppLockHelper.getSessionSecondsRemaining(lock.packageName)
+                        val sessionTag = if (secs > 0) " · ⏱ unlocked ${secs / 60}m${secs % 60}s" else ""
+                        append("  • <b>${htmlEsc(name)}</b> [$typeLabel]$sessionTag\n")
+                        append("    <code>${htmlEsc(lock.packageName)}</code>\n")
+                    }
+                }
+            }
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            locks.take(8).forEach { lock ->
+                val name = try { PackageHelper.getLabel(lock.packageName).ifEmpty { lock.packageName } } catch (_: Throwable) { lock.packageName }
+                rows.add(listOf("🔒 ${name.take(32)}" to "alk_sel:${pkgToken(lock.packageName)}"))
+            }
+            rows.add(listOf("➕ Lock an App" to "alk_q", "🔍 Browse All" to "alk_pg:0"))
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb, replyMarkup = markup)
+            else sendMessage(sb, replyMarkup = markup)
+        } catch (e: Exception) {
+            sendMessage("❌ Could not load app locker: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    private suspend fun renderAppLockerPicker(query: String, offset: Int, editMessageId: Long?) {
+        sendTyping()
+        try {
+            val pageSize = 10
+            val q = if (query.isBlank()) "" else "text:$query"
+            val apps = PackageHelper.searchAsync(q, pageSize + 1, offset, FileSortBy.NAME_ASC)
+            val hasMore = apps.size > pageSize
+            val pageItems = apps.take(pageSize)
+            val sb = buildString {
+                append("📱 <b>Select an App to Lock</b>")
+                if (query.isNotBlank()) append(" — <code>${htmlEsc(query)}</code>")
+                append("\n")
+                if (pageItems.isEmpty()) {
+                    append("\n<i>No apps found.</i>")
+                } else {
+                    append("Showing ${offset + 1}–${offset + pageItems.size} · tap to open lock menu\n\n")
+                    pageItems.forEachIndexed { i, a ->
+                        val lockTag = if (PerAppLockHelper.getLock(a.id) != null) " 🔒" else ""
+                        append("${offset + i + 1}. <b>${htmlEsc(a.name)}</b>$lockTag\n   <code>${htmlEsc(a.id)}</code>\n\n")
+                    }
+                }
+            }
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            pageItems.forEachIndexed { i, a ->
+                val lockTag = if (PerAppLockHelper.getLock(a.id) != null) " 🔒" else ""
+                rows.add(listOf("${offset + i + 1}. ${a.name.take(30)}$lockTag" to "alk_sel:${pkgToken(a.id)}"))
+            }
+            val nav = mutableListOf<Pair<String, String>>()
+            if (offset > 0) nav.add("◀️ Prev" to "alk_pg:${(offset - pageSize).coerceAtLeast(0)}")
+            if (hasMore) nav.add("Next ▶️" to "alk_pg:${offset + pageSize}")
+            if (nav.isNotEmpty()) rows.add(nav)
+            rows.add(listOf("🔍 Search" to "alk_q", "🏠 Locker Home" to "alk_home"))
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb, replyMarkup = markup)
+            else sendMessage(sb, replyMarkup = markup)
+        } catch (e: Exception) {
+            sendMessage("❌ Could not load apps: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    private suspend fun renderAppLockMenu(pkg: String, editMessageId: Long?) {
+        try {
+            val info = try { PackageHelper.searchAsync("ids:$pkg", 1, 0, FileSortBy.NAME_ASC).firstOrNull() } catch (_: Exception) { null }
+            val name = info?.name ?: pkg
+            val lock = PerAppLockHelper.getLock(pkg)
+            val secs = PerAppLockHelper.getSessionSecondsRemaining(pkg)
+            val sessionText = if (secs > 0) "⏱ Unlocked — ${secs / 60}m ${secs % 60}s left" else "🔒 Locked"
+            val cred = lock?.let { PerAppLockHelper.decodeCredential(it.encodedCredential) }
+            val failCount = PerAppLockHelper.getAttempts(pkg).count { !it.success }
+            val text = buildString {
+                append("🔐 <b>${htmlEsc(name)}</b>\n")
+                append("<code>${htmlEsc(pkg)}</code>\n\n")
+                if (lock != null) {
+                    append("🔒 <b>Lock type:</b> ${lock.lockType.uppercase()}\n")
+                    append("🔑 <b>Password:</b> <tg-spoiler>${htmlEsc(cred ?: "")}</tg-spoiler>\n")
+                    append("📊 <b>Status:</b> $sessionText\n")
+                    append("❌ <b>Failed attempts:</b> $failCount total\n")
+                } else {
+                    append("✅ <b>Status:</b> Not locked — no password set\n")
+                }
+            }
+            val tok = pkgToken(pkg)
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            if (lock != null) {
+                rows.add(listOf("🔑 Change Password" to "alk_pin:$tok", "👁 Reveal Password" to "alk_view:$tok"))
+                rows.add(listOf("🔓 Unlock 10 min" to "alk_unlock:$tok", "⏱ Session Status" to "alk_status:$tok"))
+                rows.add(listOf("📋 Attempt Log" to "alk_attempts:$tok", "🗑 Remove Lock" to "alk_rm:$tok"))
+            } else {
+                rows.add(listOf("🔐 Set Password" to "alk_pin:$tok"))
+            }
+            rows.add(listOf("◀️ Back to App Locker" to "alk_home"))
+            val markup = TelegramApiClient.inlineKeyboard(rows)
+            if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, text, replyMarkup = markup)
+            else sendMessage(text, replyMarkup = markup)
+        } catch (e: Exception) {
+            sendMessage("❌ Could not load lock menu: ${htmlEsc(e.message ?: "")}")
+        }
+    }
+
+    private suspend fun cmdIntruderCaptures(args: List<String>) {
+        sendTyping()
+        try {
+            val limit = (args.getOrNull(0)?.toIntOrNull() ?: 5).coerceIn(1, 20)
+            val captures = IntruderCaptureHelper.list().take(limit)
+            val total = IntruderCaptureHelper.count()
+            if (captures.isEmpty()) {
+                sendMessage("📷 <b>Intruder Captures</b>\n\n<i>No captures yet. A front-camera photo is taken automatically on every wrong password or PIN attempt.</i>")
+                return
+            }
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            sendMessage("📷 <b>Intruder Captures</b> — last $limit of $total total\n<i>Use /intruders 20 to fetch more.</i>")
+            captures.forEach { c ->
+                val triggerLabel = when (c.trigger) {
+                    IntruderCaptureHelper.Trigger.PER_APP_LOCK -> "🔐 Per-App Lock"
+                    IntruderCaptureHelper.Trigger.APP_PIN -> "📌 App PIN"
+                    IntruderCaptureHelper.Trigger.SECURITY_QA -> "🔒 Security Q&A"
+                    IntruderCaptureHelper.Trigger.TELEGRAM_BOT -> "🤖 Telegram Bot"
+                    else -> c.trigger
+                }
+                val caption = buildString {
+                    append("🎯 $triggerLabel\n")
+                    if (c.triggerDetail.isNotBlank()) append("📋 ${htmlEsc(c.triggerDetail)}\n")
+                    append("🕐 ${sdf.format(java.util.Date(c.timestamp))}\n")
+                    if (c.hasLocation) append("📍 <a href=\"https://maps.google.com/?q=${c.lat},${c.lng}\">${"%.5f".format(c.lat)}, ${"%.5f".format(c.lng)}</a>")
+                    else append("📍 No location")
+                }
+                val photo = if (c.absPath.isNotEmpty()) { val f = java.io.File(c.absPath); if (f.exists()) f else null } else null
+                if (photo != null) TelegramApiClient.sendPhoto(token, chatId, photo, caption)
+                else sendMessage(caption)
+            }
+        } catch (e: Exception) {
+            sendMessage("❌ Could not load captures: ${htmlEsc(e.message ?: "")}")
+        }
     }
 
     /** Show installed apps with inline buttons; tapping opens the per-app block menu. */
