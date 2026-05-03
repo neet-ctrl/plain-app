@@ -35,6 +35,8 @@ export default defineConfig({
     allowedHosts: true,
   },
   build: {
+    outDir: '../app/src/main/resources/web',
+    emptyOutDir: true,
     rollupOptions: {
       output: {
         compact: true,

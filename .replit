@@ -12,19 +12,18 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Web Frontend"
+args = "Build Web"
 
 [[workflows.workflow]]
-name = "Web Frontend"
+name = "Build Web"
 author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd plain-web && npx vite --port 5000 --host 0.0.0.0"
-waitForPort = 5000
+args = "cd plain-web && npm run build"
+
+[workflows.workflow.metadata]
+outputType = "console"
 
 [[ports]]
 localPort = 5000
