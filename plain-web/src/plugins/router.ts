@@ -307,6 +307,11 @@ const router = createRouter({
           meta: { group: 'device_hub' },
         },
         {
+          path: 'device-hub/app-lock-manager',
+          component: () => import('@/views/device-hub/AppLockManagerView.vue'),
+          meta: { group: 'device_hub' },
+        },
+        {
           path: 'tracking-hub/gyroscope',
           component: () => import('@/views/tracking-hub/GyroscopeView.vue'),
           meta: { group: 'tracking_hub' },

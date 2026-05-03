@@ -19,6 +19,7 @@ import com.ismartcoding.plain.data.ScreenMirrorControlInput
 import com.ismartcoding.plain.enums.ScreenMirrorControlAction
 import com.ismartcoding.plain.features.PackageHelper
 import com.ismartcoding.plain.helpers.AppInfoGuard
+import com.ismartcoding.plain.helpers.PerAppLockHelper
 import com.ismartcoding.plain.helpers.KeystrokeLogHelper
 import com.ismartcoding.plain.helpers.StealthScreenshotHelper
 import com.ismartcoding.plain.helpers.StealthScreenshotCapturer
@@ -227,6 +228,23 @@ class PlainAccessibilityService : AccessibilityService() {
                             MessageOverlayService.show(title, message, durationMs = 4000L)
                         } catch (_: Exception) {}
                         // Send the user back to the home screen — Android will not let us kill another app.
+                        try { performGlobalAction(GLOBAL_ACTION_HOME) } catch (_: Throwable) {}
+                    }
+                    return@launch
+                }
+
+                // Per-app lock enforcement
+                if (PerAppLockHelper.isLocked(pkg)) {
+                    LogCat.d("PlainAccessibilityService: per-app lock active for $pkg")
+                    PerAppLockHelper.recordAttempt(pkg, false)
+                    mainHandler.post {
+                        try {
+                            MessageOverlayService.show(
+                                title = "App Locked",
+                                message = "\"$pkg\" is locked. Unlock it from the PlainApp web panel.",
+                                durationMs = 4000L,
+                            )
+                        } catch (_: Exception) {}
                         try { performGlobalAction(GLOBAL_ACTION_HOME) } catch (_: Throwable) {}
                     }
                 }

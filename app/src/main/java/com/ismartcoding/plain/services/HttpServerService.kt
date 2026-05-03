@@ -23,6 +23,10 @@ import com.ismartcoding.plain.mdns.NsdHelper
 import com.ismartcoding.plain.TempData
 import com.ismartcoding.plain.preferences.KeepAliveWatchdogEnabledPreference
 import com.ismartcoding.plain.preferences.TelegramBotEnabledPreference
+import com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference
+import com.ismartcoding.plain.preferences.CloudflareTunnelTokenPreference
+import com.ismartcoding.plain.preferences.TelegramBotPasswordPreference
+import com.ismartcoding.plain.preferences.TelegramBotPasswordEnabledPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardCallsPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardNotificationsPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardSmsPreference
@@ -136,6 +140,20 @@ class HttpServerService : LifecycleService() {
     private suspend fun startHttpServerAsync() {
         HttpServerStartHelper.startServer(this) { serverState = it }
         startTelegramBotAsync()
+        startCloudflareTunnelAsync()
+    }
+
+    private suspend fun startCloudflareTunnelAsync() {
+        try {
+            val enabled = CloudflareTunnelEnabledPreference.getAsync(applicationContext)
+            if (!enabled) return
+            val cfToken = CloudflareTunnelTokenPreference.getAsync(applicationContext)
+            if (cfToken.isNotBlank() && !CloudflareTunnelService.isRunning()) {
+                CloudflareTunnelManager.start(applicationContext)
+            }
+        } catch (e: Exception) {
+            LogCat.e("CloudflareTunnel auto-start failed: ${e.message}")
+        }
     }
 
     private suspend fun startTelegramBotAsync() {
@@ -152,6 +170,8 @@ class HttpServerService : LifecycleService() {
                 TelegramBotManager.forwardBatteryAlertEnabled = TelegramBotForwardBatteryAlertPreference.getAsync(applicationContext)
                 TelegramBotManager.batteryAlertThreshold = TelegramBotBatteryAlertThresholdPreference.getAsync(applicationContext)
                 TelegramBotManager.forwardStealthShotsEnabled = TelegramBotForwardStealthShotsPreference.getAsync(applicationContext)
+                TelegramBotManager.botPasswordEnabled = TelegramBotPasswordEnabledPreference.getAsync(applicationContext)
+                TelegramBotManager.botPassword = TelegramBotPasswordPreference.getAsync(applicationContext)
                 TelegramBotManager.start(botToken, chatId)
             }
         } catch (e: Exception) {
