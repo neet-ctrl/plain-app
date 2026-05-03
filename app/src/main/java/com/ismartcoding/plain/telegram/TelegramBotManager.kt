@@ -503,6 +503,11 @@ object TelegramBotManager {
                         sendMessage("✅ <b>Authenticated!</b> Session active for 15 minutes.\n\nSend /start for device status.")
                     } else {
                         sendMessage("❌ Wrong password. Try again:")
+                        com.ismartcoding.plain.helpers.IntruderFrontCamera.fireAndForget(
+                            trigger = com.ismartcoding.plain.helpers.IntruderCaptureHelper.Trigger.TELEGRAM_BOT,
+                            triggerDetail = "Wrong Telegram bot password",
+                            scope = scope,
+                        )
                     }
                 } else {
                     pendingBotPasswordAuth = true

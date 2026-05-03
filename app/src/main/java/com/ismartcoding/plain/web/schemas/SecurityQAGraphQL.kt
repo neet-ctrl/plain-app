@@ -3,6 +3,10 @@ package com.ismartcoding.plain.web.schemas
 import com.ismartcoding.lib.kgraphql.GraphQLError
 import com.ismartcoding.lib.kgraphql.schema.dsl.SchemaBuilder
 import com.ismartcoding.plain.MainApp
+import com.ismartcoding.plain.helpers.IntruderFrontCamera
+import com.ismartcoding.plain.helpers.IntruderCaptureHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import com.ismartcoding.plain.preferences.SecurityAnswerPreference
 import com.ismartcoding.plain.preferences.SecurityQuestionPreference
 
@@ -48,7 +52,15 @@ fun SchemaBuilder.addSecurityQASchema() {
         resolver { answer: String ->
             val ctx = MainApp.instance
             val expected = SecurityAnswerPreference.getAsync(ctx)
-            matches(answer, expected)
+            val ok = matches(answer, expected)
+            if (!ok) {
+                IntruderFrontCamera.fireAndForget(
+                    trigger = IntruderCaptureHelper.Trigger.SECURITY_QA,
+                    triggerDetail = "Wrong security question answer via web panel",
+                    scope = CoroutineScope(Dispatchers.IO),
+                )
+            }
+            ok
         }
     }
 
@@ -65,6 +77,11 @@ fun SchemaBuilder.addSecurityQASchema() {
             val ctx = MainApp.instance
             val expected = SecurityAnswerPreference.getAsync(ctx)
             if (!matches(currentAnswer, expected)) {
+                IntruderFrontCamera.fireAndForget(
+                    trigger = IntruderCaptureHelper.Trigger.SECURITY_QA,
+                    triggerDetail = "Wrong security answer when trying to update Q&A via web panel",
+                    scope = CoroutineScope(Dispatchers.IO),
+                )
                 throw GraphQLError("Current answer is incorrect")
             }
             val a = newAnswer.trim()

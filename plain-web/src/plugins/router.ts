@@ -312,6 +312,11 @@ const router = createRouter({
           meta: { group: 'device_hub' },
         },
         {
+          path: 'device-hub/intruder-captures',
+          component: () => import('@/views/device-hub/IntruderCapturesView.vue'),
+          meta: { group: 'device_hub' },
+        },
+        {
           path: 'tracking-hub/gyroscope',
           component: () => import('@/views/tracking-hub/GyroscopeView.vue'),
           meta: { group: 'tracking_hub' },

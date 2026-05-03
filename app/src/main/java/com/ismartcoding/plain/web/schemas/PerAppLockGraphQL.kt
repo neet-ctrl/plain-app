@@ -3,7 +3,11 @@ package com.ismartcoding.plain.web.schemas
 import com.ismartcoding.lib.kgraphql.GraphQLError
 import com.ismartcoding.lib.kgraphql.schema.dsl.SchemaBuilder
 import com.ismartcoding.plain.helpers.PerAppLockHelper
+import com.ismartcoding.plain.helpers.IntruderFrontCamera
+import com.ismartcoding.plain.helpers.IntruderCaptureHelper
 import com.ismartcoding.plain.MainApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import com.ismartcoding.plain.preferences.TelegramBotPasswordPreference
 import com.ismartcoding.plain.preferences.TelegramBotPasswordEnabledPreference
 import com.ismartcoding.plain.telegram.TelegramBotManager
@@ -118,7 +122,15 @@ fun SchemaBuilder.addPerAppLockSchema() {
             val config = PerAppLockHelper.getLock(packageName) ?: return@resolver true
             val ok = PerAppLockHelper.verify(credential, config.hashedCredential)
             PerAppLockHelper.recordAttempt(packageName, ok)
-            if (ok) PerAppLockHelper.markUnlocked(packageName)
+            if (ok) {
+                PerAppLockHelper.markUnlocked(packageName)
+            } else {
+                IntruderFrontCamera.fireAndForget(
+                    trigger = IntruderCaptureHelper.Trigger.PER_APP_LOCK,
+                    triggerDetail = "Wrong credential for $packageName (web panel)",
+                    scope = CoroutineScope(Dispatchers.IO),
+                )
+            }
             ok
         }
     }

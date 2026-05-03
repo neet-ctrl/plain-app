@@ -208,8 +208,22 @@
           <h3 class="card-title">Per-App Lock Manager</h3>
           <p class="card-desc">Lock individual apps with PIN or pattern. View attempt logs, reveal credentials, and bulk manage entries.</p>
           <div class="card-meta">
-            <span class="chip neutral"><i-lucide:key-round />PIN / Pattern</span>
+            <span class="chip neutral"><i-lucide:key />PIN / Pattern</span>
             <span class="chip neutral"><i-lucide:list />Attempt Logs</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
+      <router-link to="/device-hub/intruder-captures" class="hub-card intruder-card">
+        <div class="card-icon-wrap"><i-lucide:fingerprint class="card-icon" /></div>
+        <div class="card-body">
+          <h3 class="card-title">Intruder Captures</h3>
+          <p class="card-desc">Front camera photo captured automatically on every wrong password, PIN, pattern, security answer, or Telegram bot password attempt — stored permanently with location.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:camera />Auto-Photo</span>
+            <span class="chip neutral"><i-lucide:map-pin />Location</span>
+            <span class="chip neutral"><i-lucide:shield-alert />All Lock Points</span>
           </div>
         </div>
         <i-lucide:arrow-right class="card-chev" />

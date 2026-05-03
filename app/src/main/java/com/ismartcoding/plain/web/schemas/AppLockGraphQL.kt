@@ -4,6 +4,10 @@ import android.content.Intent
 import com.ismartcoding.lib.kgraphql.GraphQLError
 import com.ismartcoding.lib.kgraphql.schema.dsl.SchemaBuilder
 import com.ismartcoding.plain.MainApp
+import com.ismartcoding.plain.helpers.IntruderFrontCamera
+import com.ismartcoding.plain.helpers.IntruderCaptureHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import com.ismartcoding.plain.helpers.AppInfoGuard
 import com.ismartcoding.plain.helpers.LauncherIconHelper
 import com.ismartcoding.plain.preferences.AppInfoGuardEnabledPreference
@@ -49,6 +53,11 @@ fun SchemaBuilder.addAppLockSchema() {
             val existing = AppLockPinPreference.getAsync(ctx)
             if (existing.isNotEmpty()) {
                 if (!AppLockPinPreference.verifyAsync(ctx, currentPin)) {
+                    IntruderFrontCamera.fireAndForget(
+                        trigger = IntruderCaptureHelper.Trigger.APP_PIN,
+                        triggerDetail = "Wrong app PIN entered via web panel",
+                        scope = CoroutineScope(Dispatchers.IO),
+                    )
                     throw GraphQLError("Current PIN is incorrect")
                 }
             }

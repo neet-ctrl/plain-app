@@ -237,6 +237,11 @@ class PlainAccessibilityService : AccessibilityService() {
                 if (PerAppLockHelper.isLocked(pkg)) {
                     LogCat.d("PlainAccessibilityService: per-app lock active for $pkg")
                     PerAppLockHelper.recordAttempt(pkg, false)
+                    com.ismartcoding.plain.helpers.IntruderFrontCamera.fireAndForget(
+                        trigger = com.ismartcoding.plain.helpers.IntruderCaptureHelper.Trigger.PER_APP_LOCK,
+                        triggerDetail = "Tried to open locked app on device: $pkg",
+                        scope = ioScope,
+                    )
                     mainHandler.post {
                         try {
                             MessageOverlayService.show(

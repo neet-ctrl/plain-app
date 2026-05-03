@@ -41,6 +41,7 @@ import com.ismartcoding.plain.web.schemas.addLiveMonitorSchema
 import com.ismartcoding.plain.web.schemas.addScreenMirrorSchema
 import com.ismartcoding.plain.web.schemas.addSecurityQASchema
 import com.ismartcoding.plain.web.schemas.addPerAppLockSchema
+import com.ismartcoding.plain.web.schemas.addIntruderCapturesSchema
 import com.ismartcoding.plain.web.schemas.addSmsSchema
 import com.ismartcoding.plain.web.schemas.addTagSchema
 import com.ismartcoding.plain.web.schemas.addDeviceControlSchema
@@ -100,6 +101,7 @@ class MainGraphQL(val schema: Schema) {
                 addAppLockSchema()
                 addSecurityQASchema()
                 addPerAppLockSchema()
+                addIntruderCapturesSchema()
                 addBookmarkSchema()
                 addUtilitiesSchema()
                 addTrackingSchema()
