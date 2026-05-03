@@ -306,6 +306,8 @@ declare module 'vue' {
     'ILucide:trendingUp': typeof import('~icons/lucide/trending-up')['default']
     'ILucide:trophy': typeof import('~icons/lucide/trophy')['default']
     'ILucide:unlink': typeof import('~icons/lucide/unlink')['default']
+    'ILucide:unlock': typeof import('~icons/lucide/unlock')['default']
+    'ILucide:unlockKeyhole': typeof import('~icons/lucide/unlock-keyhole')['default']
     'ILucide:vibrate': typeof import('~icons/lucide/vibrate')['default']
     'ILucide:video': typeof import('~icons/lucide/video')['default']
     'ILucide:videoOff': typeof import('~icons/lucide/video-off')['default']

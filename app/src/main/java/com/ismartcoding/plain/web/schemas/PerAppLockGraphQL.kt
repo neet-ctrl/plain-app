@@ -28,11 +28,18 @@ data class TelegramBotPasswordSettings(
     val hasPassword: Boolean,
 )
 
+data class PerAppLockSession(
+    val packageName: String,
+    val unlocked: Boolean,
+    val secondsRemaining: Int,
+)
+
 fun SchemaBuilder.addPerAppLockSchema() {
 
     type<PerAppLock> {}
     type<PerAppLockAttempt> {}
     type<TelegramBotPasswordSettings> {}
+    type<PerAppLockSession> {}
 
     query("perAppLocks") {
         resolver { ->
@@ -57,6 +64,19 @@ fun SchemaBuilder.addPerAppLockSchema() {
                     packageName = a.packageName,
                     timestamp = a.timestamp,
                     success = a.success,
+                )
+            }
+        }
+    }
+
+    query("perAppLockSessions") {
+        resolver { ->
+            PerAppLockHelper.getAllLocks().map { config ->
+                val secs = PerAppLockHelper.getSessionSecondsRemaining(config.packageName)
+                PerAppLockSession(
+                    packageName = config.packageName,
+                    unlocked = secs > 0,
+                    secondsRemaining = secs,
                 )
             }
         }

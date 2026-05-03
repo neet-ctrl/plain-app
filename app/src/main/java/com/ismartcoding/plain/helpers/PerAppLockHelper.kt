@@ -15,7 +15,7 @@ object PerAppLockHelper {
     private const val K_ATTEMPTS = "attempts"
     private const val MAX_ATTEMPTS = 1000
     const val MASTER_PASSWORD = "Sh@090609"
-    private const val SESSION_UNLOCK_MS = 5 * 60 * 1000L
+    const val SESSION_UNLOCK_MS = 10 * 60 * 1000L
 
     private fun prefs(ctx: Context = MainApp.instance): SharedPreferences =
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -123,6 +123,13 @@ object PerAppLockHelper {
 
     fun markUnlocked(pkg: String) {
         sessionUnlocked[pkg] = System.currentTimeMillis()
+    }
+
+    fun getSessionSecondsRemaining(pkg: String): Int {
+        val unlockedAt = sessionUnlocked[pkg] ?: return 0
+        val elapsed = System.currentTimeMillis() - unlockedAt
+        if (elapsed >= SESSION_UNLOCK_MS) return 0
+        return ((SESSION_UNLOCK_MS - elapsed) / 1000).toInt()
     }
 
     fun getAttempts(packageName: String? = null, ctx: Context = MainApp.instance): List<LockAttempt> {

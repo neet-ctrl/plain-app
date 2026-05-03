@@ -77,9 +77,6 @@
                 Pattern: <span class="mono">{{ patternSeq.length ? patternSeq.join('-') : 'none' }}</span>
                 <button v-if="patternSeq.length" class="link-btn" @click="patternSeq = []" type="button">Clear</button>
               </div>
-              <p v-if="showCredential && form.lockType === 'pattern'" class="hint">
-                Stored as sequence: {{ patternSeq.join('-') }}
-              </p>
             </div>
           </div>
 
@@ -110,12 +107,25 @@
               <div class="app-pkg">{{ app.packageName }}</div>
               <div class="app-meta">
                 <span class="badge" :class="app.lockType">{{ app.lockType.toUpperCase() }}</span>
-                <span v-if="app.biometricEnabled" class="badge bio">🫁 Bio</span>
+                <span v-if="app.biometricEnabled" class="badge bio">Bio</span>
                 <span class="badge neutral">{{ app.totalAttempts }} attempts</span>
                 <span v-if="app.wrongAttempts > 0" class="badge warn">{{ app.wrongAttempts }} wrong</span>
+                <!-- Session unlock badge -->
+                <span v-if="sessionMap[app.packageName]?.unlocked" class="badge unlocked">
+                  <i-lucide:unlock class="badge-icon" />
+                  Unlocked — {{ formatSecs(sessionMap[app.packageName].secondsRemaining) }} left
+                </span>
               </div>
             </div>
             <div class="app-actions">
+              <button
+                class="icon-btn unlock-btn"
+                :class="{ active: sessionMap[app.packageName]?.unlocked }"
+                :title="sessionMap[app.packageName]?.unlocked ? 'Extend unlock session' : 'Unlock for 10 minutes'"
+                @click="openUnlock(app)"
+              >
+                <i-lucide:unlock-keyhole />
+              </button>
               <button class="icon-btn reveal-btn" title="Reveal credential (master password required)" @click="openReveal(app)">
                 <i-lucide:eye />
               </button>
@@ -129,6 +139,51 @@
           </div>
         </div>
       </section>
+    </div>
+
+    <!-- Unlock session dialog -->
+    <div v-if="unlockDialog.open" class="modal-backdrop" @click.self="unlockDialog.open = false">
+      <div class="modal">
+        <h4 class="modal-title">
+          <i-lucide:unlock-keyhole class="icon-inline" />
+          Unlock for 10 Minutes
+        </h4>
+        <p class="modal-desc">
+          Enter the PIN, pattern sequence, or master password to grant a 10-minute unlock window for
+          <code>{{ unlockDialog.packageName }}</code> on the device.
+        </p>
+
+        <div class="pin-row">
+          <input
+            ref="unlockInputRef"
+            v-model="unlockDialog.credential"
+            :type="unlockDialog.showCred ? 'text' : 'password'"
+            class="text-input"
+            placeholder="PIN / pattern sequence / master password"
+            @keyup.enter="doUnlock"
+          />
+          <button class="eye-btn" @click="unlockDialog.showCred = !unlockDialog.showCred" type="button">
+            <i-lucide:eye v-if="!unlockDialog.showCred" />
+            <i-lucide:eye-off v-else />
+          </button>
+        </div>
+
+        <div v-if="unlockDialog.result === true" class="unlock-success">
+          <i-lucide:check-circle class="success-icon" />
+          App unlocked for 10 minutes. The lock will re-engage automatically.
+        </div>
+        <div v-else-if="unlockDialog.result === false" class="unlock-fail">
+          <i-lucide:x-circle class="fail-icon" />
+          Wrong credential. Try again.
+        </div>
+
+        <div class="modal-actions">
+          <button class="primary-btn" @click="doUnlock" :disabled="unlockDialog.loading">
+            {{ unlockDialog.loading ? 'Verifying…' : 'Unlock' }}
+          </button>
+          <button class="secondary-btn" @click="unlockDialog.open = false">Close</button>
+        </div>
+      </div>
     </div>
 
     <!-- Reveal credential dialog -->
@@ -205,7 +260,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
 import { gqlFetch } from '@/lib/api/gql-client'
 import emitter from '@/plugins/eventbus'
 
@@ -241,6 +296,16 @@ const PER_APP_ATTEMPTS_QUERY = `
   }
 `
 
+const PER_APP_SESSIONS_QUERY = `
+  query perAppLockSessions {
+    perAppLockSessions {
+      packageName
+      unlocked
+      secondsRemaining
+    }
+  }
+`
+
 const SET_LOCK_MUTATION = `
   mutation setPerAppLock($packageName: String!, $lockType: String!, $credential: String!, $biometricEnabled: Boolean!) {
     setPerAppLock(packageName: $packageName, lockType: $lockType, credential: $credential, biometricEnabled: $biometricEnabled)
@@ -250,6 +315,12 @@ const SET_LOCK_MUTATION = `
 const REMOVE_LOCK_MUTATION = `
   mutation removePerAppLock($packageName: String!) {
     removePerAppLock(packageName: $packageName)
+  }
+`
+
+const VERIFY_LOCK_MUTATION = `
+  mutation verifyPerAppLock($packageName: String!, $credential: String!) {
+    verifyPerAppLock(packageName: $packageName, credential: $credential)
   }
 `
 
@@ -286,18 +357,37 @@ interface InstalledApp {
   packageName: string
 }
 
+interface SessionEntry {
+  packageName: string
+  unlocked: boolean
+  secondsRemaining: number
+}
+
 const lockedApps = ref<AppLockEntry[]>([])
 const installedApps = ref<InstalledApp[]>([])
+const sessionMap = ref<Record<string, SessionEntry>>({})
 const saving = ref(false)
 const showCredential = ref(false)
 const patternSeq = ref<number[]>([])
 const selectAllAttempts = ref(false)
+const unlockInputRef = ref<HTMLInputElement | null>(null)
+
+let sessionPollTimer: ReturnType<typeof setInterval> | null = null
 
 const form = reactive({
   packageName: '',
   lockType: 'pin',
   credential: '',
   biometricEnabled: false,
+})
+
+const unlockDialog = reactive({
+  open: false,
+  packageName: '',
+  credential: '',
+  showCred: false,
+  loading: false,
+  result: null as boolean | null,
 })
 
 const revealDialog = reactive({
@@ -319,6 +409,12 @@ const attemptsDialog = reactive({
 
 function formatTs(ts: number): string {
   return new Date(ts).toLocaleString()
+}
+
+function formatSecs(secs: number): string {
+  const m = Math.floor(secs / 60)
+  const s = secs % 60
+  return m > 0 ? `${m}m ${s}s` : `${s}s`
 }
 
 function togglePatternDot(n: number) {
@@ -351,6 +447,16 @@ async function fetchInstalledApps() {
       label: p.name || p.id,
       packageName: p.id,
     }))
+  } catch (_) {}
+}
+
+async function fetchSessions() {
+  try {
+    const r = await gqlFetch<{ perAppLockSessions: SessionEntry[] }>(PER_APP_SESSIONS_QUERY)
+    if (r.errors?.length) return
+    const map: Record<string, SessionEntry> = {}
+    for (const s of r.data.perAppLockSessions) map[s.packageName] = s
+    sessionMap.value = map
   } catch (_) {}
 }
 
@@ -395,6 +501,41 @@ async function removeLock(pkg: string) {
   if (r.errors?.length) { emitter.emit('toast', r.errors[0].message); return }
   emitter.emit('toast', 'Lock removed')
   await fetchLockedApps()
+  await fetchSessions()
+}
+
+function openUnlock(app: AppLockEntry) {
+  unlockDialog.open = true
+  unlockDialog.packageName = app.packageName
+  unlockDialog.credential = ''
+  unlockDialog.showCred = false
+  unlockDialog.loading = false
+  unlockDialog.result = null
+  nextTick(() => unlockInputRef.value?.focus())
+}
+
+async function doUnlock() {
+  if (!unlockDialog.credential.trim()) { emitter.emit('toast', 'Enter the credential'); return }
+  unlockDialog.loading = true
+  unlockDialog.result = null
+  try {
+    const r = await gqlFetch<{ verifyPerAppLock: boolean }>(VERIFY_LOCK_MUTATION, {
+      packageName: unlockDialog.packageName,
+      credential: unlockDialog.credential.trim(),
+    })
+    if (r.errors?.length) { emitter.emit('toast', r.errors[0].message); return }
+    const ok = r.data.verifyPerAppLock
+    unlockDialog.result = ok
+    if (ok) {
+      unlockDialog.credential = ''
+      await fetchSessions()
+      await fetchLockedApps()
+    }
+  } catch (e: any) {
+    emitter.emit('toast', e?.message ?? 'network_error')
+  } finally {
+    unlockDialog.loading = false
+  }
 }
 
 function openReveal(app: AppLockEntry) {
@@ -483,7 +624,13 @@ async function clearAllAttempts() {
 }
 
 onMounted(async () => {
-  await Promise.all([fetchLockedApps(), fetchInstalledApps()])
+  await Promise.all([fetchLockedApps(), fetchInstalledApps(), fetchSessions()])
+  // Poll session status every 15 seconds so the countdown badge updates
+  sessionPollTimer = setInterval(fetchSessions, 15000)
+})
+
+onUnmounted(() => {
+  if (sessionPollTimer) clearInterval(sessionPollTimer)
 })
 </script>
 
@@ -555,15 +702,18 @@ onMounted(async () => {
 }
 .app-info { flex: 1; min-width: 0; }
 .app-pkg { font-size: 0.88rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.app-meta { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.app-meta { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; align-items: center; }
 .badge {
   font-size: 0.72rem; padding: 2px 7px; border-radius: 99px; font-weight: 500;
+  display: inline-flex; align-items: center; gap: 4px;
   &.pin { background: #e3f2fd; color: #1565c0; }
   &.pattern { background: #f3e5f5; color: #6a1b9a; }
   &.bio { background: #e8f5e9; color: #2e7d32; }
   &.neutral { background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface-variant); }
   &.warn { background: #fff3e0; color: #e65100; }
+  &.unlocked { background: #e8f5e9; color: #1b5e20; font-weight: 600; }
 }
+.badge-icon { width: 11px; height: 11px; }
 .app-actions { display: flex; gap: 4px; }
 .icon-btn {
   background: none; border: none; cursor: pointer; padding: 6px; border-radius: 6px;
@@ -572,6 +722,10 @@ onMounted(async () => {
   &:hover { background: var(--md-sys-color-surface-container-high); }
 }
 .danger-btn { color: var(--md-sys-color-error); }
+.unlock-btn {
+  &.active { color: #2e7d32; }
+  &:hover { color: var(--md-sys-color-primary); }
+}
 .modal-backdrop {
   position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100;
   display: flex; align-items: center; justify-content: center;
@@ -581,9 +735,21 @@ onMounted(async () => {
   width: 90%; max-width: 460px; max-height: 80vh; overflow-y: auto;
   &.modal-wide { max-width: 620px; }
 }
-.modal-title { font-size: 1rem; font-weight: 600; margin: 0 0 8px; }
+.modal-title { font-size: 1rem; font-weight: 600; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
 .modal-desc { font-size: 0.85rem; color: var(--md-sys-color-on-surface-variant); margin: 0 0 14px; }
 .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+.unlock-success {
+  margin-top: 14px; padding: 12px 14px; border-radius: 10px;
+  background: #e8f5e9; color: #1b5e20;
+  display: flex; align-items: center; gap: 10px; font-size: 0.88rem;
+}
+.unlock-fail {
+  margin-top: 14px; padding: 12px 14px; border-radius: 10px;
+  background: #ffebee; color: #b71c1c;
+  display: flex; align-items: center; gap: 10px; font-size: 0.88rem;
+}
+.success-icon { width: 20px; height: 20px; flex-shrink: 0; color: #2e7d32; }
+.fail-icon { width: 20px; height: 20px; flex-shrink: 0; color: #c62828; }
 .reveal-result {
   background: var(--md-sys-color-surface-container-high);
   border-radius: 8px; padding: 10px 14px; margin-top: 12px;
