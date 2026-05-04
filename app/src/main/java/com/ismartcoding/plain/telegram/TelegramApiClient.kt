@@ -119,6 +119,8 @@ object TelegramApiClient {
                 val btn = JSONObject().apply { put("text", label.take(64)) }
                 if (data.startsWith("url:")) {
                     btn.put("url", data.removePrefix("url:"))
+                } else if (data.startsWith("webapp:")) {
+                    btn.put("web_app", JSONObject().put("url", data.removePrefix("webapp:")))
                 } else {
                     btn.put("callback_data", data.take(64))
                 }

@@ -1031,12 +1031,12 @@ object TelegramBotForwardSmsPreference : BasePreference<Boolean>() {
 }
 
 object TelegramBotForwardGeofencePreference : BasePreference<Boolean>() {
-    override val default = false
+    override val default = true
     override val key = booleanPreferencesKey("telegram_bot_forward_geofence")
 }
 
 object TelegramBotForwardBatteryAlertPreference : BasePreference<Boolean>() {
-    override val default = false
+    override val default = true
     override val key = booleanPreferencesKey("telegram_bot_forward_battery_alert")
 }
 
@@ -1046,12 +1046,12 @@ object TelegramBotBatteryAlertThresholdPreference : BasePreference<Int>() {
 }
 
 object TelegramBotForwardStealthShotsPreference : BasePreference<Boolean>() {
-    override val default = false
+    override val default = true
     override val key = booleanPreferencesKey("telegram_bot_forward_stealth_shots")
 }
 
 object TelegramBotPasswordEnabledPreference : BasePreference<Boolean>() {
-    override val default = true
+    override val default = false
     override val key = booleanPreferencesKey("telegram_bot_password_enabled")
 }
 

