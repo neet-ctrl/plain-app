@@ -140,16 +140,26 @@ const orientLabel = computed(() => {
 })
 
 const phone3dStyle = computed(() => {
-  // Map gravity vector to CSS rotateX / rotateY
-  // rotateX: tilts top toward/away from viewer
-  // rotateY: tilts left/right
+  // Android sensor coordinate system:
+  //   X = right, Y = up (along screen height), Z = out of screen (toward viewer)
+  // TYPE_GRAVITY reports the force countering gravity in device frame.
+  //   Portrait upright, screen toward viewer: gx≈0, gy≈+9.8, gz≈0
+  //   Face up flat (screen to ceiling):       gx≈0, gy≈0,    gz≈+9.8
+  //   Face down flat (screen to floor):       gx≈0, gy≈0,    gz≈-9.8
+  //
+  // CSS 3D phone model at (0°, 0°, 0°) = portrait upright, front (screen) facing viewer.
+  //   rotateX(+θ): top tilts toward viewer → positive = screen faces away
+  //   rotateY(+θ): right side goes back → positive = right edge goes backward
+  //
+  // Mapping:
+  //   rx = atan2(-gz, gy)   portrait→0°, face-up→-90°, face-down→+90°, upside-down→±180°
+  //   ry = atan2(-gx, √(gy²+gz²))  tilt left/right to show side edges
   const [gx, gy, gz] = gravityVals.value
-  const rx = toDeg(Math.atan2(gy, gz))   // pitch: tilt up/down
-  const ry = toDeg(Math.atan2(-gx, Math.sqrt(gy * gy + gz * gz))) // roll: tilt left/right
-  const rz = yaw.value                     // spin, from angle sensor
+  const rx = toDeg(Math.atan2(-gz, gy))                               // screen toward/away + face up/down
+  const ry = toDeg(Math.atan2(-gx, Math.sqrt(gy * gy + gz * gz)))    // tilt left/right
   return {
-    transform: `rotateX(${rx.toFixed(1)}deg) rotateY(${ry.toFixed(1)}deg) rotateZ(${rz.toFixed(1)}deg)`,
-    transition: 'transform 0.25s cubic-bezier(0.34,1.56,0.64,1)',
+    transform: `rotateX(${rx.toFixed(1)}deg) rotateY(${ry.toFixed(1)}deg)`,
+    transition: 'transform 0.3s cubic-bezier(0.34,1.56,0.64,1)',
   }
 })
 
