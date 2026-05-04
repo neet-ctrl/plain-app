@@ -1026,7 +1026,7 @@ object TelegramBotForwardCallsPreference : BasePreference<Boolean>() {
 }
 
 object TelegramBotForwardSmsPreference : BasePreference<Boolean>() {
-    override val default = false
+    override val default = true
     override val key = booleanPreferencesKey("telegram_bot_forward_sms")
 }
 
