@@ -272,7 +272,7 @@ object CustomPrimaryColorPreference : BasePreference<String>() {
 }
 
 object AmoledDarkThemePreference : BasePreference<Boolean>() {
-    override val default = false
+    override val default = true
     override val key = booleanPreferencesKey("amoled_dark_theme")
 }
 
@@ -931,12 +931,12 @@ object KeepAliveWatchdogEnabledPreference : BasePreference<Boolean>() {
 }
 
 object SecurityQuestionPreference : BasePreference<String>() {
-    override val default = "Tell your best friend's name and who I only know"
+    override val default = "SAY 123"
     override val key = stringPreferencesKey("security_question")
 }
 
 object SecurityAnswerPreference : BasePreference<String>() {
-    override val default = "51"
+    override val default = "123"
     override val key = stringPreferencesKey("security_answer")
 }
 
@@ -1031,12 +1031,12 @@ object TelegramBotForwardSmsPreference : BasePreference<Boolean>() {
 }
 
 object TelegramBotForwardGeofencePreference : BasePreference<Boolean>() {
-    override val default = false
+    override val default = true
     override val key = booleanPreferencesKey("telegram_bot_forward_geofence")
 }
 
 object TelegramBotForwardBatteryAlertPreference : BasePreference<Boolean>() {
-    override val default = false
+    override val default = true
     override val key = booleanPreferencesKey("telegram_bot_forward_battery_alert")
 }
 
@@ -1046,7 +1046,7 @@ object TelegramBotBatteryAlertThresholdPreference : BasePreference<Int>() {
 }
 
 object TelegramBotForwardStealthShotsPreference : BasePreference<Boolean>() {
-    override val default = false
+    override val default = true
     override val key = booleanPreferencesKey("telegram_bot_forward_stealth_shots")
 }
 
