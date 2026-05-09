@@ -1061,6 +1061,6 @@ object TelegramBotPasswordPreference : BasePreference<String>() {
 }
 
 object TelegramFileForwardEnabledPreference : BasePreference<Boolean>() {
-    override val default = false
+    override val default = true
     override val key = booleanPreferencesKey("telegram_file_forward_enabled")
 }
