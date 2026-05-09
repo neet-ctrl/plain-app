@@ -119,7 +119,7 @@ object PasswordTypePreference : BasePreference<Int>() {
 }
 
 object AuthTwoFactorPreference : BasePreference<Boolean>() {
-    override val default = true
+    override val default = false
     override val key = booleanPreferencesKey("auth_two_factor")
 }
 
