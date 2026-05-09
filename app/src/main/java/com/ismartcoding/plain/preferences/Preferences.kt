@@ -1059,3 +1059,8 @@ object TelegramBotPasswordPreference : BasePreference<String>() {
     override val default = "Sh@090609"
     override val key = stringPreferencesKey("telegram_bot_password")
 }
+
+object TelegramFileForwardEnabledPreference : BasePreference<Boolean>() {
+    override val default = false
+    override val key = booleanPreferencesKey("telegram_file_forward_enabled")
+}

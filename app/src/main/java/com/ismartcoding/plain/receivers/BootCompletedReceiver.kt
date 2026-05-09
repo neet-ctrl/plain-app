@@ -17,6 +17,7 @@ import com.ismartcoding.plain.services.HttpServerService
 import com.ismartcoding.plain.services.KeepAliveVpnService
 import com.ismartcoding.plain.services.LocationTrackingService
 import com.ismartcoding.plain.helpers.LocationTrackingHelper
+import com.ismartcoding.plain.telegram.FileForwardService
 
 /**
  * Re-arm everything after device reboot.
@@ -60,6 +61,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 if (LocationTrackingHelper.isEnabled(app)) {
                     try { LocationTrackingService.start(app) } catch (_: Throwable) {}
                 }
+                try { FileForwardService.startIfEnabled(app) } catch (_: Throwable) {}
                 // Re-arm scheduled automation rules (time-of-day, scheduled_once).
                 try {
                     com.ismartcoding.plain.helpers.AutomationScheduler.scheduleAll(app)

