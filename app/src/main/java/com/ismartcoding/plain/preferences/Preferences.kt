@@ -94,12 +94,12 @@ object AppLockPinPreference : BasePreference<String>() {
 }
 
 object PasswordPreference : BasePreference<String>() {
-    override val default = ""
+    override val default = "847402"
     override val key = stringPreferencesKey("password")
 }
 
 object PasswordTypePreference : BasePreference<Int>() {
-    override val default = PasswordType.NONE.value
+    override val default = PasswordType.FIXED.value
     override val key = intPreferencesKey("password_type")
 
     suspend fun putAsync(
@@ -119,7 +119,7 @@ object PasswordTypePreference : BasePreference<Int>() {
 }
 
 object AuthTwoFactorPreference : BasePreference<Boolean>() {
-    override val default = true
+    override val default = false
     override val key = booleanPreferencesKey("auth_two_factor")
 }
 
