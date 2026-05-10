@@ -1,6 +1,7 @@
 package com.neet.tracker.ui.screens
 
 import android.content.Intent
+import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
@@ -57,19 +58,26 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
     var uploadSolTarget by remember { mutableStateOf<TestPaper?>(null) }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val qpLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { u ->
-            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            uploadQPTarget?.let { t -> vm.save(t.copy(questionPaperUri = u.toString())) }
-        }
+        val target = uploadQPTarget
         uploadQPTarget = null
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                target?.let { t -> vm.save(t.copy(questionPaperUri = localPath ?: u.toString())) }
+            }
+        }
     }
     val solLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { u ->
-            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            uploadSolTarget?.let { t -> vm.save(t.copy(solutionUri = u.toString())) }
-        }
+        val target = uploadSolTarget
         uploadSolTarget = null
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                target?.let { t -> vm.save(t.copy(solutionUri = localPath ?: u.toString())) }
+            }
+        }
     }
 
     val allTags = tests.flatMap { it.tags }.distinct()
@@ -185,19 +193,26 @@ fun SamplePapersScreen(navController: NavController, vm: SamplePaperViewModel = 
     var uploadSolTarget by remember { mutableStateOf<SamplePaper?>(null) }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val qpLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { u ->
-            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            uploadQPTarget?.let { p -> vm.save(p.copy(questionPaperUri = u.toString())) }
-        }
+        val target = uploadQPTarget
         uploadQPTarget = null
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                target?.let { p -> vm.save(p.copy(questionPaperUri = localPath ?: u.toString())) }
+            }
+        }
     }
     val solLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { u ->
-            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            uploadSolTarget?.let { p -> vm.save(p.copy(solutionUri = u.toString())) }
-        }
+        val target = uploadSolTarget
         uploadSolTarget = null
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                target?.let { p -> vm.save(p.copy(solutionUri = localPath ?: u.toString())) }
+            }
+        }
     }
 
     val allTags = papers.flatMap { it.tags }.distinct()

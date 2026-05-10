@@ -1,6 +1,7 @@
 package com.neet.tracker.ui.screens
 
 import android.content.Intent
+import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -227,15 +228,19 @@ fun SubjectShortNotesScreen(navController: NavController) {
     var uploadingSubject by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val subj = uploadingSubject
+        uploadingSubject = null
         uri?.let { u ->
-            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            uploadingSubject?.let { subj ->
-                val subjectEnum = try { Subject.valueOf(subj) } catch (e: Exception) { Subject.GENERAL }
-                vm.save(SubjectShortNote(subject = subjectEnum, fileUri = u.toString()))
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                subj?.let { s ->
+                    val subjectEnum = try { Subject.valueOf(s) } catch (e: Exception) { Subject.GENERAL }
+                    vm.save(SubjectShortNote(subject = subjectEnum, fileUri = localPath ?: u.toString()))
+                }
             }
         }
-        uploadingSubject = null
     }
 
     SpaceBackground {

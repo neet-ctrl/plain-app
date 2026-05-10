@@ -1,6 +1,7 @@
 package com.neet.tracker.ui.screens
 
 import android.content.Intent
+import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -448,12 +449,16 @@ fun DiagramsSubjectScreen(navController: NavController, subject: String, vm: Dia
 
     var uploadTarget by remember { mutableStateOf<Diagram?>(null) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { u ->
-            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            uploadTarget?.let { d -> vm.save(d.copy(fileUri = u.toString())) }
-        }
+        val target = uploadTarget
         uploadTarget = null
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                target?.let { d -> vm.save(d.copy(fileUri = localPath ?: u.toString())) }
+            }
+        }
     }
 
     SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = color) }) {
@@ -502,10 +507,13 @@ fun AddDiagramDialog(subject: String, color: Color, onSave: (Diagram) -> Unit, o
     var chapter by remember { mutableStateOf("") }
     var fileUri by remember { mutableStateOf("") }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let {
-            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            fileUri = it.toString()
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                fileUri = localPath ?: u.toString()
+            }
         }
     }
     NEETDialog(title = "Add Diagram", icon = Icons.Default.AccountTree, accentColor = color, onDismiss = onDismiss) {
@@ -535,12 +543,16 @@ fun ChapterShortNotesSubjectScreen(navController: NavController, subject: String
 
     var uploadTarget by remember { mutableStateOf<ChapterShortNote?>(null) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { u ->
-            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            uploadTarget?.let { n -> vm.save(n.copy(fileUri = u.toString())) }
-        }
+        val target = uploadTarget
         uploadTarget = null
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                target?.let { n -> vm.save(n.copy(fileUri = localPath ?: u.toString())) }
+            }
+        }
     }
 
     SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = color) }) {
@@ -590,10 +602,13 @@ fun AddChapterNoteDialog(subject: String, color: Color, onSave: (ChapterShortNot
     var fileUri by remember { mutableStateOf("") }
     val subjectEnum = try { Subject.valueOf(subject) } catch (e: Exception) { Subject.GENERAL }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let {
-            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            fileUri = it.toString()
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                fileUri = localPath ?: u.toString()
+            }
         }
     }
     NEETDialog(title = "Add Short Notes", icon = Icons.Default.Article, accentColor = color, onDismiss = onDismiss) {

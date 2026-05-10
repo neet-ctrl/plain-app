@@ -1,6 +1,7 @@
 package com.neet.tracker.ui.screens
 
 import android.content.Intent
+import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -118,10 +119,13 @@ fun NotebookEditDialog(notebook: Notebook?, onSave: (Notebook) -> Unit, onDismis
     var nbNo by remember { mutableStateOf(notebook?.notebookNo ?: "") }
     var photoUri by remember { mutableStateOf(notebook?.photoUri ?: "") }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
-        u?.let {
-            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            photoUri = it.toString()
+        u?.let { picked ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, picked)
+                photoUri = localPath ?: picked.toString()
+            }
         }
     }
 

@@ -2,6 +2,7 @@ package com.neet.tracker.ui.screens
 
 import android.app.TimePickerDialog
 import android.content.Intent
+import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -265,13 +266,17 @@ fun DateEventDetailScreen(navController: NavController, date: String, vm: DateEv
     var showAdd by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var uploadEventTarget by remember { mutableStateOf<DateEvent?>(null) }
     val eventFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { u ->
-            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            uploadEventTarget?.let { e -> vm.save(e.copy(fileUri = u.toString())) }
-        }
+        val target = uploadEventTarget
         uploadEventTarget = null
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                target?.let { e -> vm.save(e.copy(fileUri = localPath ?: u.toString())) }
+            }
+        }
     }
 
     SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = NeonGreen) }) {

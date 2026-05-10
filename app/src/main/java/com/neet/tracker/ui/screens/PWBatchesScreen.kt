@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import android.content.Intent
+import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -90,19 +91,26 @@ fun PWBatchTestsScreen(navController: NavController, batchId: String, batchName:
     var uploadSolTarget by remember { mutableStateOf<PWTest?>(null) }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val qpLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { u ->
-            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            uploadQPTarget?.let { t -> vm.saveTest(t.copy(questionPaperUri = u.toString())) }
-        }
+        val target = uploadQPTarget
         uploadQPTarget = null
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                target?.let { t -> vm.saveTest(t.copy(questionPaperUri = localPath ?: u.toString())) }
+            }
+        }
     }
     val solLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { u ->
-            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            uploadSolTarget?.let { t -> vm.saveTest(t.copy(solutionUri = u.toString())) }
-        }
+        val target = uploadSolTarget
         uploadSolTarget = null
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                target?.let { t -> vm.saveTest(t.copy(solutionUri = localPath ?: u.toString())) }
+            }
+        }
     }
 
     val allTags = tests.flatMap { it.tags }.distinct()

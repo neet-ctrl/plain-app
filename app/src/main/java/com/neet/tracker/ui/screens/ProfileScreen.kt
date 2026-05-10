@@ -1,6 +1,7 @@
 package com.neet.tracker.ui.screens
 
 import android.content.Intent
+import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -51,10 +52,13 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
     var showAddAttempt by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let {
-            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            photoUri = it.toString()
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                photoUri = localPath ?: u.toString()
+            }
         }
     }
 
@@ -257,10 +261,13 @@ fun ProfileField(label: String, value: String, editing: Boolean, icon: androidx.
 @Composable
 fun RowScope.FileUploadButton(label: String, uri: String, editing: Boolean, color: Color, onUpload: (String) -> Unit, onView: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
-        u?.let {
-            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            onUpload(it.toString())
+        u?.let { picked ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, picked)
+                onUpload(localPath ?: picked.toString())
+            }
         }
     }
     Box(
@@ -308,22 +315,32 @@ fun NEETAttemptCard(
     var solUri by remember(attempt) { mutableStateOf(attempt.solutionPdfUri) }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val marksheetLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let {
-            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            marksheetUri = it.toString(); onUpdate(attempt.copy(marksheetUri = marksheetUri))
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                marksheetUri = localPath ?: u.toString()
+                onUpdate(attempt.copy(marksheetUri = marksheetUri))
+            }
         }
     }
     val qpLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let {
-            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            qpUri = it.toString(); onUpdate(attempt.copy(questionPaperUri = qpUri))
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                qpUri = localPath ?: u.toString()
+                onUpdate(attempt.copy(questionPaperUri = qpUri))
+            }
         }
     }
     val solLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let {
-            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            solUri = it.toString(); onUpdate(attempt.copy(solutionPdfUri = solUri))
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                solUri = localPath ?: u.toString()
+                onUpdate(attempt.copy(solutionPdfUri = solUri))
+            }
         }
     }
 

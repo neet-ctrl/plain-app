@@ -1,6 +1,7 @@
 package com.neet.tracker.ui.screens
 
 import android.content.Intent
+import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -35,10 +36,13 @@ import com.neet.tracker.ui.viewmodels.*
 fun NEETSyllabusScreen(navController: NavController, vm: SyllabusViewModel = hiltViewModel()) {
     val syllabus by vm.syllabus.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let {
-            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            vm.save(NEETSyllabus(fileUri = it.toString()))
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                vm.save(NEETSyllabus(fileUri = localPath ?: u.toString()))
+            }
         }
     }
     SpaceBackground {
@@ -77,13 +81,17 @@ fun DictionaryNeetScreen(navController: NavController, vm: DictionaryViewModel =
     var showAdd by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var uploadTarget by remember { mutableStateOf<DictionaryNeet?>(null) }
     val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { u ->
-            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            uploadTarget?.let { t -> vm.saveNeet(t.copy(fileUri = u.toString())) }
-        }
+        val target = uploadTarget
         uploadTarget = null
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                target?.let { t -> vm.saveNeet(t.copy(fileUri = localPath ?: u.toString())) }
+            }
+        }
     }
 
     val allTags = terms.flatMap { it.tags }.distinct()
@@ -265,13 +273,17 @@ fun MnemonicsScreen(navController: NavController, vm: MnemonicViewModel = hiltVi
     val filtered = mnemonics.filter { searchQuery.isBlank() || it.name.contains(searchQuery, true) || it.chapter.contains(searchQuery, true) }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var uploadMnemTarget by remember { mutableStateOf<Mnemonic?>(null) }
     val mnemFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { u ->
-            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            uploadMnemTarget?.let { t -> vm.save(t.copy(fileUri = u.toString())) }
-        }
+        val target = uploadMnemTarget
         uploadMnemTarget = null
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                target?.let { t -> vm.save(t.copy(fileUri = localPath ?: u.toString())) }
+            }
+        }
     }
 
     SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = NeonPurple) }) {
@@ -372,12 +384,16 @@ fun DayWasteScreen(navController: NavController, vm: DayWasteViewModel = hiltVie
     var uploadSourceTarget by remember { mutableStateOf<DayWaste?>(null) }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val sourceLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { u ->
-            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            uploadSourceTarget?.let { d -> vm.save(d.copy(sourceUri = u.toString())) }
-        }
+        val target = uploadSourceTarget
         uploadSourceTarget = null
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                target?.let { d -> vm.save(d.copy(sourceUri = localPath ?: u.toString())) }
+            }
+        }
     }
 
     val filtered = entries.filter { searchQuery.isBlank() || it.date.contains(searchQuery, true) }

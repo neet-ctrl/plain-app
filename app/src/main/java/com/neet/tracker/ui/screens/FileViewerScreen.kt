@@ -43,6 +43,7 @@ import com.neet.tracker.ui.dialogs.RichTextToolbar
 import com.neet.tracker.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 private val UV_PAGE_MARKS = listOf(
     "✅" to "Got It",
@@ -64,10 +65,18 @@ private val UV_QUICK_EMOJIS = listOf(
 @Composable
 fun FileViewerScreen(navController: NavController, fileUri: String, title: String) {
     val context = LocalContext.current
-    val uri = remember(fileUri) { try { Uri.parse(fileUri) } catch (e: Exception) { null } }
+    // Local file paths (copied to app-internal storage) start with "/".
+    // Content:// URIs are used for backwards-compat with old uploads.
+    val isLocalFile = remember(fileUri) { fileUri.startsWith("/") }
+    val localFile   = remember(fileUri) { if (isLocalFile) File(fileUri) else null }
+    val uri = remember(fileUri) {
+        if (isLocalFile) null
+        else try { Uri.parse(fileUri) } catch (e: Exception) { null }
+    }
 
-    // Resolve the actual filename for content:// URIs that don't expose a MIME type directly
+    // Resolve display name — for local files just use the filename.
     val resolvedDisplayName = remember(fileUri) {
+        if (isLocalFile) return@remember File(fileUri).name
         var name = ""
         if (uri?.scheme == "content") {
             try {
@@ -82,7 +91,10 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     }
 
     val mimeType = remember(fileUri, resolvedDisplayName) {
-        if (uri != null) {
+        if (isLocalFile) {
+            val ext = File(fileUri).extension.lowercase()
+            MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: ""
+        } else if (uri != null) {
             // Primary: content resolver (works for most providers)
             context.contentResolver.getType(uri)?.takeIf { it.isNotBlank() }
                 ?: run {
@@ -96,17 +108,17 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
         } else ""
     }
     val extension = remember(fileUri, mimeType, resolvedDisplayName) {
-        MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)?.takeIf { it.isNotBlank() }
-            ?: if (resolvedDisplayName.isNotBlank()) resolvedDisplayName.substringAfterLast('.', "").lowercase()
-            else MimeTypeMap.getFileExtensionFromUrl(fileUri)?.lowercase()
-                ?: fileUri.substringAfterLast('.', "").lowercase()
+        if (isLocalFile) File(fileUri).extension.lowercase()
+        else {
+            MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)?.takeIf { it.isNotBlank() }
+                ?: if (resolvedDisplayName.isNotBlank()) resolvedDisplayName.substringAfterLast('.', "").lowercase()
+                else MimeTypeMap.getFileExtensionFromUrl(fileUri)?.lowercase()
+                    ?: fileUri.substringAfterLast('.', "").lowercase()
+        }
     }
     val isImage = mimeType.startsWith("image/") || extension in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
-    val isPdf   = mimeType == "application/pdf" || extension == "pdf" || fileUri.contains("pdf", ignoreCase = true)
-    // For any non-image file, always attempt PDF rendering. PDFs stored via content:// often
-    // have no detectable extension or MIME type, so we try the renderer and fall back to
-    // GenericFileView only when the renderer itself reports an error.
-    val tryAsPdf = !isImage && uri != null
+    // Try PDF rendering for any non-image, whether we have a local File or a content:// URI.
+    val tryAsPdf = !isImage && (uri != null || localFile != null)
 
     val prefs   = remember { context.getSharedPreferences("uv_viewer", Context.MODE_PRIVATE) }
     val noteKey = remember(fileUri) { "note_${fileUri.hashCode()}" }
@@ -161,11 +173,17 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
 
     // ── PDF loading ────────────────────────────────────────────────────────────
     LaunchedEffect(fileUri) {
-        if (tryAsPdf && uri != null) {
+        if (tryAsPdf) {
             pdfLoading = true; pdfError = false; pdfErrorMessage = ""
             withContext(Dispatchers.IO) {
                 try {
-                    val pfd: ParcelFileDescriptor? = context.contentResolver.openFileDescriptor(uri, "r")
+                    // Local files (copied to internal storage): open directly — no permissions needed.
+                    // Content:// URIs (legacy uploads): use content resolver.
+                    val pfd: ParcelFileDescriptor? = when {
+                        localFile != null -> ParcelFileDescriptor.open(localFile, ParcelFileDescriptor.MODE_READ_ONLY)
+                        uri != null       -> context.contentResolver.openFileDescriptor(uri, "r")
+                        else              -> null
+                    }
                     if (pfd != null) {
                         val renderer = PdfRenderer(pfd)
                         totalPages = renderer.pageCount
@@ -354,11 +372,21 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     .clickable(enabled = focusMode) { focusMode = false }
             ) {
                 when {
-                    uri == null || fileUri.isBlank() -> FileErrorView()
-                    isImage -> ImageViewer(uri = uri, title = title)
-                    // tryAsPdf = all non-image files — we always attempt PDF rendering first.
-                    // If the renderer fails (pdfError), fall back to GenericFileView so the
-                    // user can still open the file externally.
+                    fileUri.isBlank() -> FileErrorView()
+                    isImage -> {
+                        // Local file image (e.g. copied photo) — render directly from File.
+                        if (localFile != null) {
+                            AsyncImage(
+                                model              = localFile,
+                                contentDescription = title,
+                                modifier           = Modifier.fillMaxSize()
+                            )
+                        } else if (uri != null) {
+                            ImageViewer(uri = uri, title = title)
+                        } else {
+                            FileErrorView()
+                        }
+                    }
                     tryAsPdf -> {
                         when {
                             pdfLoading -> UvLoadingView()
@@ -371,21 +399,40 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                                     panOffset = Offset(panOffset.x + p.x, panOffset.y + p.y)
                                 }
                             )
-                            pdfError -> FileFailureLog(
-                                uri = uri, title = title,
-                                detectedMime = mimeType, detectedExt = extension,
-                                resolvedName = resolvedDisplayName, rawUri = fileUri,
-                                errorMessage = pdfErrorMessage, context = context
-                            )
+                            pdfError -> {
+                                if (uri != null) {
+                                    FileFailureLog(
+                                        uri = uri, title = title,
+                                        detectedMime = mimeType, detectedExt = extension,
+                                        resolvedName = resolvedDisplayName, rawUri = fileUri,
+                                        errorMessage = pdfErrorMessage, context = context
+                                    )
+                                } else {
+                                    // Local file that couldn't be rendered as PDF (e.g. it's a
+                                    // Word doc). Show simpler error with Open Externally button.
+                                    LocalFileRenderError(
+                                        localFile    = localFile,
+                                        title        = title,
+                                        errorMessage = pdfErrorMessage,
+                                        context      = context
+                                    )
+                                }
+                            }
                             else -> UvLoadingView()
                         }
                     }
-                    else -> FileFailureLog(
-                        uri = uri, title = title,
-                        detectedMime = mimeType, detectedExt = extension,
-                        resolvedName = resolvedDisplayName, rawUri = fileUri,
-                        errorMessage = "URI scheme not supported for in-app viewing.", context = context
-                    )
+                    else -> {
+                        if (uri != null) {
+                            FileFailureLog(
+                                uri = uri, title = title,
+                                detectedMime = mimeType, detectedExt = extension,
+                                resolvedName = resolvedDisplayName, rawUri = fileUri,
+                                errorMessage = "URI scheme not supported for in-app viewing.", context = context
+                            )
+                        } else {
+                            FileErrorView()
+                        }
+                    }
                 }
 
                 // Bookmark ribbon
@@ -882,6 +929,94 @@ private fun UvErrorView(uri: Uri, context: Context) {
                     Icon(Icons.Default.OpenInNew, null, tint = NeonOrange)
                     Spacer(Modifier.width(8.dp))
                     Text("Open Externally", color = NeonOrange, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+// ─── Local File Render Error ──────────────────────────────────────────────────
+// Shown when a locally-copied file cannot be rendered in-app (e.g. a Word doc).
+// Uses FileProvider to offer "Open Externally" since the file is in internal storage.
+
+@Composable
+private fun LocalFileRenderError(
+    localFile: File?,
+    title: String,
+    errorMessage: String,
+    context: Context
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(vertical = 16.dp)
+    ) {
+        item {
+            GlassCard(glowColor = NeonOrange) {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        ThreeDIconBox(icon = Icons.Default.InsertDriveFile, tint = NeonOrange, size = 52.dp, iconSize = 28.dp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Cannot Preview In-App", style = MaterialTheme.typography.titleMedium,
+                                color = NeonOrange, fontWeight = FontWeight.ExtraBold)
+                            Text(title, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.6f))
+                        }
+                    }
+                    NeonDivider(NeonOrange.copy(0.3f))
+                    Text(
+                        "This file format cannot be displayed in-app. Use the button below to open it with another app on your device.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(0.8f)
+                    )
+                }
+            }
+        }
+        if (errorMessage.isNotBlank()) {
+            item {
+                GlassCard(glowColor = NeonRed.copy(0.5f)) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.Error, null, tint = NeonRed, modifier = Modifier.size(14.dp))
+                            Text("Render Detail", style = MaterialTheme.typography.labelMedium, color = NeonRed)
+                        }
+                        Box(
+                            modifier = Modifier.fillMaxWidth()
+                                .background(Color.Black.copy(0.45f), RoundedCornerShape(10.dp))
+                                .border(0.5.dp, NeonRed.copy(0.4f), RoundedCornerShape(10.dp))
+                                .padding(12.dp)
+                        ) {
+                            Text(errorMessage,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = NeonRed.copy(0.9f),
+                                lineHeight = 18.sp)
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            localFile?.let { f ->
+                Button(
+                    onClick = {
+                        try {
+                            val fUri = androidx.core.content.FileProvider.getUriForFile(
+                                context, "${context.packageName}.fileprovider", f
+                            )
+                            val mime = context.contentResolver.getType(fUri) ?: "*/*"
+                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(fUri, mime)
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            }
+                            context.startActivity(Intent.createChooser(intent, "Open with"))
+                        } catch (_: Exception) {}
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan.copy(0.18f)),
+                    border = BorderStroke(1.dp, NeonCyan.copy(0.65f))
+                ) {
+                    Icon(Icons.Default.OpenInNew, null, tint = NeonCyan)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Open in External App", color = NeonCyan, fontWeight = FontWeight.Bold)
                 }
             }
         }
