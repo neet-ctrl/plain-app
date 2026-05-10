@@ -1,45 +1,65 @@
-# [Project name]
+# NEET Tracker Pro — Android
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
-
-## Run & Operate
-
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+A comprehensive Android study-tracking app for NEET aspirants. Tracks notebooks, books, PYQ sources, test papers, planner events, diary entries, date events, dictionaries, mnemonics, diagrams, short notes, day-waste logs, NEET sequence, lack points, and student profile — with full alarm/reminder infrastructure.
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- **Language**: Kotlin
+- **UI**: Jetpack Compose + Material 3
+- **Architecture**: MVVM + Hilt DI
+- **Database**: Room (version 2)
+- **Navigation**: Compose Navigation
+- **Build**: Gradle 8 (Kotlin DSL)
+- **CI**: GitHub Actions (debug + release APK)
 
-## Where things live
+## Project Structure
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+```
+app/
+  src/main/
+    java/com/neet/tracker/
+      alarm/           - AlarmScheduler, AlarmReceiver, BootReceiver, NotificationHelper
+      data/
+        database/      - NEETDatabase (v2), NEETDao, DatabaseModule
+        models/        - Models.kt (all Room entities + data classes)
+      di/              - Hilt modules
+      navigation/      - Routes + nav graph
+      ui/
+        components/    - Reusable UI components
+        dialogs/       - Reusable dialogs
+        screens/       - All screen composables
+        theme/         - Theme, colors, typography
+        viewmodels/    - ViewModels (including ReminderViewModel)
+    AndroidManifest.xml
+.github/workflows/
+  debug.yml            - CI: build debug APK on every push
+  release.yml          - CI: build & sign release APK, upload as artifact
+gradle/wrapper/
+  gradle-wrapper.properties
+gradlew
+```
 
-## Architecture decisions
+## Alarm / Reminder Infrastructure
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- `AlarmScheduler.kt` — schedules/cancels exact alarms via AlarmManager
+- `AlarmReceiver.kt` — BroadcastReceiver that fires the notification
+- `BootReceiver.kt` — reschedules saved alarms after device reboot
+- `NotificationHelper.kt` — creates notification channel and shows notification
+- `ReminderViewModel.kt` — manages Reminder entities and coordinates scheduling
+- Alarm UI available in every `PlannerEventCard` (all planner screens) and every `DateEventCard`
 
-## Product
+## CI Workflows
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+| Workflow | Trigger | Output |
+|----------|---------|--------|
+| `debug.yml` | push to any branch | `app-debug.apk` artifact |
+| `release.yml` | push to `main` | `app-release.apk` artifact (signed) |
 
-## User preferences
+Release signing: JKS decoded from `KEYSTORE_BASE64` secret, password `Sh@090609`, alias `my-key`.
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+## User Preferences
 
-## Gotchas
-
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- Android-only project; no web/Node/pnpm workspace.
+- Hardcoded keystore credentials in release workflow (as per original requirement).
+- Database uses `fallbackToDestructiveMigration()` — no manual migrations needed.
+- All alarm permissions declared in AndroidManifest.xml.
