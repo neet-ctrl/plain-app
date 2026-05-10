@@ -5,6 +5,9 @@ import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -16,8 +19,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
@@ -56,6 +62,7 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
     var editTarget by remember { mutableStateOf<TestPaper?>(null) }
     var uploadQPTarget by remember { mutableStateOf<TestPaper?>(null) }
     var uploadSolTarget by remember { mutableStateOf<TestPaper?>(null) }
+    var filesTargetId by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -106,12 +113,25 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 80.dp)
                 ) {
-                    items(filtered) { t ->
+                    items(filtered, key = { it.id }) { t ->
                         val statusGlow = statusColor(t.status)
+                        val hasQP = t.questionPaperUri.isNotBlank()
+                        val hasSol = t.solutionUri.isNotBlank()
                         GlassCard(glowColor = statusGlow, modifier = Modifier.aspectRatio(0.85f)) {
                             Box(modifier = Modifier.fillMaxSize()) {
-                                Column(modifier = Modifier.fillMaxSize().padding(10.dp).padding(bottom = 36.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(t.name, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 2)
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(10.dp)
+                                        .padding(bottom = 36.dp)
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) { filesTargetId = t.id },
+                                    verticalArrangement = Arrangement.Center,
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(t.name, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 2, textAlign = TextAlign.Center)
                                     Spacer(Modifier.height(6.dp))
                                     StatusBadge(t.status)
                                     if (t.marksObtained.isNotBlank()) {
@@ -127,6 +147,15 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
                                             Text(t.prefixDate, style = MaterialTheme.typography.labelSmall, color = NeonCyan.copy(0.6f))
                                         }
                                     }
+                                    Spacer(Modifier.height(6.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        if (hasQP) {
+                                            Box(modifier = Modifier.size(8.dp).background(NeonGreen, CircleShape))
+                                        }
+                                        if (hasSol) {
+                                            Box(modifier = Modifier.size(8.dp).background(NeonOrange, CircleShape))
+                                        }
+                                    }
                                 }
                                 Column(modifier = Modifier.align(Alignment.BottomCenter)) {
                                     HorizontalDivider(color = Color.White.copy(0.08f), thickness = 0.5.dp)
@@ -139,26 +168,6 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
                                         CardIconButton(Icons.Default.LocalOffer, NeonPurple.copy(0.7f)) { showTags = t }
                                         CardIconButton(Icons.Default.StickyNote2, NeonGold.copy(0.6f)) { showRemark = t }
                                         CardIconButton(Icons.Default.Link, NeonCyan.copy(0.5f)) { showUrl = t }
-                                        CardIconButton(
-                                            if (t.questionPaperUri.isNotBlank()) Icons.Default.PictureAsPdf else Icons.Default.UploadFile,
-                                            if (t.questionPaperUri.isNotBlank()) NeonGreen.copy(0.8f) else NeonCyan.copy(0.4f)
-                                        ) {
-                                            if (t.questionPaperUri.isNotBlank()) navController.navigate(fileViewerRoute(t.questionPaperUri, "${t.name} QP"))
-                                            else { uploadQPTarget = t; qpLauncher.launch(arrayOf("*/*")) }
-                                        }
-                                        if (t.questionPaperUri.isNotBlank()) {
-                                            CardIconButton(Icons.Default.Close, NeonRed.copy(0.65f)) { vm.save(t.copy(questionPaperUri = "")) }
-                                        }
-                                        CardIconButton(
-                                            if (t.solutionUri.isNotBlank()) Icons.Default.FilePresent else Icons.Default.NoteAdd,
-                                            if (t.solutionUri.isNotBlank()) NeonOrange.copy(0.8f) else NeonCyan.copy(0.4f)
-                                        ) {
-                                            if (t.solutionUri.isNotBlank()) navController.navigate(fileViewerRoute(t.solutionUri, "${t.name} Solution"))
-                                            else { uploadSolTarget = t; solLauncher.launch(arrayOf("*/*")) }
-                                        }
-                                        if (t.solutionUri.isNotBlank()) {
-                                            CardIconButton(Icons.Default.Close, NeonRed.copy(0.65f)) { vm.save(t.copy(solutionUri = "")) }
-                                        }
                                         CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(t) }
                                     }
                                 }
@@ -180,6 +189,21 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
     showTags?.let { t -> TagDialog(t.tags, onSave = { vm.save(t.copy(tags = it)); showTags = null }, onDismiss = { showTags = null }) }
     showRemark?.let { t -> RemarkDialog(t.remark, onSave = { vm.save(t.copy(remark = it)); showRemark = null }, onDismiss = { showRemark = null }) }
     showUrl?.let { t -> URLDialog(t.url, onSave = { vm.save(t.copy(url = it)); showUrl = null }, onDismiss = { showUrl = null }) }
+    filesTargetId?.let { id ->
+        val liveTest = filtered.firstOrNull { it.id == id }
+        if (liveTest != null) {
+            TestFilesDialog(
+                test = liveTest,
+                onDismiss = { filesTargetId = null },
+                onUploadQP = { uploadQPTarget = liveTest; qpLauncher.launch(arrayOf("*/*")) },
+                onUploadSol = { uploadSolTarget = liveTest; solLauncher.launch(arrayOf("*/*")) },
+                onRemoveQP = { vm.save(liveTest.copy(questionPaperUri = "")) },
+                onRemoveSol = { vm.save(liveTest.copy(solutionUri = "")) },
+                onViewQP = { navController.navigate(fileViewerRoute(liveTest.questionPaperUri, "${liveTest.name} QP")); filesTargetId = null },
+                onViewSol = { navController.navigate(fileViewerRoute(liveTest.solutionUri, "${liveTest.name} Solution")); filesTargetId = null }
+            )
+        }
+    }
 }
 
 @Composable
@@ -294,4 +318,141 @@ fun SamplePapersScreen(navController: NavController, vm: SamplePaperViewModel = 
     showTags?.let { p -> TagDialog(p.tags, onSave = { vm.save(p.copy(tags = it)); showTags = null }, onDismiss = { showTags = null }) }
     showRemark?.let { p -> RemarkDialog(p.remark, onSave = { vm.save(p.copy(remark = it)); showRemark = null }, onDismiss = { showRemark = null }) }
     showUrl?.let { p -> URLDialog(p.url, onSave = { vm.save(p.copy(url = it)); showUrl = null }, onDismiss = { showUrl = null }) }
+}
+
+// ─── Test Paper Files Dialog ───────────────────────────────────────────────────
+
+@Composable
+fun TestFilesDialog(
+    test: TestPaper,
+    onDismiss: () -> Unit,
+    onUploadQP: () -> Unit,
+    onUploadSol: () -> Unit,
+    onRemoveQP: () -> Unit,
+    onRemoveSol: () -> Unit,
+    onViewQP: () -> Unit,
+    onViewSol: () -> Unit
+) {
+    NEETDialog(
+        title = test.name,
+        icon = Icons.Default.Assignment,
+        accentColor = NeonCyan,
+        onDismiss = onDismiss
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                TestFileCard(
+                    label = "Question Paper",
+                    uploadedIcon = Icons.Default.PictureAsPdf,
+                    emptyIcon = Icons.Default.UploadFile,
+                    color = NeonGreen,
+                    isUploaded = test.questionPaperUri.isNotBlank(),
+                    onTap = { if (test.questionPaperUri.isNotBlank()) onViewQP() else onUploadQP() },
+                    onRemove = onRemoveQP,
+                    modifier = Modifier.weight(1f)
+                )
+                TestFileCard(
+                    label = "Solution",
+                    uploadedIcon = Icons.Default.FileOpen,
+                    emptyIcon = Icons.Default.NoteAdd,
+                    color = NeonOrange,
+                    isUploaded = test.solutionUri.isNotBlank(),
+                    onTap = { if (test.solutionUri.isNotBlank()) onViewSol() else onUploadSol() },
+                    onRemove = onRemoveSol,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                border = BorderStroke(1.dp, Color.White.copy(0.15f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White.copy(0.7f))
+            ) {
+                Text("Close")
+            }
+        }
+    }
+}
+
+@Composable
+fun TestFileCard(
+    label: String,
+    uploadedIcon: ImageVector,
+    emptyIcon: ImageVector,
+    color: Color,
+    isUploaded: Boolean,
+    onTap: () -> Unit,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(18.dp))
+                .background(if (isUploaded) color.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.04f))
+                .border(
+                    width = 1.dp,
+                    color = if (isUploaded) color.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.10f),
+                    shape = RoundedCornerShape(18.dp)
+                )
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onTap() },
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(12.dp)
+            ) {
+                Icon(
+                    imageVector = if (isUploaded) uploadedIcon else emptyIcon,
+                    contentDescription = null,
+                    tint = if (isUploaded) color else Color.White.copy(alpha = 0.22f),
+                    modifier = Modifier.size(46.dp)
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (isUploaded) color else Color.White.copy(alpha = 0.4f),
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = if (isUploaded) "Tap to open" else "Tap to upload",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isUploaded) color.copy(alpha = 0.65f) else Color.White.copy(alpha = 0.25f),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+        if (isUploaded) {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .align(Alignment.TopEnd)
+                    .offset(x = 4.dp, y = (-4).dp)
+                    .background(NeonRed, CircleShape)
+                    .clip(CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onRemove() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Remove",
+                    tint = Color.White,
+                    modifier = Modifier.size(13.dp)
+                )
+            }
+        }
+    }
 }
