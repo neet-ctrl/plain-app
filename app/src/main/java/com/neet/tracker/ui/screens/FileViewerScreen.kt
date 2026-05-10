@@ -64,19 +64,40 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     val context = LocalContext.current
     val uri = remember(fileUri) { try { Uri.parse(fileUri) } catch (e: Exception) { null } }
 
-    val mimeType = remember(fileUri) {
+    // Resolve the actual filename for content:// URIs that don't expose a MIME type directly
+    val resolvedDisplayName = remember(fileUri) {
+        var name = ""
+        if (uri?.scheme == "content") {
+            try {
+                context.contentResolver.query(
+                    uri,
+                    arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                    null, null, null
+                )?.use { c -> if (c.moveToFirst()) name = c.getString(0) ?: "" }
+            } catch (_: Exception) {}
+        }
+        name
+    }
+
+    val mimeType = remember(fileUri, resolvedDisplayName) {
         if (uri != null) {
-            context.contentResolver.getType(uri)
-                ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(
-                    fileUri.substringAfterLast('.', "").lowercase()
-                )
-                ?: ""
+            // Primary: content resolver (works for most providers)
+            context.contentResolver.getType(uri)?.takeIf { it.isNotBlank() }
+                ?: run {
+                    // Fallback: derive MIME from the display name's extension
+                    val ext = if (resolvedDisplayName.isNotBlank())
+                        resolvedDisplayName.substringAfterLast('.', "").lowercase()
+                    else
+                        fileUri.substringAfterLast('.', "").lowercase()
+                    MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: ""
+                }
         } else ""
     }
-    val extension = remember(fileUri, mimeType) {
-        MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
-            ?: MimeTypeMap.getFileExtensionFromUrl(fileUri)?.lowercase()
-            ?: fileUri.substringAfterLast('.', "").lowercase()
+    val extension = remember(fileUri, mimeType, resolvedDisplayName) {
+        MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)?.takeIf { it.isNotBlank() }
+            ?: if (resolvedDisplayName.isNotBlank()) resolvedDisplayName.substringAfterLast('.', "").lowercase()
+            else MimeTypeMap.getFileExtensionFromUrl(fileUri)?.lowercase()
+                ?: fileUri.substringAfterLast('.', "").lowercase()
     }
     val isImage = mimeType.startsWith("image/") || extension in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
     val isPdf   = mimeType == "application/pdf" || extension == "pdf" || fileUri.contains("pdf", ignoreCase = true)
