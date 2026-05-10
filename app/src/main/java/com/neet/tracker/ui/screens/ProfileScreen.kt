@@ -18,7 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
@@ -49,8 +49,9 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
     var twelfthUri by remember(profile) { mutableStateOf(profile?.twelfthMarksheetUri ?: "") }
     var photoUri by remember(profile) { mutableStateOf(profile?.photoUri ?: "") }
     var target by remember(profile) { mutableStateOf(profile?.targetScore ?: "700/720") }
+    var dreamRole by remember(profile) { mutableStateOf(profile?.dreamRole ?: "MBBS Doctor") }
     var attempts by remember(profile) { mutableStateOf(profile?.neetAttempts ?: emptyList()) }
-    var showAddAttempt by remember { mutableStateOf(false) }
+    var showTargetEdit by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -77,7 +78,8 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
                                     name = name, dob = dob, email = email, mobile = mobile,
                                     aadharNo = aadhar, tenthPercentage = tenth, tenthMarksheetUri = tenthUri,
                                     twelfthPercentage = twelfth, twelfthMarksheetUri = twelfthUri,
-                                    photoUri = photoUri, targetScore = target, neetAttempts = attempts
+                                    photoUri = photoUri, targetScore = target, dreamRole = dreamRole,
+                                    neetAttempts = attempts
                                 )
                             )
                         }
@@ -138,18 +140,85 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
                                     }
                                 }
                             }
-                            // Target Score
-                            Row(
+                            // Target Score 3D Card
+                            Box(
                                 modifier = Modifier
-                                    .background(NeonGold.copy(0.15f), RoundedCornerShape(16.dp))
-                                    .border(1.dp, NeonGold.copy(0.5f), RoundedCornerShape(16.dp))
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    .fillMaxWidth()
+                                    .shadow(12.dp, RoundedCornerShape(20.dp), spotColor = NeonGold.copy(0.4f), ambientColor = NeonGold.copy(0.1f))
+                                    .background(
+                                        Brush.linearGradient(listOf(NeonGold.copy(0.22f), Color(0xFF0A1428), NeonGold.copy(0.08f))),
+                                        RoundedCornerShape(20.dp)
+                                    )
+                                    .border(
+                                        1.5.dp,
+                                        Brush.linearGradient(listOf(NeonGold.copy(0.75f), Color.White.copy(0.12f), NeonGold.copy(0.35f))),
+                                        RoundedCornerShape(20.dp)
+                                    )
+                                    .padding(horizontal = 18.dp, vertical = 14.dp)
                             ) {
-                                Icon(Icons.Default.EmojiEvents, null, tint = NeonGold, modifier = Modifier.size(20.dp))
-                                Text("NEET Target: $target", style = MaterialTheme.typography.headlineSmall, color = NeonGold, fontWeight = FontWeight.ExtraBold)
-                                Text("· MBBS Doctor 🩺", style = MaterialTheme.typography.bodySmall, color = NeonGold.copy(0.7f))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    // Trophy 3D icon box
+                                    Box(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .shadow(8.dp, RoundedCornerShape(14.dp), spotColor = NeonGold.copy(0.5f))
+                                            .background(
+                                                Brush.linearGradient(listOf(NeonGold.copy(0.30f), NeonGold.copy(0.08f))),
+                                                RoundedCornerShape(14.dp)
+                                            )
+                                            .border(1.dp, NeonGold.copy(0.55f), RoundedCornerShape(14.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("🏆", fontSize = 22.sp)
+                                    }
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text(
+                                            "NEET Target",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = NeonGold.copy(0.65f),
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.sp
+                                        )
+                                        Text(
+                                            target,
+                                            style = MaterialTheme.typography.headlineLarge,
+                                            color = NeonGold,
+                                            fontWeight = FontWeight.ExtraBold
+                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                            Text("🩺", fontSize = 13.sp)
+                                            Text(
+                                                dreamRole,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = Color.White.copy(0.75f),
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                    }
+                                    // 3D Edit button
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .shadow(6.dp, RoundedCornerShape(11.dp), spotColor = NeonGold.copy(0.4f))
+                                            .background(
+                                                Brush.linearGradient(listOf(NeonGold.copy(0.25f), NeonGold.copy(0.08f))),
+                                                RoundedCornerShape(11.dp)
+                                            )
+                                            .border(
+                                                1.dp,
+                                                Brush.linearGradient(listOf(NeonGold.copy(0.70f), Color.White.copy(0.20f))),
+                                                RoundedCornerShape(11.dp)
+                                            )
+                                            .clickable { showTargetEdit = true },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Edit, null, tint = NeonGold, modifier = Modifier.size(16.dp))
+                                    }
+                                }
                             }
                         }
                     }
@@ -185,7 +254,6 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
                         ProfileField("Email", email, editing, Icons.Default.Email) { email = it }
                         ProfileField("Mobile No.", mobile, editing, Icons.Default.Phone) { mobile = it }
                         ProfileField("Aadhar No.", aadhar, editing, Icons.Default.Badge) { aadhar = it }
-                        if (editing) ProfileField("Target Score", target, editing, Icons.Default.EmojiEvents) { target = it }
                     }
                 }
 
@@ -245,6 +313,144 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
                 }
             }
         }
+    }
+
+    // Target Edit Dialog
+    if (showTargetEdit) {
+        var editTarget by remember { mutableStateOf(target) }
+        var editRole by remember { mutableStateOf(dreamRole) }
+        AlertDialog(
+            onDismissRequest = { showTargetEdit = false },
+            containerColor = Color(0xFF08122A),
+            shape = RoundedCornerShape(24.dp),
+            title = null,
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // Header
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .shadow(10.dp, RoundedCornerShape(14.dp), spotColor = NeonGold.copy(0.5f))
+                                .background(Brush.linearGradient(listOf(NeonGold.copy(0.30f), NeonGold.copy(0.08f))), RoundedCornerShape(14.dp))
+                                .border(1.dp, NeonGold.copy(0.55f), RoundedCornerShape(14.dp)),
+                            contentAlignment = Alignment.Center
+                        ) { Text("🏆", fontSize = 22.sp) }
+                        Column {
+                            Text("Edit Target", style = MaterialTheme.typography.headlineMedium, color = NeonGold, fontWeight = FontWeight.ExtraBold)
+                            Text("Set your NEET goal & dream role", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.45f))
+                        }
+                    }
+
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Brush.horizontalGradient(listOf(Color.Transparent, NeonGold.copy(0.4f), Color.Transparent))))
+
+                    // Target score field
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("🎯", fontSize = 13.sp)
+                            Text("NEET Target Score", style = MaterialTheme.typography.labelMedium, color = NeonGold.copy(0.75f), fontWeight = FontWeight.Bold)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .shadow(4.dp, RoundedCornerShape(14.dp), spotColor = NeonGold.copy(0.2f))
+                                .background(Brush.linearGradient(listOf(NeonGold.copy(0.10f), Color(0xFF050E22))), RoundedCornerShape(14.dp))
+                                .border(1.dp, NeonGold.copy(0.35f), RoundedCornerShape(14.dp))
+                        ) {
+                            TextField(
+                                value = editTarget,
+                                onValueChange = { editTarget = it },
+                                placeholder = { Text("e.g. 700/720", color = Color.White.copy(0.25f)) },
+                                singleLine = true,
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedTextColor = NeonGold,
+                                    unfocusedTextColor = Color.White,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    cursorColor = NeonGold
+                                ),
+                                textStyle = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+
+                    // Dream role field
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("🩺", fontSize = 13.sp)
+                            Text("Dream Role", style = MaterialTheme.typography.labelMedium, color = NeonGold.copy(0.75f), fontWeight = FontWeight.Bold)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .shadow(4.dp, RoundedCornerShape(14.dp), spotColor = NeonGold.copy(0.2f))
+                                .background(Brush.linearGradient(listOf(NeonGold.copy(0.10f), Color(0xFF050E22))), RoundedCornerShape(14.dp))
+                                .border(1.dp, NeonGold.copy(0.35f), RoundedCornerShape(14.dp))
+                        ) {
+                            TextField(
+                                value = editRole,
+                                onValueChange = { editRole = it },
+                                placeholder = { Text("e.g. MBBS Doctor", color = Color.White.copy(0.25f)) },
+                                singleLine = true,
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    cursorColor = NeonGold
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Box(
+                    modifier = Modifier
+                        .shadow(8.dp, RoundedCornerShape(13.dp), spotColor = NeonGold.copy(0.5f))
+                        .background(Brush.linearGradient(listOf(NeonGold.copy(0.35f), NeonGold.copy(0.12f))), RoundedCornerShape(13.dp))
+                        .border(1.dp, NeonGold.copy(0.65f), RoundedCornerShape(13.dp))
+                        .clickable {
+                            target = editTarget
+                            dreamRole = editRole
+                            vm.save(
+                                (profile ?: StudentProfile()).copy(
+                                    name = name, dob = dob, email = email, mobile = mobile,
+                                    aadharNo = aadhar, tenthPercentage = tenth, tenthMarksheetUri = tenthUri,
+                                    twelfthPercentage = twelfth, twelfthMarksheetUri = twelfthUri,
+                                    photoUri = photoUri, targetScore = editTarget, dreamRole = editRole,
+                                    neetAttempts = attempts
+                                )
+                            )
+                            showTargetEdit = false
+                        }
+                        .padding(horizontal = 20.dp, vertical = 10.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.Save, null, tint = NeonGold, modifier = Modifier.size(15.dp))
+                        Text("Save", color = NeonGold, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            },
+            dismissButton = {
+                Box(
+                    modifier = Modifier
+                        .shadow(4.dp, RoundedCornerShape(13.dp))
+                        .background(Color.White.copy(0.05f), RoundedCornerShape(13.dp))
+                        .border(1.dp, Color.White.copy(0.15f), RoundedCornerShape(13.dp))
+                        .clickable { showTargetEdit = false }
+                        .padding(horizontal = 20.dp, vertical = 10.dp)
+                ) {
+                    Text("Cancel", color = Color.White.copy(0.55f), style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        )
     }
 }
 

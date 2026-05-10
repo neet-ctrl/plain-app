@@ -29,7 +29,7 @@ import com.neet.tracker.data.models.*
         NeetSequencePdf::class,
         Reminder::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

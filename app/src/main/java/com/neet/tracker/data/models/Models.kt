@@ -99,6 +99,7 @@ data class StudentProfile(
     val twelfthPercentage: String = "",
     val twelfthMarksheetUri: String = "",
     val targetScore: String = "700/720",
+    val dreamRole: String = "MBBS Doctor",
     val neetAttempts: List<NeetAttempt> = emptyList()
 )
 
