@@ -162,7 +162,9 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var showBookmarks  by remember { mutableStateOf(false) }
     var showJumpDialog by remember { mutableStateOf(false) }
     var jumpTarget     by remember { mutableStateOf("") }
-    var bookmarkTick   by remember { mutableStateOf(0) }
+    var bookmarkTick       by remember { mutableStateOf(0) }
+    var isHorizontalScroll by remember { mutableStateOf(false) }
+    var zoomEnabled        by remember { mutableStateOf(false) }
 
     // ── Annotation / Draw-on-PDF ───────────────────────────────────────────────
     val annoScope           = rememberCoroutineScope()
@@ -389,6 +391,22 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 }
             }
 
+            // ── Viewer controls strip (scroll direction + zoom) ────────────────
+            AnimatedVisibility(visible = pdfPages.isNotEmpty() && !focusMode, enter = fadeIn(), exit = fadeOut()) {
+                UvViewerControls(
+                    isHorizontalScroll = isHorizontalScroll,
+                    onScrollToggle = {
+                        isHorizontalScroll = !isHorizontalScroll
+                        scale = 1f; panOffset = Offset.Zero
+                    },
+                    zoomEnabled = zoomEnabled,
+                    onZoomToggle = {
+                        zoomEnabled = !zoomEnabled
+                        if (!zoomEnabled) { scale = 1f; panOffset = Offset.Zero }
+                    }
+                )
+            }
+
             // ── Annotation toolbar ─────────────────────────────────────────────
             AnimatedVisibility(
                 visible = annotationMode && pdfPages.isNotEmpty(),
@@ -510,6 +528,10 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                                     scale     = (scale * s).coerceIn(0.5f, 6f)
                                     panOffset = Offset(panOffset.x + p.x, panOffset.y + p.y)
                                 },
+                                zoomEnabled        = zoomEnabled,
+                                isHorizontalScroll = isHorizontalScroll,
+                                onPrev = { if (currentPage > 0) { currentPage--; scale = 1f; panOffset = Offset.Zero } },
+                                onNext = { if (currentPage < pdfPages.lastIndex) { currentPage++; scale = 1f; panOffset = Offset.Zero } },
                                 annotationMode      = annotationMode,
                                 annotationTool      = annotationTool,
                                 annotationColorArgb = annotationColorArgb,
@@ -847,6 +869,10 @@ private fun UvPdfPage(
     scale: Float,
     panOffset: Offset,
     onTransform: (scaleChange: Float, panChange: Offset) -> Unit,
+    zoomEnabled: Boolean = false,
+    isHorizontalScroll: Boolean = false,
+    onPrev: () -> Unit = {},
+    onNext: () -> Unit = {},
     annotationMode: Boolean = false,
     annotationTool: AnnotationTool = AnnotationTool.PEN,
     annotationColorArgb: Int = android.graphics.Color.RED,
@@ -863,9 +889,39 @@ private fun UvPdfPage(
             .fillMaxSize()
             .background(Color(0xFF08080F))
             .run {
-                if (!annotationMode)
-                    pointerInput(Unit) { detectTransformGestures { _, pan, zoom, _ -> onTransform(zoom, pan) } }
-                else this
+                if (!annotationMode) {
+                    if (zoomEnabled) {
+                        pointerInput(zoomEnabled) {
+                            detectTransformGestures { _, pan, zoom, _ -> onTransform(zoom, pan) }
+                        }
+                    } else {
+                        pointerInput(isHorizontalScroll) {
+                            var totalX = 0f
+                            var totalY = 0f
+                            detectDragGestures(
+                                onDragStart = { totalX = 0f; totalY = 0f },
+                                onDrag = { _, dragAmount ->
+                                    totalX += dragAmount.x
+                                    totalY += dragAmount.y
+                                },
+                                onDragEnd = {
+                                    val threshold = 60f
+                                    if (isHorizontalScroll) {
+                                        when {
+                                            totalX < -threshold -> onNext()
+                                            totalX > threshold  -> onPrev()
+                                        }
+                                    } else {
+                                        when {
+                                            totalY < -threshold -> onNext()
+                                            totalY > threshold  -> onPrev()
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                } else this
             },
         contentAlignment = Alignment.Center
     ) {
@@ -926,6 +982,16 @@ private fun UvPdfPage(
         // Hints
         if (!annotationMode) {
             if (scale == 1f) {
+                val hintIcon = when {
+                    zoomEnabled          -> Icons.Default.ZoomIn
+                    isHorizontalScroll   -> Icons.Default.MoreHoriz
+                    else                 -> Icons.Default.MoreVert
+                }
+                val hintText = when {
+                    zoomEnabled        -> "Pinch to zoom  ·  Drag to pan"
+                    isHorizontalScroll -> "Swipe ←  to next  ·  → to prev"
+                    else               -> "Swipe ↑  to next  ·  ↓ to prev"
+                }
                 Box(
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp)
                         .background(Color.Black.copy(0.55f), RoundedCornerShape(14.dp))
@@ -933,9 +999,8 @@ private fun UvPdfPage(
                         .padding(horizontal = 14.dp, vertical = 6.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Icon(Icons.Default.ZoomIn, null, tint = NeonCyan.copy(0.6f), modifier = Modifier.size(13.dp))
-                        Text("Pinch to zoom  ·  Drag to pan",
-                            style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.45f))
+                        Icon(hintIcon, null, tint = NeonCyan.copy(0.6f), modifier = Modifier.size(13.dp))
+                        Text(hintText, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.45f))
                     }
                 }
             }
@@ -1798,6 +1863,146 @@ private fun DiagRow(label: String, value: String) {
             lineHeight = 18.sp)
         Spacer(Modifier.height(4.dp))
         NeonDivider(Color.White.copy(0.07f))
+    }
+}
+
+// ─── Viewer Controls Strip (Scroll Direction + Zoom Toggle) ──────────────────
+
+@Composable
+private fun UvViewerControls(
+    isHorizontalScroll: Boolean,
+    onScrollToggle: () -> Unit,
+    zoomEnabled: Boolean,
+    onZoomToggle: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(listOf(Color(0xFF0A1220), Color(0xFF060D18)))
+            )
+            .border(BorderStroke(0.5.dp, Brush.horizontalGradient(listOf(NeonCyan.copy(0.25f), NeonPurple.copy(0.2f), NeonGold.copy(0.2f)))))
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Label
+        Text(
+            "Scroll",
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(0.35f),
+            fontSize = 10.sp
+        )
+
+        // Horizontal toggle pill
+        Box(
+            modifier = Modifier
+                .shadow(if (isHorizontalScroll) 6.dp else 0.dp, RoundedCornerShape(10.dp), spotColor = NeonCyan.copy(0.5f))
+                .background(
+                    if (isHorizontalScroll) Brush.linearGradient(listOf(NeonCyan.copy(0.28f), NeonCyan.copy(0.12f)))
+                    else Brush.linearGradient(listOf(Color.White.copy(0.06f), Color.White.copy(0.03f))),
+                    RoundedCornerShape(10.dp)
+                )
+                .border(
+                    1.dp,
+                    if (isHorizontalScroll) NeonCyan.copy(0.75f) else Color.White.copy(0.1f),
+                    RoundedCornerShape(10.dp)
+                )
+                .clickable(onClick = onScrollToggle)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(Icons.Default.MoreHoriz, null,
+                    tint = if (isHorizontalScroll) NeonCyan else Color.White.copy(0.35f),
+                    modifier = Modifier.size(14.dp))
+                Text("H-Scroll",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    color = if (isHorizontalScroll) NeonCyan else Color.White.copy(0.35f),
+                    fontWeight = if (isHorizontalScroll) FontWeight.ExtraBold else FontWeight.Normal)
+            }
+        }
+
+        // Vertical toggle pill
+        Box(
+            modifier = Modifier
+                .shadow(if (!isHorizontalScroll) 6.dp else 0.dp, RoundedCornerShape(10.dp), spotColor = NeonPurple.copy(0.5f))
+                .background(
+                    if (!isHorizontalScroll) Brush.linearGradient(listOf(NeonPurple.copy(0.28f), NeonPurple.copy(0.12f)))
+                    else Brush.linearGradient(listOf(Color.White.copy(0.06f), Color.White.copy(0.03f))),
+                    RoundedCornerShape(10.dp)
+                )
+                .border(
+                    1.dp,
+                    if (!isHorizontalScroll) NeonPurple.copy(0.75f) else Color.White.copy(0.1f),
+                    RoundedCornerShape(10.dp)
+                )
+                .clickable(onClick = onScrollToggle)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(Icons.Default.MoreVert, null,
+                    tint = if (!isHorizontalScroll) NeonPurple else Color.White.copy(0.35f),
+                    modifier = Modifier.size(14.dp))
+                Text("V-Scroll",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    color = if (!isHorizontalScroll) NeonPurple else Color.White.copy(0.35f),
+                    fontWeight = if (!isHorizontalScroll) FontWeight.ExtraBold else FontWeight.Normal)
+            }
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        // Divider
+        Box(modifier = Modifier.width(0.5.dp).height(22.dp).background(Color.White.copy(0.12f)))
+
+        Spacer(Modifier.width(4.dp))
+
+        // Zoom label
+        Text(
+            "Zoom",
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(0.35f),
+            fontSize = 10.sp
+        )
+
+        // Zoom toggle pill
+        Box(
+            modifier = Modifier
+                .shadow(if (zoomEnabled) 8.dp else 0.dp, RoundedCornerShape(10.dp), spotColor = NeonGold.copy(0.55f))
+                .background(
+                    if (zoomEnabled) Brush.linearGradient(listOf(NeonGold.copy(0.3f), NeonGold.copy(0.1f)))
+                    else Brush.linearGradient(listOf(Color.White.copy(0.06f), Color.White.copy(0.03f))),
+                    RoundedCornerShape(10.dp)
+                )
+                .border(
+                    1.dp,
+                    if (zoomEnabled) NeonGold.copy(0.8f) else Color.White.copy(0.1f),
+                    RoundedCornerShape(10.dp)
+                )
+                .clickable(onClick = onZoomToggle)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(
+                    if (zoomEnabled) Icons.Default.ZoomIn else Icons.Default.ZoomOut,
+                    null,
+                    tint = if (zoomEnabled) NeonGold else Color.White.copy(0.35f),
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    if (zoomEnabled) "ON" else "OFF",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    color = if (zoomEnabled) NeonGold else Color.White.copy(0.35f),
+                    fontWeight = if (zoomEnabled) FontWeight.ExtraBold else FontWeight.Normal
+                )
+            }
+        }
     }
 }
 
