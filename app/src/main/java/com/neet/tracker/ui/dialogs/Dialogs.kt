@@ -468,7 +468,6 @@ fun NeetTimePickerButton(
                             selectorColor = accentColor,
                             containerColor = Color.Transparent,
                             periodSelectorBorderColor = accentColor.copy(0.5f),
-                            clockDialSelectorHandleContainerColor = accentColor,
                             timeSelectorSelectedContainerColor = accentColor.copy(0.3f),
                             timeSelectorUnselectedContainerColor = Color.White.copy(0.06f),
                             timeSelectorSelectedContentColor = accentColor,
