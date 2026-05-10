@@ -1,5 +1,7 @@
 package com.neet.tracker.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
@@ -10,10 +12,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.neet.tracker.data.models.SubjectShortNote
 import com.neet.tracker.navigation.Routes
 import com.neet.tracker.ui.components.*
 import com.neet.tracker.ui.theme.*
+import com.neet.tracker.ui.viewmodels.SubjectNoteViewModel
 
 @Composable
 fun AssetsScreen(navController: NavController) {
@@ -203,7 +208,17 @@ fun SubjectShortNotesScreen(navController: NavController) {
         Triple("Zoology", Icons.Default.Pets, "ZOOLOGY") to NeonOrange,
     )
 
-    val vm: com.neet.tracker.ui.viewmodels.SubjectNoteViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    val vm: SubjectNoteViewModel = hiltViewModel()
+    var uploadingSubject by remember { mutableStateOf<String?>(null) }
+
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { u ->
+            uploadingSubject?.let { subj ->
+                vm.save(SubjectShortNote(subject = subj, fileUri = u.toString()))
+            }
+        }
+        uploadingSubject = null
+    }
 
     SpaceBackground {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -217,15 +232,29 @@ fun SubjectShortNotesScreen(navController: NavController) {
             ) {
                 items(subjects) { (info, color) ->
                     val note by vm.noteFor(info.third).collectAsState()
+                    val hasPdf = note?.fileUri?.isNotBlank() == true
                     NEETCard(
                         title = info.first,
-                        subtitle = if (note?.fileUri?.isNotBlank() == true) "PDF uploaded" else "No PDF yet",
-                        icon = info.second,
+                        subtitle = if (hasPdf) "Tap to view PDF" else "Tap to upload PDF",
+                        icon = if (hasPdf) Icons.Default.PictureAsPdf else Icons.Default.UploadFile,
                         glowColor = color,
                         onClick = {
-                            val fileUri = note?.fileUri
-                            if (!fileUri.isNullOrBlank()) {
-                                navController.navigate(com.neet.tracker.navigation.fileViewerRoute(fileUri, "${info.first} Notes"))
+                            if (hasPdf) {
+                                navController.navigate(com.neet.tracker.navigation.fileViewerRoute(note!!.fileUri, "${info.first} Notes"))
+                            } else {
+                                uploadingSubject = info.third
+                                launcher.launch("application/pdf")
+                            }
+                        },
+                        bottomContent = {
+                            CardIconButton(Icons.Default.UploadFile, color.copy(0.7f)) {
+                                uploadingSubject = info.third
+                                launcher.launch("application/pdf")
+                            }
+                            if (hasPdf) {
+                                CardIconButton(Icons.Default.FileOpen, color.copy(0.7f)) {
+                                    navController.navigate(com.neet.tracker.navigation.fileViewerRoute(note!!.fileUri, "${info.first} Notes"))
+                                }
                             }
                         }
                     )

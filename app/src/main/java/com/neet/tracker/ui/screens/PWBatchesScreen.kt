@@ -140,6 +140,7 @@ fun PWBatchTestsScreen(navController: NavController, batchId: String, batchName:
                                         CardIconButton(Icons.Default.Star, NeonGold.copy(0.7f)) { showMarks = t }
                                         CardIconButton(Icons.Default.LocalOffer, NeonPurple.copy(0.7f)) { showTags = t }
                                         CardIconButton(Icons.Default.StickyNote2, NeonGold.copy(0.6f)) { showRemark = t }
+                                        CardIconButton(Icons.Default.Link, NeonCyan.copy(0.5f)) { showUrl = t }
                                         CardIconButton(Icons.Default.Delete, NeonRed.copy(0.4f)) { vm.deleteTest(t) }
                                     }
                                 }

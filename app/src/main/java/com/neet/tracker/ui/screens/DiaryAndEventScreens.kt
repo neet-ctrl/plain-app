@@ -205,7 +205,7 @@ fun DiaryEntryScreen(navController: NavController, diaryId: String, vm: DiaryVie
         }
     }
     if (showTagDialog) {
-        TagDialog(diary?.tags ?: emptyList(), onSave = { diary?.let { vm.save(it.copy(tags = it.tags)) } }, onDismiss = { showTagDialog = false })
+        TagDialog(diary?.tags ?: emptyList(), onSave = { newTags -> diary?.let { vm.save(it.copy(tags = newTags)) } }, onDismiss = { showTagDialog = false })
     }
 }
 

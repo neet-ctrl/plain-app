@@ -180,7 +180,9 @@ fun NotebookChaptersScreen(navController: NavController, notebookId: String, not
                                 chapter = chapter,
                                 onEdit = { editTarget = chapter },
                                 onDelete = { vm.deleteChapter(chapter) },
-                                onStatusChange = { vm.saveChapter(chapter.copy(status = it)) }
+                                onStatusChange = { vm.saveChapter(chapter.copy(status = it)) },
+                                onSpecSave = { vm.saveChapter(chapter.copy(specifications = it)) },
+                                onMissingSave = { vm.saveChapter(chapter.copy(missingNotes = it)) }
                             )
                         }
                     }
@@ -201,7 +203,7 @@ fun NotebookChaptersScreen(navController: NavController, notebookId: String, not
 }
 
 @Composable
-fun ChapterCard(chapter: NotebookChapter, onEdit: () -> Unit, onDelete: () -> Unit, onStatusChange: (Status) -> Unit) {
+fun ChapterCard(chapter: NotebookChapter, onEdit: () -> Unit, onDelete: () -> Unit, onStatusChange: (Status) -> Unit, onSpecSave: (String) -> Unit = {}, onMissingSave: (String) -> Unit = {}) {
     var showSpec by remember { mutableStateOf(false) }
     var showMissing by remember { mutableStateOf(false) }
     var showStatus by remember { mutableStateOf(false) }
@@ -234,10 +236,10 @@ fun ChapterCard(chapter: NotebookChapter, onEdit: () -> Unit, onDelete: () -> Un
     }
 
     if (showSpec) {
-        SpecificationDialog("Chapter Specifications", chapter.specifications, onSave = { /* save spec */ }, onDismiss = { showSpec = false })
+        SpecificationDialog("Chapter Specifications", chapter.specifications, onSave = { onSpecSave(it); showSpec = false }, onDismiss = { showSpec = false })
     }
     if (showMissing) {
-        MissingNotesDialog(chapter.missingNotes, onSave = { /* save missing */ }, onDismiss = { showMissing = false })
+        MissingNotesDialog(chapter.missingNotes, onSave = { onMissingSave(it); showMissing = false }, onDismiss = { showMissing = false })
     }
     if (showStatus) {
         StatusSelectorDialog(chapter.status, onSelect = onStatusChange, onDismiss = { showStatus = false })
