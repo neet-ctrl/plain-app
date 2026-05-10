@@ -173,6 +173,9 @@ fun NotebookChaptersScreen(navController: NavController, notebookId: String, not
     var searchQuery by remember { mutableStateOf("") }
     var showAdd by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<NotebookChapter?>(null) }
+    var specTarget by remember { mutableStateOf<NotebookChapter?>(null) }
+    var missingTarget by remember { mutableStateOf<NotebookChapter?>(null) }
+    var statusTarget by remember { mutableStateOf<NotebookChapter?>(null) }
 
     val filtered = chapters.filter { searchQuery.isBlank() || it.name.contains(searchQuery, true) }
 
@@ -191,14 +194,14 @@ fun NotebookChaptersScreen(navController: NavController, notebookId: String, not
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         contentPadding = PaddingValues(bottom = 80.dp)
                     ) {
-                        items(filtered) { chapter ->
+                        items(filtered, key = { it.id }) { chapter ->
                             ChapterCard(
                                 chapter = chapter,
                                 onEdit = { editTarget = chapter },
                                 onDelete = { vm.deleteChapter(chapter) },
-                                onStatusChange = { vm.saveChapter(chapter.copy(status = it)) },
-                                onSpecSave = { vm.saveChapter(chapter.copy(specifications = it)) },
-                                onMissingSave = { vm.saveChapter(chapter.copy(missingNotes = it)) }
+                                onShowSpec = { specTarget = chapter },
+                                onShowMissing = { missingTarget = chapter },
+                                onShowStatus = { statusTarget = chapter }
                             )
                         }
                     }
@@ -213,14 +216,19 @@ fun NotebookChaptersScreen(navController: NavController, notebookId: String, not
     editTarget?.let { ch ->
         ChapterEditDialog(chapter = ch, notebookId = notebookId, onSave = { vm.saveChapter(it); editTarget = null }, onDismiss = { editTarget = null })
     }
+    specTarget?.let { ch ->
+        SpecificationDialog("Chapter Specifications", ch.specifications, onSave = { vm.saveChapter(ch.copy(specifications = it)); specTarget = null }, onDismiss = { specTarget = null })
+    }
+    missingTarget?.let { ch ->
+        MissingNotesDialog(ch.missingNotes, onSave = { vm.saveChapter(ch.copy(missingNotes = it)); missingTarget = null }, onDismiss = { missingTarget = null })
+    }
+    statusTarget?.let { ch ->
+        StatusSelectorDialog(ch.status, onSelect = { vm.saveChapter(ch.copy(status = it)); statusTarget = null }, onDismiss = { statusTarget = null })
+    }
 }
 
 @Composable
-fun ChapterCard(chapter: NotebookChapter, onEdit: () -> Unit, onDelete: () -> Unit, onStatusChange: (Status) -> Unit, onSpecSave: (String) -> Unit = {}, onMissingSave: (String) -> Unit = {}) {
-    var showSpec by remember { mutableStateOf(false) }
-    var showMissing by remember { mutableStateOf(false) }
-    var showStatus by remember { mutableStateOf(false) }
-
+fun ChapterCard(chapter: NotebookChapter, onEdit: () -> Unit, onDelete: () -> Unit, onShowSpec: () -> Unit, onShowMissing: () -> Unit, onShowStatus: () -> Unit) {
     val statusGlow = when (chapter.status) {
         Status.COMPLETED -> StatusCompleted
         Status.EXPECTED -> StatusExpected
@@ -233,29 +241,19 @@ fun ChapterCard(chapter: NotebookChapter, onEdit: () -> Unit, onDelete: () -> Un
             Column(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(modifier = Modifier.size(10.dp).background(statusGlow, CircleShape))
                 Spacer(Modifier.height(8.dp))
-                Text(chapter.name, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
+                Text(chapter.name, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
             Column(modifier = Modifier.align(Alignment.BottomCenter)) {
                 HorizontalDivider(color = Color.White.copy(0.08f), thickness = 0.5.dp)
                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                    CardIconButton(Icons.Default.Info, NeonCyan.copy(0.7f)) { showSpec = true }
-                    CardIconButton(Icons.Default.WarningAmber, NeonOrange.copy(0.7f)) { showMissing = true }
-                    CardIconButton(Icons.Default.ToggleOn, statusGlow) { showStatus = true }
+                    CardIconButton(Icons.Default.Info, NeonCyan.copy(0.7f), onShowSpec)
+                    CardIconButton(Icons.Default.WarningAmber, NeonOrange.copy(0.7f), onShowMissing)
+                    CardIconButton(Icons.Default.ToggleOn, statusGlow, onShowStatus)
                     CardIconButton(Icons.Default.Edit, NeonPurple.copy(0.7f), onEdit)
                     CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f), onDelete)
                 }
             }
         }
-    }
-
-    if (showSpec) {
-        SpecificationDialog("Chapter Specifications", chapter.specifications, onSave = { onSpecSave(it); showSpec = false }, onDismiss = { showSpec = false })
-    }
-    if (showMissing) {
-        MissingNotesDialog(chapter.missingNotes, onSave = { onMissingSave(it); showMissing = false }, onDismiss = { showMissing = false })
-    }
-    if (showStatus) {
-        StatusSelectorDialog(chapter.status, onSelect = onStatusChange, onDismiss = { showStatus = false })
     }
 }
 
