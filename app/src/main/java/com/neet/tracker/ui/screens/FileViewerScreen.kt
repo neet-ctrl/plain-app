@@ -101,6 +101,10 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     }
     val isImage = mimeType.startsWith("image/") || extension in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
     val isPdf   = mimeType == "application/pdf" || extension == "pdf" || fileUri.contains("pdf", ignoreCase = true)
+    // For any non-image file, always attempt PDF rendering. PDFs stored via content:// often
+    // have no detectable extension or MIME type, so we try the renderer and fall back to
+    // GenericFileView only when the renderer itself reports an error.
+    val tryAsPdf = !isImage && uri != null
 
     val prefs   = remember { context.getSharedPreferences("uv_viewer", Context.MODE_PRIVATE) }
     val noteKey = remember(fileUri) { "note_${fileUri.hashCode()}" }
@@ -154,7 +158,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
 
     // ── PDF loading ────────────────────────────────────────────────────────────
     LaunchedEffect(fileUri) {
-        if (isPdf && uri != null) {
+        if (tryAsPdf && uri != null) {
             pdfLoading = true; pdfError = false
             withContext(Dispatchers.IO) {
                 try {
@@ -186,10 +190,10 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             AnimatedVisibility(visible = !focusMode, enter = fadeIn(), exit = fadeOut()) {
                 NEETTopBar(
                     title      = title,
-                    breadcrumb = if (isPdf && totalPages > 0) "Page ${currentPage + 1} / $totalPages" else "File Viewer",
+                    breadcrumb = if (pdfPages.isNotEmpty() && totalPages > 0) "Page ${currentPage + 1} / $totalPages" else "File Viewer",
                     onBack     = { navController.popBackStack() },
                     actions    = {
-                        if (isPdf && pdfPages.isNotEmpty()) {
+                        if (pdfPages.isNotEmpty()) {
                             IconButton(onClick = { focusMode = true }) {
                                 Icon(Icons.Default.Fullscreen, null,
                                     tint = Color.White.copy(0.55f), modifier = Modifier.size(20.dp))
@@ -281,7 +285,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             }
 
             // ── Reading progress bar ───────────────────────────────────────────
-            if (isPdf && pdfPages.isNotEmpty()) {
+            if (pdfPages.isNotEmpty()) {
                 Box(modifier = Modifier.fillMaxWidth().height(3.dp).background(Color.White.copy(0.07f))) {
                     val animProg by animateFloatAsState(progressFraction, tween(600), label = "prog")
                     Box(
@@ -342,10 +346,12 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 when {
                     uri == null || fileUri.isBlank() -> FileErrorView()
                     isImage -> ImageViewer(uri = uri, title = title)
-                    isPdf -> {
+                    // tryAsPdf = all non-image files — we always attempt PDF rendering first.
+                    // If the renderer fails (pdfError), fall back to GenericFileView so the
+                    // user can still open the file externally.
+                    tryAsPdf -> {
                         when {
                             pdfLoading -> UvLoadingView()
-                            pdfError   -> UvErrorView(uri = uri, context = context)
                             pdfPages.isNotEmpty() -> UvPdfPage(
                                 bitmap    = pdfPages[currentPage.coerceIn(0, pdfPages.lastIndex)],
                                 scale     = scale,
@@ -355,7 +361,8 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                                     panOffset = Offset(panOffset.x + p.x, panOffset.y + p.y)
                                 }
                             )
-                            else -> UvErrorView(uri = uri, context = context)
+                            pdfError -> GenericFileView(uri = uri, title = title, extension = extension, context = context)
+                            else -> UvLoadingView()
                         }
                     }
                     else -> GenericFileView(uri = uri, title = title, extension = extension, context = context)
@@ -387,7 +394,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 }
 
                 // Zoom indicator
-                if (isPdf && scale != 1f && pdfPages.isNotEmpty()) {
+                if (scale != 1f && pdfPages.isNotEmpty()) {
                     Box(
                         modifier = Modifier.align(Alignment.TopEnd)
                             .padding(top = if (isBookmarked) 44.dp else 8.dp, end = 8.dp)
@@ -399,7 +406,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
 
             // ── Per-page mark strip ────────────────────────────────────────────
             AnimatedVisibility(
-                visible = isPdf && pdfPages.isNotEmpty() && !focusMode,
+                visible = pdfPages.isNotEmpty() && !focusMode,
                 enter = fadeIn(), exit = fadeOut()
             ) {
                 Column {
@@ -450,7 +457,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             }
 
             // ── Page nav bar ───────────────────────────────────────────────────
-            if (isPdf && pdfPages.isNotEmpty() && !focusMode) {
+            if (pdfPages.isNotEmpty() && !focusMode) {
                 UvPageNavBar(
                     current = currentPage,
                     total   = totalPages,
