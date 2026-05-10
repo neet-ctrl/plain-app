@@ -973,7 +973,16 @@ private fun FileFailureLog(
     val nameDisplay  = resolvedName.ifBlank { "Not available (non-content:// URI or no DISPLAY_NAME column)" }
 
     // Friendly conclusion
+    val isOldUploadPermissionError = (errorMessage.contains("Permission", ignoreCase = true) ||
+        errorMessage.contains("SecurityException", ignoreCase = true)) &&
+        uriAuthority.contains("media.documents", ignoreCase = true)
+
     val conclusion = when {
+        isOldUploadPermissionError ->
+            "ACTION REQUIRED: This file was uploaded using an older version of the app that did not " +
+            "store permanent access to it. The stored link is now permanently broken.\n\n" +
+            "Fix: Go back to the screen where you attached this file, tap the upload button, " +
+            "and select the file again. All re-uploaded files will work correctly going forward."
         errorMessage.contains("PdfRenderer", ignoreCase = true) ||
         errorMessage.contains("IllegalArgument", ignoreCase = true) ||
         errorMessage.contains("parsererror", ignoreCase = true) ->
@@ -981,9 +990,7 @@ private fun FileFailureLog(
             "It is likely NOT a PDF — it may be a Word doc, image, or other format."
         errorMessage.contains("null file descriptor", ignoreCase = true) ||
         errorMessage.contains("Permission", ignoreCase = true) ->
-            "The app could not get read access to this file. " +
-            "This usually happens when the URI permission expired after an app restart. " +
-            "Re-upload the file to fix it."
+            "The app lost read access to this file. Go back and re-upload it."
         errorMessage.contains("FileNotFoundException", ignoreCase = true) ||
         errorMessage.contains("No such file", ignoreCase = true) ->
             "The file no longer exists at the stored location. It may have been deleted or moved."
