@@ -144,8 +144,8 @@ fun DictionaryTermCard(
             if (term.tags.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) { items(term.tags) { t -> TagChip(t) } }
             if (onViewFile != null || onUploadFile != null) {
                 NeonDivider(NeonCyan.copy(0.2f))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (onViewFile != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (term.fileUri.isNotBlank() && onViewFile != null) {
                         OutlinedButton(
                             onClick = onViewFile,
                             modifier = Modifier.weight(1f),
@@ -155,10 +155,12 @@ fun DictionaryTermCard(
                         ) {
                             Icon(Icons.Default.FileOpen, null, modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("View", style = MaterialTheme.typography.labelSmall)
+                            Text("View File", style = MaterialTheme.typography.labelSmall)
                         }
-                    }
-                    if (onUploadFile != null) {
+                        IconButton(onClick = onUploadFile ?: {}, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Default.UploadFile, tint = NeonCyan.copy(0.5f), modifier = Modifier.size(16.dp), contentDescription = "Replace file")
+                        }
+                    } else if (onUploadFile != null) {
                         OutlinedButton(
                             onClick = onUploadFile,
                             modifier = Modifier.weight(1f),
@@ -166,9 +168,9 @@ fun DictionaryTermCard(
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Icon(if (term.fileUri.isNotBlank()) Icons.Default.AttachFile else Icons.Default.UploadFile, null, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Default.UploadFile, null, modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text(if (term.fileUri.isNotBlank()) "Replace" else "Attach", style = MaterialTheme.typography.labelSmall)
+                            Text("Attach File", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
@@ -297,7 +299,7 @@ fun MnemonicsScreen(navController: NavController, vm: MnemonicViewModel = hiltVi
                                     IconButton(onClick = { vm.delete(m) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Delete, null, tint = NeonRed.copy(0.6f), modifier = Modifier.size(16.dp)) }
                                 }
                                 NeonDivider(NeonPurple.copy(0.2f))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                     if (m.fileUri.isNotBlank()) {
                                         OutlinedButton(
                                             onClick = { navController.navigate(fileViewerRoute(m.fileUri, m.name)) },
@@ -310,17 +312,21 @@ fun MnemonicsScreen(navController: NavController, vm: MnemonicViewModel = hiltVi
                                             Spacer(Modifier.width(4.dp))
                                             Text("View File", style = MaterialTheme.typography.labelSmall)
                                         }
-                                    }
-                                    OutlinedButton(
-                                        onClick = { uploadMnemTarget = m; mnemFileLauncher.launch("*/*") },
-                                        modifier = Modifier.weight(1f),
-                                        border = BorderStroke(1.dp, NeonPurple.copy(0.4f)),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonPurple),
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Icon(if (m.fileUri.isNotBlank()) Icons.Default.AttachFile else Icons.Default.UploadFile, null, modifier = Modifier.size(14.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text(if (m.fileUri.isNotBlank()) "Replace" else "Attach File", style = MaterialTheme.typography.labelSmall)
+                                        IconButton(onClick = { uploadMnemTarget = m; mnemFileLauncher.launch("*/*") }, modifier = Modifier.size(36.dp)) {
+                                            Icon(Icons.Default.UploadFile, tint = NeonPurple.copy(0.5f), modifier = Modifier.size(16.dp), contentDescription = "Replace file")
+                                        }
+                                    } else {
+                                        OutlinedButton(
+                                            onClick = { uploadMnemTarget = m; mnemFileLauncher.launch("*/*") },
+                                            modifier = Modifier.weight(1f),
+                                            border = BorderStroke(1.dp, NeonPurple.copy(0.4f)),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonPurple),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            Icon(Icons.Default.UploadFile, null, modifier = Modifier.size(14.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("Attach File", style = MaterialTheme.typography.labelSmall)
+                                        }
                                     }
                                 }
                             }
@@ -402,11 +408,12 @@ fun DayWasteScreen(navController: NavController, vm: DayWasteViewModel = hiltVie
                                         CardIconButton(
                                             if (d.sourceUri.isNotBlank()) Icons.Default.AttachFile else Icons.Default.UploadFile,
                                             if (d.sourceUri.isNotBlank()) NeonCyan.copy(0.8f) else NeonCyan.copy(0.4f)
-                                        ) { uploadSourceTarget = d; sourceLauncher.launch("*/*") }
+                                        ) {
+                                            if (d.sourceUri.isNotBlank()) navController.navigate(fileViewerRoute(d.sourceUri, "Source: ${d.date}"))
+                                            else { uploadSourceTarget = d; sourceLauncher.launch("*/*") }
+                                        }
                                         if (d.sourceUri.isNotBlank()) {
-                                            CardIconButton(Icons.Default.FileOpen, NeonGreen.copy(0.8f)) {
-                                                navController.navigate(fileViewerRoute(d.sourceUri, "Source: ${d.date}"))
-                                            }
+                                            CardIconButton(Icons.Default.UploadFile, NeonCyan.copy(0.4f)) { uploadSourceTarget = d; sourceLauncher.launch("*/*") }
                                         }
                                         CardIconButton(Icons.Default.Delete, NeonRed.copy(0.4f)) { vm.delete(d) }
                                     }

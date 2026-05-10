@@ -479,11 +479,12 @@ fun DiagramsSubjectScreen(navController: NavController, subject: String, vm: Dia
                                 CardIconButton(
                                     if (d.fileUri.isNotBlank()) Icons.Default.PictureAsPdf else Icons.Default.UploadFile,
                                     if (d.fileUri.isNotBlank()) color.copy(0.85f) else color.copy(0.4f)
-                                ) { uploadTarget = d; pdfLauncher.launch("application/pdf") }
+                                ) {
+                                    if (d.fileUri.isNotBlank()) navController.navigate(diagramViewerRoute(subject, d.fileUri, d.chapter))
+                                    else { uploadTarget = d; pdfLauncher.launch("application/pdf") }
+                                }
                                 if (d.fileUri.isNotBlank()) {
-                                    CardIconButton(Icons.Default.FileOpen, color.copy(0.75f)) {
-                                        navController.navigate(diagramViewerRoute(subject, d.fileUri, d.chapter))
-                                    }
+                                    CardIconButton(Icons.Default.UploadFile, color.copy(0.4f)) { uploadTarget = d; pdfLauncher.launch("application/pdf") }
                                 }
                                 CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(d) }
                             }
@@ -565,11 +566,12 @@ fun ChapterShortNotesSubjectScreen(navController: NavController, subject: String
                                 CardIconButton(
                                     if (n.fileUri.isNotBlank()) Icons.Default.PictureAsPdf else Icons.Default.UploadFile,
                                     if (n.fileUri.isNotBlank()) color.copy(0.85f) else color.copy(0.4f)
-                                ) { uploadTarget = n; pdfLauncher.launch("application/pdf") }
+                                ) {
+                                    if (n.fileUri.isNotBlank()) navController.navigate(shortNoteViewerRoute(subject, n.fileUri, n.chapter))
+                                    else { uploadTarget = n; pdfLauncher.launch("application/pdf") }
+                                }
                                 if (n.fileUri.isNotBlank()) {
-                                    CardIconButton(Icons.Default.FileOpen, color.copy(0.75f)) {
-                                        navController.navigate(shortNoteViewerRoute(subject, n.fileUri, n.chapter))
-                                    }
+                                    CardIconButton(Icons.Default.UploadFile, color.copy(0.4f)) { uploadTarget = n; pdfLauncher.launch("application/pdf") }
                                 }
                                 CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(n) }
                             }

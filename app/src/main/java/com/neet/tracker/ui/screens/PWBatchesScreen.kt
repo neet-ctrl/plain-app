@@ -150,16 +150,6 @@ fun PWBatchTestsScreen(navController: NavController, batchId: String, batchName:
                                             Text(t.marksObtained, style = MaterialTheme.typography.labelSmall, color = NeonGold)
                                         }
                                     }
-                                    if (t.questionPaperUri.isNotBlank()) {
-                                        TextButton(onClick = { navController.navigate(fileViewerRoute(t.questionPaperUri, "${t.name} QP")) }) {
-                                            Text("View QP", style = MaterialTheme.typography.labelSmall, color = NeonCyan)
-                                        }
-                                    }
-                                    if (t.solutionUri.isNotBlank()) {
-                                        TextButton(onClick = { navController.navigate(fileViewerRoute(t.solutionUri, "${t.name} Solution")) }) {
-                                            Text("View Sol", style = MaterialTheme.typography.labelSmall, color = NeonOrange)
-                                        }
-                                    }
                                 }
                                 Column(modifier = Modifier.align(Alignment.BottomCenter)) {
                                     HorizontalDivider(color = Color.White.copy(0.08f), thickness = 0.5.dp)
@@ -175,11 +165,17 @@ fun PWBatchTestsScreen(navController: NavController, batchId: String, batchName:
                                         CardIconButton(
                                             if (t.questionPaperUri.isNotBlank()) Icons.Default.PictureAsPdf else Icons.Default.UploadFile,
                                             if (t.questionPaperUri.isNotBlank()) NeonGreen.copy(0.8f) else NeonCyan.copy(0.4f)
-                                        ) { uploadQPTarget = t; qpLauncher.launch("*/*") }
+                                        ) {
+                                            if (t.questionPaperUri.isNotBlank()) navController.navigate(fileViewerRoute(t.questionPaperUri, "${t.name} QP"))
+                                            else { uploadQPTarget = t; qpLauncher.launch("*/*") }
+                                        }
                                         CardIconButton(
                                             if (t.solutionUri.isNotBlank()) Icons.Default.FilePresent else Icons.Default.NoteAdd,
                                             if (t.solutionUri.isNotBlank()) NeonOrange.copy(0.8f) else NeonCyan.copy(0.4f)
-                                        ) { uploadSolTarget = t; solLauncher.launch("*/*") }
+                                        ) {
+                                            if (t.solutionUri.isNotBlank()) navController.navigate(fileViewerRoute(t.solutionUri, "${t.name} Solution"))
+                                            else { uploadSolTarget = t; solLauncher.launch("*/*") }
+                                        }
                                         CardIconButton(Icons.Default.Delete, NeonRed.copy(0.4f)) { vm.deleteTest(t) }
                                     }
                                 }

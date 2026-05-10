@@ -265,13 +265,17 @@ fun SubjectShortNotesScreen(navController: NavController) {
                             }
                         },
                         bottomContent = {
-                            CardIconButton(Icons.Default.UploadFile, color.copy(0.7f)) {
-                                uploadingSubject = info.third
-                                launcher.launch("application/pdf")
+                            CardIconButton(
+                                if (hasPdf) Icons.Default.PictureAsPdf else Icons.Default.UploadFile,
+                                color.copy(if (hasPdf) 0.85f else 0.7f)
+                            ) {
+                                if (hasPdf) navController.navigate(com.neet.tracker.navigation.subjectNoteViewerRoute(info.third, note!!.fileUri, "${info.first} Notes"))
+                                else { uploadingSubject = info.third; launcher.launch("application/pdf") }
                             }
                             if (hasPdf) {
-                                CardIconButton(Icons.Default.FileOpen, color.copy(0.7f)) {
-                                    navController.navigate(com.neet.tracker.navigation.subjectNoteViewerRoute(info.third, note!!.fileUri, "${info.first} Notes"))
+                                CardIconButton(Icons.Default.UploadFile, color.copy(0.4f)) {
+                                    uploadingSubject = info.third
+                                    launcher.launch("application/pdf")
                                 }
                             }
                         }

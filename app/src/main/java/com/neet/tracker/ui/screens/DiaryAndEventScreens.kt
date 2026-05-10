@@ -430,8 +430,8 @@ fun DateEventCard(
             }
             if (onViewFile != null || onUploadFile != null) {
                 NeonDivider(NeonGreen.copy(0.2f))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (onViewFile != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (event.fileUri.isNotBlank() && onViewFile != null) {
                         OutlinedButton(
                             onClick = onViewFile,
                             modifier = Modifier.weight(1f),
@@ -443,8 +443,10 @@ fun DateEventCard(
                             Spacer(Modifier.width(4.dp))
                             Text("View File", style = MaterialTheme.typography.labelSmall)
                         }
-                    }
-                    if (onUploadFile != null) {
+                        IconButton(onClick = onUploadFile ?: {}, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Default.UploadFile, tint = NeonGold.copy(0.5f), modifier = Modifier.size(16.dp), contentDescription = "Replace file")
+                        }
+                    } else if (onUploadFile != null) {
                         OutlinedButton(
                             onClick = onUploadFile,
                             modifier = Modifier.weight(1f),
@@ -452,9 +454,9 @@ fun DateEventCard(
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonGold),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Icon(if (event.fileUri.isNotBlank()) Icons.Default.AttachFile else Icons.Default.UploadFile, null, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Default.UploadFile, null, modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text(if (event.fileUri.isNotBlank()) "Replace File" else "Attach File", style = MaterialTheme.typography.labelSmall)
+                            Text("Attach File", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
