@@ -28,6 +28,7 @@ import com.neet.tracker.data.models.*
 import com.neet.tracker.navigation.fileViewerRoute
 import com.neet.tracker.ui.components.*
 import com.neet.tracker.ui.dialogs.DialogTextField
+import com.neet.tracker.ui.dialogs.NeetDatePickerButton
 import com.neet.tracker.ui.theme.*
 import com.neet.tracker.ui.viewmodels.ProfileViewModel
 import java.net.URLEncoder
@@ -158,7 +159,29 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
                 item {
                     ProfileSection(title = "Personal Details", accentColor = NeonCyan) {
                         ProfileField("Full Name", name, editing, Icons.Default.Person) { name = it }
-                        ProfileField("Date of Birth", dob, editing, Icons.Default.Cake) { dob = it }
+
+                        // Date of Birth — 3D Calendar Picker in edit mode
+                        if (editing) {
+                            NeetDatePickerButton(
+                                selectedDate = dob,
+                                onDateSelected = { dob = it },
+                                accentColor = NeonCyan,
+                                label = "Date of Birth"
+                            )
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Cake, null, tint = NeonCyan.copy(0.6f), modifier = Modifier.size(18.dp))
+                                Column {
+                                    Text("Date of Birth", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.4f))
+                                    Text(dob.ifBlank { "—" }, style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        }
+
                         ProfileField("Email", email, editing, Icons.Default.Email) { email = it }
                         ProfileField("Mobile No.", mobile, editing, Icons.Default.Phone) { mobile = it }
                         ProfileField("Aadhar No.", aadhar, editing, Icons.Default.Badge) { aadhar = it }
@@ -206,9 +229,7 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
                         }
                         if (editing) {
                             Button(
-                                onClick = {
-                                    attempts = attempts + NeetAttempt()
-                                },
+                                onClick = { attempts = attempts + NeetAttempt() },
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = ButtonDefaults.buttonColors(containerColor = NeonGold.copy(0.12f)),
                                 border = BorderStroke(1.dp, NeonGold.copy(0.4f))

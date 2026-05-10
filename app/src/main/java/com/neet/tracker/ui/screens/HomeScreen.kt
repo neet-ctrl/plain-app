@@ -1,5 +1,6 @@
 package com.neet.tracker.ui.screens
 
+import android.app.TimePickerDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -10,6 +11,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,18 +29,25 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
+import com.neet.tracker.alarm.AlarmScheduler
+import com.neet.tracker.data.models.DateEvent
+import com.neet.tracker.data.models.PlannerEvent
 import com.neet.tracker.data.models.StudentProfile
 import com.neet.tracker.navigation.*
 import com.neet.tracker.ui.components.*
 import com.neet.tracker.ui.theme.*
+import com.neet.tracker.ui.viewmodels.DateEventViewModel
 import com.neet.tracker.ui.viewmodels.HomeCountViewModel
+import com.neet.tracker.ui.viewmodels.PlannerViewModel
 import com.neet.tracker.ui.viewmodels.ProfileViewModel
-import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.*
 
 data class MainCard(
     val title: String,
@@ -48,12 +57,26 @@ data class MainCard(
     val description: String
 )
 
+// ─── Aggregated alarm item for Universal Reminder Card ───────────────────────
+
+data class UniversalAlarmItem(
+    val id: String,
+    val label: String,
+    val subLabel: String,
+    val alarmTime: Long,
+    val accentColor: Color,
+    val icon: ImageVector,
+    val onCancelAlarm: (() -> Unit)? = null
+)
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     navController: NavController,
     vm: ProfileViewModel = hiltViewModel(),
-    countsVm: HomeCountViewModel = hiltViewModel()
+    countsVm: HomeCountViewModel = hiltViewModel(),
+    dateEventVm: DateEventViewModel = hiltViewModel(),
+    plannerVm: PlannerViewModel = hiltViewModel()
 ) {
     val context      = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -63,7 +86,7 @@ fun HomeScreen(
     // ── All-Files storage permission state ────────────────────────────────────
     fun checkStoragePermission() =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager()
-        else true   // READ_EXTERNAL_STORAGE covers older Android
+        else true
 
     var hasStoragePermission by remember { mutableStateOf(checkStoragePermission()) }
     DisposableEffect(lifecycleOwner) {
@@ -85,7 +108,102 @@ fun HomeScreen(
     val sequenceCount    by countsVm.sequenceCount.collectAsState()
     val lackCount        by countsVm.lackCount.collectAsState()
 
-    // Route → live item count (null = no badge shown)
+    // ── Aggregate ALL events with alarms ──────────────────────────────────────
+    val allDateEvents  by dateEventVm.allEvents.collectAsState()
+    val dayEntries     by plannerVm.dayEntries.collectAsState()
+    val weekEntries    by plannerVm.weekEntries.collectAsState()
+    val monthEntries   by plannerVm.monthEntries.collectAsState()
+    val yearEntries    by plannerVm.yearEntries.collectAsState()
+
+    val alarmItems: List<UniversalAlarmItem> = remember(allDateEvents, dayEntries, weekEntries, monthEntries, yearEntries) {
+        val items = mutableListOf<UniversalAlarmItem>()
+        // Date Events
+        allDateEvents.filter { it.alarmTime > 0L }.forEach { ev ->
+            items.add(UniversalAlarmItem(
+                id = ev.id,
+                label = ev.name.ifBlank { "Unnamed Event" },
+                subLabel = ev.date,
+                alarmTime = ev.alarmTime,
+                accentColor = NeonGreen,
+                icon = Icons.Default.EventNote,
+                onCancelAlarm = {
+                    AlarmScheduler.cancelAlarm(context, ev.id.hashCode())
+                    dateEventVm.save(ev.copy(alarmTime = 0L, alarmLabel = ""))
+                }
+            ))
+        }
+        // Planner Events (all types)
+        dayEntries.forEach { entry ->
+            entry.events.filter { it.alarmTime > 0L }.forEach { ev ->
+                items.add(UniversalAlarmItem(
+                    id = ev.id,
+                    label = ev.name.ifBlank { "Day Event" },
+                    subLabel = "Day • ${entry.date}",
+                    alarmTime = ev.alarmTime,
+                    accentColor = NeonCyan,
+                    icon = Icons.Default.Today,
+                    onCancelAlarm = {
+                        AlarmScheduler.cancelAlarm(context, ev.id.hashCode())
+                        val newEvents = entry.events.map { if (it.id == ev.id) it.copy(alarmTime = 0L, alarmLabel = "") else it }
+                        plannerVm.saveDay(entry.copy(events = newEvents))
+                    }
+                ))
+            }
+        }
+        weekEntries.forEach { entry ->
+            entry.events.filter { it.alarmTime > 0L }.forEach { ev ->
+                items.add(UniversalAlarmItem(
+                    id = ev.id,
+                    label = ev.name.ifBlank { "Week Event" },
+                    subLabel = "Week • ${entry.weekLabel}",
+                    alarmTime = ev.alarmTime,
+                    accentColor = NeonPurple,
+                    icon = Icons.Default.ViewWeek,
+                    onCancelAlarm = {
+                        AlarmScheduler.cancelAlarm(context, ev.id.hashCode())
+                        val newEvents = entry.events.map { if (it.id == ev.id) it.copy(alarmTime = 0L, alarmLabel = "") else it }
+                        plannerVm.saveWeek(entry.copy(events = newEvents))
+                    }
+                ))
+            }
+        }
+        monthEntries.forEach { entry ->
+            entry.events.filter { it.alarmTime > 0L }.forEach { ev ->
+                items.add(UniversalAlarmItem(
+                    id = ev.id,
+                    label = ev.name.ifBlank { "Month Event" },
+                    subLabel = "Month • ${entry.month}",
+                    alarmTime = ev.alarmTime,
+                    accentColor = NeonGold,
+                    icon = Icons.Default.CalendarViewMonth,
+                    onCancelAlarm = {
+                        AlarmScheduler.cancelAlarm(context, ev.id.hashCode())
+                        val newEvents = entry.events.map { if (it.id == ev.id) it.copy(alarmTime = 0L, alarmLabel = "") else it }
+                        plannerVm.saveMonth(entry.copy(events = newEvents))
+                    }
+                ))
+            }
+        }
+        yearEntries.forEach { entry ->
+            entry.events.filter { it.alarmTime > 0L }.forEach { ev ->
+                items.add(UniversalAlarmItem(
+                    id = ev.id,
+                    label = ev.name.ifBlank { "Year Event" },
+                    subLabel = "Year • ${entry.yearSession}",
+                    alarmTime = ev.alarmTime,
+                    accentColor = NeonGreen,
+                    icon = Icons.Default.CalendarToday,
+                    onCancelAlarm = {
+                        AlarmScheduler.cancelAlarm(context, ev.id.hashCode())
+                        val newEvents = entry.events.map { if (it.id == ev.id) it.copy(alarmTime = 0L, alarmLabel = "") else it }
+                        plannerVm.saveYear(entry.copy(events = newEvents))
+                    }
+                ))
+            }
+        }
+        items.sortedBy { it.alarmTime }
+    }
+
     val countMap = remember(assetsCount, diaryCount, eventCount, dictCount, mnemonicCount,
         diagramCount, chapterNoteCount, dayWasteCount, sequenceCount, lackCount) {
         mapOf(
@@ -102,7 +220,6 @@ fun HomeScreen(
         )
     }
 
-    // Fully thematic icons — each card's icon perfectly matches its subject
     val mainCards = listOf(
         MainCard("Assets Vault",       Icons.Default.Inventory2,        Routes.ASSETS,              NeonCyan,   "Books · Notes · Papers"),
         MainCard("Smart Planner",      Icons.Default.CalendarMonth,     Routes.PLANNER,             NeonPurple, "Day · Week · Month · Year"),
@@ -134,6 +251,18 @@ fun HomeScreen(
                 NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search 14 modules...")
                 Spacer(Modifier.height(10.dp))
 
+                // ─── Universal Reminder Card ─────────────────────────────────
+                AnimatedVisibility(
+                    visible = alarmItems.isNotEmpty() && searchQuery.isBlank(),
+                    enter = expandVertically(tween(400, easing = EaseOutBack)) + fadeIn(tween(350)),
+                    exit  = shrinkVertically(tween(300)) + fadeOut(tween(200))
+                ) {
+                    UniversalReminderCard(
+                        items = alarmItems,
+                        modifier = Modifier.padding(bottom = 14.dp)
+                    )
+                }
+
                 AnimatedVisibility(visible = searchQuery.isBlank()) {
                     Text(
                         text = "14 Modules · Your NEET Command Center",
@@ -143,7 +272,7 @@ fun HomeScreen(
                     )
                 }
 
-                // Storage permission banner — shown until the user grants access
+                // Storage permission banner
                 AnimatedVisibility(
                     visible = !hasStoragePermission && searchQuery.isBlank(),
                     enter = expandVertically() + fadeIn(tween(350)),
@@ -193,6 +322,220 @@ fun HomeScreen(
     }
 }
 
+// ─── Universal Reminder Card ──────────────────────────────────────────────────
+
+@Composable
+fun UniversalReminderCard(items: List<UniversalAlarmItem>, modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "urc")
+    val bellRing by infiniteTransition.animateFloat(
+        initialValue = -8f, targetValue = 8f,
+        animationSpec = infiniteRepeatable(
+            tween(120, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+            initialStartOffset = StartOffset(1800)
+        ), label = "bell_ring"
+    )
+    val glowPulse by infiniteTransition.animateFloat(
+        initialValue = 0.5f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1600, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "glow_pulse"
+    )
+
+    var expanded by remember { mutableStateOf(true) }
+    val sdf = remember { SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()) }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(20.dp, RoundedCornerShape(22.dp), spotColor = NeonGold.copy(glowPulse * 0.45f), ambientColor = NeonGold.copy(0.1f))
+            .clip(RoundedCornerShape(22.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(Color(0xFF1A1400), Color(0xFF0C0E1A), Color(0xFF120F00))
+                )
+            )
+            .border(
+                1.5.dp,
+                Brush.linearGradient(
+                    listOf(NeonGold.copy(glowPulse * 0.9f), NeonOrange.copy(0.3f), NeonGold.copy(glowPulse * 0.5f))
+                ),
+                RoundedCornerShape(22.dp)
+            )
+    ) {
+        // Background glow orbs
+        Box(modifier = Modifier.size(140.dp).align(Alignment.TopStart).offset((-20).dp, (-20).dp)
+            .background(Brush.radialGradient(listOf(NeonGold.copy(0.08f * glowPulse), Color.Transparent)), CircleShape))
+        Box(modifier = Modifier.size(90.dp).align(Alignment.BottomEnd).offset(15.dp, 15.dp)
+            .background(Brush.radialGradient(listOf(NeonOrange.copy(0.06f * glowPulse), Color.Transparent)), CircleShape))
+
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.clickable { expanded = !expanded }
+            ) {
+                // Animated bell icon
+                Box(
+                    modifier = Modifier.size(42.dp)
+                        .shadow(10.dp, RoundedCornerShape(14.dp), spotColor = NeonGold.copy(0.6f))
+                        .background(
+                            Brush.linearGradient(listOf(NeonGold.copy(0.30f), NeonOrange.copy(0.15f))),
+                            RoundedCornerShape(14.dp)
+                        )
+                        .border(1.dp, NeonGold.copy(glowPulse * 0.8f), RoundedCornerShape(14.dp))
+                        .graphicsLayer { rotationZ = bellRing },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.NotificationsActive, null, tint = NeonGold, modifier = Modifier.size(24.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Active Reminders",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = NeonGold,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        "${items.size} alarm${if (items.size != 1) "s" else ""} set across all modules",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(0.55f)
+                    )
+                }
+                // Expand/collapse
+                Box(
+                    modifier = Modifier.size(30.dp)
+                        .background(NeonGold.copy(0.12f), RoundedCornerShape(8.dp))
+                        .border(0.5.dp, NeonGold.copy(0.3f), RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        null,
+                        tint = NeonGold.copy(0.85f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(tween(320, easing = EaseOutBack)) + fadeIn(tween(280)),
+                exit  = shrinkVertically(tween(250)) + fadeOut(tween(200))
+            ) {
+                Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    NeonDivider(NeonGold.copy(0.3f))
+                    Spacer(Modifier.height(4.dp))
+                    items.forEach { item ->
+                        UniversalReminderRow(item = item, sdf = sdf, glowPulse = glowPulse)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UniversalReminderRow(item: UniversalAlarmItem, sdf: SimpleDateFormat, glowPulse: Float) {
+    val now = System.currentTimeMillis()
+    val isPast = item.alarmTime < now
+    val isImminentHour = !isPast && (item.alarmTime - now) < 3_600_000L
+
+    val rowColor = when {
+        isPast       -> NeonRed.copy(0.8f)
+        isImminentHour -> NeonOrange
+        else         -> item.accentColor
+    }
+
+    val rowGlow by rememberInfiniteTransition(label = "row_${item.id}").animateFloat(
+        initialValue = 0.15f, targetValue = if (isImminentHour) 0.6f else 0.35f,
+        animationSpec = infiniteRepeatable(tween(if (isImminentHour) 700 else 2000, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "row_glow"
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(if (isImminentHour) 8.dp else 0.dp, RoundedCornerShape(14.dp), spotColor = rowColor.copy(rowGlow))
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                Brush.linearGradient(listOf(rowColor.copy(0.12f), Color(0xFF080D1A), rowColor.copy(0.06f)))
+            )
+            .border(1.dp, rowColor.copy(rowGlow + 0.1f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // Source icon
+        Box(
+            modifier = Modifier.size(34.dp)
+                .background(rowColor.copy(0.2f), RoundedCornerShape(10.dp))
+                .border(0.5.dp, rowColor.copy(0.5f), RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(item.icon, null, tint = rowColor, modifier = Modifier.size(18.dp))
+        }
+
+        // Labels
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                item.label,
+                style = MaterialTheme.typography.labelLarge,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    item.subLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(0.45f),
+                    maxLines = 1
+                )
+                Box(modifier = Modifier.size(3.dp).background(Color.White.copy(0.2f), CircleShape))
+                Text(
+                    sdf.format(Date(item.alarmTime)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = rowColor,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+            }
+            if (isPast) {
+                Text("⚠ Alarm time passed", style = MaterialTheme.typography.labelSmall, color = NeonRed.copy(0.85f), fontWeight = FontWeight.Bold)
+            } else if (isImminentHour) {
+                Text("🔔 Coming up within 1 hour!", style = MaterialTheme.typography.labelSmall, color = NeonOrange, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        // Bell animated icon
+        Box(
+            modifier = Modifier.size(32.dp)
+                .background(rowColor.copy(0.15f), RoundedCornerShape(10.dp))
+                .border(0.5.dp, rowColor.copy(0.4f), RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.AlarmOn,
+                null,
+                tint = rowColor,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        // Cancel alarm button
+        if (item.onCancelAlarm != null) {
+            IconButton(
+                onClick = { item.onCancelAlarm.invoke() },
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(Icons.Default.AlarmOff, null, tint = NeonRed.copy(0.7f), modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
 // ─── 3D Home Header ───────────────────────────────────────────────────────────
 
 @Composable
@@ -232,7 +575,6 @@ fun HomeHeader(profile: StudentProfile?, navController: NavController) {
                 )
             )
     ) {
-        // Nebula glow background on header
         Box(
             modifier = Modifier.size(260.dp).align(Alignment.TopEnd).offset(50.dp, (-30).dp)
                 .background(Brush.radialGradient(listOf(NeonPurple.copy(headerNebula * 0.8f), Color.Transparent)), CircleShape)
@@ -241,8 +583,6 @@ fun HomeHeader(profile: StudentProfile?, navController: NavController) {
             modifier = Modifier.size(180.dp).align(Alignment.TopStart).offset((-40).dp, 10.dp)
                 .background(Brush.radialGradient(listOf(NeonCyan.copy(headerNebula * 0.5f), Color.Transparent)), CircleShape)
         )
-
-        // Horizontal top shine line
         Box(
             modifier = Modifier.fillMaxWidth().height(1.dp).align(Alignment.TopCenter)
                 .background(Brush.horizontalGradient(listOf(Color.Transparent, NeonCyan.copy(0.30f), NeonPurple.copy(0.20f), Color.Transparent)))
@@ -256,9 +596,7 @@ fun HomeHeader(profile: StudentProfile?, navController: NavController) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
 
-                // ── 3D Profile Photo ──────────────────────────────────────────
                 Box(modifier = Modifier.size(78.dp).clickable { navController.navigate(Routes.PROFILE) }, contentAlignment = Alignment.Center) {
-                    // Outer animated sweep ring
                     Box(
                         modifier = Modifier.fillMaxSize()
                             .graphicsLayer { rotationZ = ringRotation }
@@ -274,7 +612,6 @@ fun HomeHeader(profile: StudentProfile?, navController: NavController) {
                                 CircleShape
                             )
                     )
-                    // Inner ring
                     Box(
                         modifier = Modifier.size(70.dp)
                             .shadow(16.dp, CircleShape, spotColor = NeonCyan.copy(0.45f))
@@ -305,13 +642,11 @@ fun HomeHeader(profile: StudentProfile?, navController: NavController) {
                                 Icon(Icons.Default.Person, null, tint = NeonCyan, modifier = Modifier.size(36.dp))
                             }
                         }
-                        // Top-left shine
                         Box(
                             modifier = Modifier.size(28.dp).align(Alignment.TopStart)
                                 .background(Brush.radialGradient(listOf(Color.White.copy(0.18f), Color.Transparent)), CircleShape)
                         )
                     }
-                    // Camera edit badge
                     Box(
                         modifier = Modifier.size(22.dp).align(Alignment.BottomEnd).offset(2.dp, 2.dp)
                             .shadow(6.dp, CircleShape, spotColor = NeonCyan.copy(0.4f))
@@ -326,7 +661,6 @@ fun HomeHeader(profile: StudentProfile?, navController: NavController) {
                     }
                 }
 
-                // ── Name + Greeting ───────────────────────────────────────────
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(
                         "$greeting,",
@@ -340,7 +674,6 @@ fun HomeHeader(profile: StudentProfile?, navController: NavController) {
                         fontWeight = FontWeight.ExtraBold,
                         maxLines = 1
                     )
-                    // Target badge
                     Row(
                         modifier = Modifier
                             .shadow(10.dp, RoundedCornerShape(12.dp), spotColor = NeonGold.copy(aimGlow * 0.55f))
@@ -367,7 +700,6 @@ fun HomeHeader(profile: StudentProfile?, navController: NavController) {
                     }
                 }
 
-                // Settings icon
                 Box(
                     modifier = Modifier.size(42.dp)
                         .shadow(6.dp, RoundedCornerShape(14.dp), spotColor = NeonCyan.copy(0.20f))
@@ -387,7 +719,6 @@ fun HomeHeader(profile: StudentProfile?, navController: NavController) {
                 }
             }
 
-            // ── Motivational strip ────────────────────────────────────────────
             Box(
                 modifier = Modifier.fillMaxWidth()
                     .shadow(4.dp, RoundedCornerShape(14.dp), spotColor = NeonCyan.copy(0.12f))
@@ -447,14 +778,12 @@ fun HomeModuleCard(card: MainCard, count: Int? = null, onClick: () -> Unit) {
         modifier = Modifier
             .aspectRatio(1f)
             .scale(scale)
-            // Deep 3D shadow with colored glow
             .shadow(
                 16.dp, shape,
                 spotColor    = card.accentColor.copy(0.38f),
                 ambientColor = card.accentColor.copy(0.10f)
             )
             .clip(shape)
-            // Multi-layer background for deep 3D feel
             .background(
                 Brush.linearGradient(
                     colors = listOf(
@@ -467,7 +796,6 @@ fun HomeModuleCard(card: MainCard, count: Int? = null, onClick: () -> Unit) {
                     end   = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
                 )
             )
-            // Gradient border — bright top-left, dim bottom-right (3D lighting)
             .border(
                 1.dp,
                 Brush.linearGradient(
@@ -485,23 +813,14 @@ fun HomeModuleCard(card: MainCard, count: Int? = null, onClick: () -> Unit) {
                 indication = null
             ) { onClick() }
     ) {
-        // ── Layer 1: Top-left white light source (3D depth illusion)
         Box(
             modifier = Modifier.size(110.dp).align(Alignment.TopStart)
-                .background(
-                    Brush.radialGradient(listOf(Color.White.copy(0.12f), Color.Transparent)),
-                    shape
-                )
+                .background(Brush.radialGradient(listOf(Color.White.copy(0.12f), Color.Transparent)), shape)
         )
-        // ── Layer 2: Colored corner glow orb
         Box(
             modifier = Modifier.size(100.dp).align(Alignment.TopStart)
-                .background(
-                    Brush.radialGradient(listOf(card.accentColor.copy(glowAlpha * 1.1f), Color.Transparent)),
-                    shape
-                )
+                .background(Brush.radialGradient(listOf(card.accentColor.copy(glowAlpha * 1.1f), Color.Transparent)), shape)
         )
-        // ── Layer 3: Animated diagonal shine stripe (glass reflection)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -524,21 +843,15 @@ fun HomeModuleCard(card: MainCard, count: Int? = null, onClick: () -> Unit) {
                     )
                 )
         )
-        // ── Layer 4: Bottom-right accent glow
         Box(
             modifier = Modifier.size(70.dp).align(Alignment.BottomEnd)
-                .background(
-                    Brush.radialGradient(listOf(card.accentColor.copy(glowAlpha * 0.50f), Color.Transparent)),
-                    shape
-                )
+                .background(Brush.radialGradient(listOf(card.accentColor.copy(glowAlpha * 0.50f), Color.Transparent)), shape)
         )
-        // ── Layer 5: Bottom depth shadow (3D floor shadow)
         Box(
             modifier = Modifier.fillMaxWidth().height(50.dp).align(Alignment.BottomCenter)
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.32f))))
         )
 
-        // ── Count badge (top-right corner) ────────────────────────────────────
         if (count != null && count > 0) {
             val badgePulse by rememberInfiniteTransition(label = "badge_${card.title}").animateFloat(
                 initialValue = 0.75f, targetValue = 1f,
@@ -568,13 +881,11 @@ fun HomeModuleCard(card: MainCard, count: Int? = null, onClick: () -> Unit) {
             }
         }
 
-        // ── Main content
         Column(
             modifier = Modifier.fillMaxSize().padding(14.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 3D icon box (raised, lit, reflected)
             ThreeDIconBox(
                 icon     = card.icon,
                 tint     = card.accentColor,
@@ -628,7 +939,6 @@ private fun StoragePermissionBanner(modifier: Modifier = Modifier, onAllow: () -
             .padding(16.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            // Header row
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -658,7 +968,6 @@ private fun StoragePermissionBanner(modifier: Modifier = Modifier, onAllow: () -
                 }
             }
 
-            // Why this is needed
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -678,7 +987,6 @@ private fun StoragePermissionBanner(modifier: Modifier = Modifier, onAllow: () -
                 )
             }
 
-            // Button row
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
                     onClick = onAllow,

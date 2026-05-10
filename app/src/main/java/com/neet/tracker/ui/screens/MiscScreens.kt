@@ -463,7 +463,12 @@ fun AddDayWasteDialog(onSave: (DayWaste) -> Unit, onDismiss: () -> Unit) {
     var tip by remember { mutableStateOf("") }
     NEETDialog(title = "Log Wasted Day", icon = Icons.Default.Dangerous, accentColor = NeonRed, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            DialogTextField(value = date, onValueChange = { date = it }, label = "Date (DD/MM/YYYY)", icon = Icons.Default.CalendarToday, accentColor = NeonRed)
+            NeetDatePickerButton(
+                selectedDate = date,
+                onDateSelected = { date = it },
+                accentColor = NeonRed,
+                label = "Date of Wasted Day"
+            )
             DialogTextField(value = pct, onValueChange = { pct = it }, label = "Waste % (0-100)", icon = Icons.Default.Percent, accentColor = NeonRed)
             DialogTextField(value = reason, onValueChange = { reason = it }, label = "Reason of Waste", icon = Icons.Default.Warning, accentColor = NeonRed, multiline = true)
             DialogTextField(value = tip, onValueChange = { tip = it }, label = "Recovery Tip", icon = Icons.Default.Lightbulb, accentColor = NeonGold, multiline = true)

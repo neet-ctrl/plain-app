@@ -96,7 +96,12 @@ fun DayPlannerScreen(navController: NavController, vm: PlannerViewModel = hiltVi
     if (showAdd) {
         NEETDialog(title = "New Day Entry", icon = Icons.Default.Today, accentColor = NeonCyan, onDismiss = { showAdd = false }) {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                DialogTextField(value = newDate, onValueChange = { newDate = it }, label = "Date (DD/MM/YYYY)", icon = Icons.Default.CalendarToday, accentColor = NeonCyan)
+                NeetDatePickerButton(
+                    selectedDate = newDate,
+                    onDateSelected = { newDate = it },
+                    accentColor = NeonCyan,
+                    label = "Select Day Date"
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(onClick = { showAdd = false }, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
                     Button(onClick = {
@@ -193,7 +198,15 @@ fun PlannerEventCard(event: PlannerEvent, index: Int, accentColor: Color, onUpda
             NeonDivider(accentColor)
             DialogTextField(value = name, onValueChange = { name = it; onUpdate(event.copy(name = name)) }, label = "Event Name", icon = Icons.Default.Event, accentColor = accentColor)
             DialogTextField(value = notes, onValueChange = { notes = it; onUpdate(event.copy(notes = notes)) }, label = "Notes / Description", icon = Icons.Default.Notes, accentColor = accentColor, multiline = true)
-            DialogTextField(value = timing, onValueChange = { timing = it; onUpdate(event.copy(timingRange = timing)) }, label = "Timing Range (e.g. 9AM–11AM)", icon = Icons.Default.Schedule, accentColor = accentColor)
+
+            // 3D Time Range Picker replacing the old text field
+            NeetTimeRangePickerButton(
+                value = timing,
+                onValueChange = { timing = it; onUpdate(event.copy(timingRange = timing)) },
+                accentColor = accentColor,
+                label = "Event Time Range"
+            )
+
             DialogTextField(value = remark, onValueChange = { remark = it; onUpdate(event.copy(remark = remark)) }, label = "Remark", icon = Icons.Default.StickyNote2, accentColor = accentColor)
 
             // ─── Alarm / Reminder Row ──────────────────────────────────────────
@@ -275,7 +288,8 @@ fun WeekPlannerScreen(navController: NavController, vm: PlannerViewModel = hiltV
     var searchQuery by remember { mutableStateOf("") }
     var showAdd by remember { mutableStateOf(false) }
     var newWeek by remember { mutableStateOf("") }
-    var newRange by remember { mutableStateOf("") }
+    var newRangeStart by remember { mutableStateOf("") }
+    var newRangeEnd by remember { mutableStateOf("") }
     val filtered = entries.filter { searchQuery.isBlank() || it.weekLabel.contains(searchQuery, true) }
 
     SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }) }) {
@@ -297,10 +311,34 @@ fun WeekPlannerScreen(navController: NavController, vm: PlannerViewModel = hiltV
         NEETDialog(title = "New Week Entry", icon = Icons.Default.ViewWeek, accentColor = NeonPurple, onDismiss = { showAdd = false }) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 DialogTextField(value = newWeek, onValueChange = { newWeek = it }, label = "Week Label (e.g. 3rd Week of May)", icon = Icons.Default.ViewWeek, accentColor = NeonPurple)
-                DialogTextField(value = newRange, onValueChange = { newRange = it }, label = "Date Range (e.g. 12-18 May)", icon = Icons.Default.DateRange, accentColor = NeonPurple)
+                Text("Week Date Range", style = MaterialTheme.typography.labelSmall, color = NeonPurple.copy(0.9f), fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    NeetDatePickerButton(
+                        selectedDate = newRangeStart,
+                        onDateSelected = { newRangeStart = it },
+                        accentColor = NeonPurple,
+                        label = "Start Date",
+                        modifier = Modifier.weight(1f)
+                    )
+                    NeetDatePickerButton(
+                        selectedDate = newRangeEnd,
+                        onDateSelected = { newRangeEnd = it },
+                        accentColor = NeonPurple,
+                        label = "End Date",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(onClick = { showAdd = false }, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
-                    Button(onClick = { if (newWeek.isNotBlank()) { vm.saveWeek(WeekPlannerEntry(weekLabel = newWeek, dateRange = newRange)); showAdd = false } }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonPurple.copy(0.2f)), border = BorderStroke(1.dp, NeonPurple.copy(0.6f))) { Text("Add", color = NeonPurple, fontWeight = FontWeight.Bold) }
+                    Button(
+                        onClick = {
+                            if (newWeek.isNotBlank()) {
+                                val range = if (newRangeStart.isNotBlank() && newRangeEnd.isNotBlank()) "$newRangeStart – $newRangeEnd" else if (newRangeStart.isNotBlank()) newRangeStart else ""
+                                vm.saveWeek(WeekPlannerEntry(weekLabel = newWeek, dateRange = range))
+                                showAdd = false
+                            }
+                        },
+                        modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonPurple.copy(0.2f)), border = BorderStroke(1.dp, NeonPurple.copy(0.6f))) { Text("Add", color = NeonPurple, fontWeight = FontWeight.Bold) }
                 }
             }
         }

@@ -88,8 +88,13 @@ fun DailyDiaryScreen(navController: NavController, vm: DiaryViewModel = hiltView
     }
     if (showAdd) {
         NEETDialog(title = "New Diary Entry", icon = Icons.Default.MenuBook, accentColor = NeonGold, onDismiss = { showAdd = false }) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                DialogTextField(value = newDate, onValueChange = { newDate = it }, label = "Date (DD/MM/YYYY)", icon = Icons.Default.CalendarToday, accentColor = NeonGold)
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                NeetDatePickerButton(
+                    selectedDate = newDate,
+                    onDateSelected = { newDate = it },
+                    accentColor = NeonGold,
+                    label = "Diary Date"
+                )
                 DialogTextField(value = newNick, onValueChange = { newNick = it }, label = "Nickname (e.g. 'Breakthrough Day')", icon = Icons.Default.Title, accentColor = NeonGold)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(onClick = { showAdd = false }, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
@@ -248,9 +253,14 @@ fun DateEventsScreen(navController: NavController, vm: DateEventViewModel = hilt
         }
     }
     if (showAdd) {
-        NEETDialog(title = "New Date", icon = Icons.Default.EventNote, accentColor = NeonGreen, onDismiss = { showAdd = false }) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                DialogTextField(value = newDate, onValueChange = { newDate = it }, label = "Date (DD/MM/YYYY)", icon = Icons.Default.CalendarToday, accentColor = NeonGreen)
+        NEETDialog(title = "New Event Date", icon = Icons.Default.EventNote, accentColor = NeonGreen, onDismiss = { showAdd = false }) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                NeetDatePickerButton(
+                    selectedDate = newDate,
+                    onDateSelected = { newDate = it },
+                    accentColor = NeonGreen,
+                    label = "Event Date"
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(onClick = { showAdd = false }, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
                     Button(onClick = { if (newDate.isNotBlank()) { vm.save(DateEvent(date = newDate)); showAdd = false; newDate = "" } }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonGreen.copy(0.2f)), border = BorderStroke(1.dp, NeonGreen.copy(0.6f))) { Text("Add", color = NeonGreen, fontWeight = FontWeight.Bold) }
@@ -332,6 +342,7 @@ fun DateEventCard(
     var showCrossInput by remember { mutableStateOf(status == "CROSSED") }
     var alarmTime by remember(event) { mutableStateOf(event.alarmTime) }
     var alarmLabel by remember(event) { mutableStateOf(event.alarmLabel) }
+    var timeRange by remember(event) { mutableStateOf(event.timeRange) }
 
     val statusColor = when (status) { "COMPLETED" -> StatusCompleted; "CROSSED" -> StatusCross; else -> NeonGreen }
     val alarmDisplayText = if (alarmTime > 0L) {
@@ -352,6 +363,15 @@ fun DateEventCard(
             NeonDivider(statusColor)
             DialogTextField(value = name, onValueChange = { name = it; onUpdate(event.copy(name = name)) }, label = "Event Name", icon = Icons.Default.Event, accentColor = statusColor)
             DialogTextField(value = detail, onValueChange = { detail = it; onUpdate(event.copy(detail = detail)) }, label = "Details", icon = Icons.Default.Description, accentColor = statusColor, multiline = true)
+
+            // 3D Time Range Picker
+            NeetTimeRangePickerButton(
+                value = timeRange,
+                onValueChange = { timeRange = it; onUpdate(event.copy(timeRange = timeRange)) },
+                accentColor = statusColor,
+                label = "Event Time Range"
+            )
+
             if (event.url.isNotBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Icon(Icons.Default.Link, null, tint = NeonCyan, modifier = Modifier.size(14.dp))
@@ -497,7 +517,14 @@ fun AddDateEventDialog(date: String, onSave: (DateEvent) -> Unit, onDismiss: () 
             DialogTextField(value = detail, onValueChange = { detail = it }, label = "Details", icon = Icons.Default.Description, accentColor = NeonGreen, multiline = true)
             DialogTextField(value = url, onValueChange = { url = it }, label = "URL (optional)", icon = Icons.Default.Link, accentColor = NeonGreen)
             DialogTextField(value = totalQ, onValueChange = { totalQ = it }, label = "No. of Questions (optional)", icon = Icons.Default.Quiz, accentColor = NeonGreen)
-            DialogTextField(value = timeRange, onValueChange = { timeRange = it }, label = "Time Range (optional)", icon = Icons.Default.Schedule, accentColor = NeonGreen)
+
+            // 3D Time Range Picker
+            NeetTimeRangePickerButton(
+                value = timeRange,
+                onValueChange = { timeRange = it },
+                accentColor = NeonGreen,
+                label = "Event Time Range (optional)"
+            )
 
             // Alarm button
             OutlinedButton(

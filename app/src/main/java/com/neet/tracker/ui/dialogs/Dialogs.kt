@@ -31,6 +31,8 @@ import com.neet.tracker.data.models.CompletionDate
 import com.neet.tracker.data.models.Status
 import com.neet.tracker.ui.components.*
 import com.neet.tracker.ui.theme.*
+import java.text.SimpleDateFormat
+import java.util.*
 
 // ─── Next-Level 3D Dialog Shell ───────────────────────────────────────────────
 
@@ -65,19 +67,15 @@ fun NEETDialog(
                     .background(Brush.linearGradient(colors = listOf(Color(0xFF0C1A32), Color(0xFF060C1A), Color(0xFF0A1526))))
                     .border(1.5.dp, Brush.linearGradient(colors = listOf(accentColor.copy(0.85f), accentColor.copy(0.2f), accentColor.copy(0.65f))), RoundedCornerShape(30.dp))
             ) {
-                // Glow orb
                 Box(modifier = Modifier.size(180.dp).align(Alignment.TopStart).offset((-35).dp, (-35).dp)
                     .background(Brush.radialGradient(listOf(accentColor.copy(0.14f * glowR), Color.Transparent)), CircleShape))
                 Box(modifier = Modifier.size(120.dp).align(Alignment.BottomEnd).offset(25.dp, 25.dp)
                     .background(Brush.radialGradient(listOf(accentColor.copy(0.08f * glowR), Color.Transparent)), CircleShape))
-
-                // Scan line effect
                 Box(modifier = Modifier.fillMaxWidth().height(1.dp).align(Alignment.TopCenter)
                     .offset(y = (scanLine * 1000).dp.coerceAtMost(600.dp))
                     .background(Brush.horizontalGradient(listOf(Color.Transparent, accentColor.copy(0.15f), Color.Transparent))))
 
                 Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp)) {
-                    // Header
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         Box(
                             modifier = Modifier.size(50.dp)
@@ -111,6 +109,405 @@ fun NEETDialog(
     }
 }
 
+// ─── 3D Modern Date Picker Button ─────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NeetDatePickerButton(
+    selectedDate: String,
+    onDateSelected: (String) -> Unit,
+    accentColor: Color = NeonCyan,
+    label: String = "Select Date",
+    modifier: Modifier = Modifier
+) {
+    var showPicker by remember { mutableStateOf(false) }
+
+    val initialMillis = remember(selectedDate) {
+        try {
+            if (selectedDate.isNotBlank()) {
+                SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(selectedDate)?.time
+                    ?: System.currentTimeMillis()
+            } else System.currentTimeMillis()
+        } catch (e: Exception) { System.currentTimeMillis() }
+    }
+
+    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+
+    val infiniteTransition = rememberInfiniteTransition(label = "datebtn_$label")
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.25f, targetValue = 0.55f,
+        animationSpec = infiniteRepeatable(tween(2200, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "datebtn_glow"
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp), modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(Icons.Default.CalendarMonth, null, tint = accentColor.copy(0.8f), modifier = Modifier.size(14.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, color = accentColor.copy(0.9f), fontWeight = FontWeight.SemiBold)
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(12.dp, RoundedCornerShape(18.dp), spotColor = accentColor.copy(glowAlpha * 0.8f), ambientColor = accentColor.copy(0.08f))
+                .clip(RoundedCornerShape(18.dp))
+                .background(
+                    Brush.linearGradient(
+                        listOf(accentColor.copy(0.15f), Color(0xFF080F1F), accentColor.copy(0.07f))
+                    )
+                )
+                .border(
+                    1.5.dp,
+                    Brush.linearGradient(listOf(accentColor.copy(glowAlpha + 0.1f), accentColor.copy(0.15f), accentColor.copy(glowAlpha * 0.6f))),
+                    RoundedCornerShape(18.dp)
+                )
+                .clickable { showPicker = true }
+                .padding(horizontal = 16.dp, vertical = 14.dp)
+        ) {
+            // Top-left shine
+            Box(
+                modifier = Modifier.size(60.dp).align(Alignment.TopStart)
+                    .background(Brush.radialGradient(listOf(Color.White.copy(0.07f), Color.Transparent)), RoundedCornerShape(18.dp))
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Box(
+                    modifier = Modifier.size(44.dp)
+                        .shadow(10.dp, RoundedCornerShape(14.dp), spotColor = accentColor.copy(0.5f))
+                        .background(
+                            Brush.linearGradient(listOf(accentColor.copy(0.30f), accentColor.copy(0.08f))),
+                            RoundedCornerShape(14.dp)
+                        )
+                        .border(1.dp, accentColor.copy(glowAlpha + 0.2f), RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.CalendarMonth, null, tint = accentColor, modifier = Modifier.size(24.dp))
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    if (selectedDate.isNotBlank()) {
+                        Text(
+                            selectedDate,
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    } else {
+                        Text(
+                            "Tap to pick date",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(0.35f)
+                        )
+                    }
+                    Text(
+                        "Tap to open calendar",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = accentColor.copy(0.55f)
+                    )
+                }
+                Box(
+                    modifier = Modifier.size(28.dp)
+                        .background(accentColor.copy(0.15f), RoundedCornerShape(8.dp))
+                        .border(0.5.dp, accentColor.copy(0.4f), RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.KeyboardArrowDown, null, tint = accentColor.copy(0.8f), modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+    }
+
+    if (showPicker) {
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                            val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+                            cal.timeInMillis = millis
+                            val localSdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                            localSdf.timeZone = TimeZone.getTimeZone("UTC")
+                            onDateSelected(localSdf.format(Date(millis)))
+                        }
+                        showPicker = false
+                    }
+                ) {
+                    Text("Select", color = accentColor, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) {
+                    Text("Cancel", color = Color.White.copy(0.6f))
+                }
+            },
+            colors = DatePickerDefaults.colors(
+                containerColor = Color(0xFF0C1A32),
+                titleContentColor = accentColor,
+                headlineContentColor = Color.White,
+                weekdayContentColor = Color.White.copy(0.5f),
+                subheadContentColor = Color.White.copy(0.7f),
+                navigationContentColor = accentColor,
+                yearContentColor = Color.White,
+                currentYearContentColor = accentColor,
+                selectedYearContentColor = Color.Black,
+                selectedYearContainerColor = accentColor,
+                dayContentColor = Color.White.copy(0.8f),
+                selectedDayContentColor = Color.Black,
+                selectedDayContainerColor = accentColor,
+                todayContentColor = accentColor,
+                todayDateBorderColor = accentColor,
+                dividerColor = accentColor.copy(0.2f)
+            )
+        ) {
+            DatePicker(
+                state = datePickerState,
+                colors = DatePickerDefaults.colors(
+                    containerColor = Color(0xFF0C1A32),
+                    titleContentColor = accentColor,
+                    headlineContentColor = Color.White,
+                    weekdayContentColor = Color.White.copy(0.5f),
+                    subheadContentColor = Color.White.copy(0.7f),
+                    navigationContentColor = accentColor,
+                    yearContentColor = Color.White,
+                    currentYearContentColor = accentColor,
+                    selectedYearContentColor = Color.Black,
+                    selectedYearContainerColor = accentColor,
+                    dayContentColor = Color.White.copy(0.8f),
+                    selectedDayContentColor = Color.Black,
+                    selectedDayContainerColor = accentColor,
+                    todayContentColor = accentColor,
+                    todayDateBorderColor = accentColor,
+                    dividerColor = accentColor.copy(0.2f)
+                )
+            )
+        }
+    }
+}
+
+// ─── 3D Modern Time Picker Button ─────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NeetTimePickerButton(
+    selectedTime: String,
+    onTimeSelected: (String) -> Unit,
+    accentColor: Color = NeonCyan,
+    label: String = "Select Time",
+    modifier: Modifier = Modifier
+) {
+    var showPicker by remember { mutableStateOf(false) }
+
+    val initHour = remember(selectedTime) {
+        try {
+            if (selectedTime.isNotBlank()) {
+                val sdf = SimpleDateFormat("hh:mm a", Locale.getDefault())
+                val cal = Calendar.getInstance()
+                cal.time = sdf.parse(selectedTime) ?: Date()
+                cal.get(Calendar.HOUR_OF_DAY)
+            } else Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        } catch (e: Exception) { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
+    }
+    val initMin = remember(selectedTime) {
+        try {
+            if (selectedTime.isNotBlank()) {
+                val sdf = SimpleDateFormat("hh:mm a", Locale.getDefault())
+                val cal = Calendar.getInstance()
+                cal.time = sdf.parse(selectedTime) ?: Date()
+                cal.get(Calendar.MINUTE)
+            } else Calendar.getInstance().get(Calendar.MINUTE)
+        } catch (e: Exception) { Calendar.getInstance().get(Calendar.MINUTE) }
+    }
+
+    val timePickerState = rememberTimePickerState(initialHour = initHour, initialMinute = initMin, is24Hour = false)
+
+    val infiniteTransition = rememberInfiniteTransition(label = "timebtn_$label")
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.20f, targetValue = 0.50f,
+        animationSpec = infiniteRepeatable(tween(2500, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "timebtn_glow"
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp), modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(Icons.Default.AccessTime, null, tint = accentColor.copy(0.8f), modifier = Modifier.size(14.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, color = accentColor.copy(0.9f), fontWeight = FontWeight.SemiBold)
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(10.dp, RoundedCornerShape(16.dp), spotColor = accentColor.copy(glowAlpha * 0.7f))
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    Brush.linearGradient(listOf(accentColor.copy(0.12f), Color(0xFF080F1F), accentColor.copy(0.06f)))
+                )
+                .border(
+                    1.5.dp,
+                    Brush.linearGradient(listOf(accentColor.copy(glowAlpha + 0.1f), accentColor.copy(0.15f), accentColor.copy(glowAlpha * 0.6f))),
+                    RoundedCornerShape(16.dp)
+                )
+                .clickable { showPicker = true }
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(
+                    modifier = Modifier.size(38.dp)
+                        .shadow(8.dp, RoundedCornerShape(12.dp), spotColor = accentColor.copy(0.5f))
+                        .background(
+                            Brush.radialGradient(listOf(accentColor.copy(0.28f), accentColor.copy(0.07f))),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .border(1.dp, accentColor.copy(0.55f), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.AccessTime, null, tint = accentColor, modifier = Modifier.size(20.dp))
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    if (selectedTime.isNotBlank()) {
+                        Text(selectedTime, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.ExtraBold)
+                    } else {
+                        Text("Tap to pick time", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.35f))
+                    }
+                }
+                Icon(Icons.Default.KeyboardArrowDown, null, tint = accentColor.copy(0.7f), modifier = Modifier.size(16.dp))
+            }
+        }
+    }
+
+    if (showPicker) {
+        Dialog(onDismissRequest = { showPicker = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            val dlgGlow by rememberInfiniteTransition(label = "dlg_time").animateFloat(
+                initialValue = 0.7f, targetValue = 1.2f,
+                animationSpec = infiniteRepeatable(tween(2000, easing = EaseInOutSine), RepeatMode.Reverse), label = "dlg_glow"
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .shadow(32.dp, RoundedCornerShape(30.dp), spotColor = accentColor.copy(0.45f))
+                    .clip(RoundedCornerShape(30.dp))
+                    .background(Brush.linearGradient(listOf(Color(0xFF0C1A32), Color(0xFF060C1A), Color(0xFF0A1526))))
+                    .border(1.5.dp, Brush.linearGradient(listOf(accentColor.copy(0.8f), accentColor.copy(0.2f), accentColor.copy(0.6f))), RoundedCornerShape(30.dp))
+                    .padding(24.dp)
+            ) {
+                Box(modifier = Modifier.size(150.dp).align(Alignment.TopStart).offset((-30).dp, (-30).dp)
+                    .background(Brush.radialGradient(listOf(accentColor.copy(0.12f * dlgGlow), Color.Transparent)), CircleShape))
+                Column(verticalArrangement = Arrangement.spacedBy(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(modifier = Modifier.size(40.dp).background(accentColor.copy(0.18f), RoundedCornerShape(12.dp)).border(1.dp, accentColor.copy(0.5f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.AccessTime, null, tint = accentColor, modifier = Modifier.size(22.dp))
+                        }
+                        Text(label, style = MaterialTheme.typography.headlineLarge, color = Color.White, fontWeight = FontWeight.ExtraBold)
+                    }
+                    NeonDivider(accentColor.copy(0.4f))
+                    TimePicker(
+                        state = timePickerState,
+                        colors = TimePickerDefaults.colors(
+                            clockDialColor = accentColor.copy(0.12f),
+                            clockDialSelectedContentColor = Color.Black,
+                            clockDialUnselectedContentColor = Color.White,
+                            selectorColor = accentColor,
+                            containerColor = Color.Transparent,
+                            periodSelectorBorderColor = accentColor.copy(0.5f),
+                            clockDialSelectorHandleContainerColor = accentColor,
+                            timeSelectorSelectedContainerColor = accentColor.copy(0.3f),
+                            timeSelectorUnselectedContainerColor = Color.White.copy(0.06f),
+                            timeSelectorSelectedContentColor = accentColor,
+                            timeSelectorUnselectedContentColor = Color.White.copy(0.7f),
+                        )
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(
+                            onClick = { showPicker = false },
+                            modifier = Modifier.weight(1f),
+                            border = BorderStroke(1.dp, Color.White.copy(0.2f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                        ) { Text("Cancel") }
+                        Button(
+                            onClick = {
+                                val h = timePickerState.hour
+                                val m = timePickerState.minute
+                                val amPm = if (h < 12) "AM" else "PM"
+                                val displayH = if (h == 0) 12 else if (h > 12) h - 12 else h
+                                onTimeSelected("${displayH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} $amPm")
+                                showPicker = false
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = accentColor.copy(0.2f)),
+                            border = BorderStroke(1.dp, accentColor.copy(0.6f))
+                        ) { Text("Set Time", color = accentColor, fontWeight = FontWeight.ExtraBold) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── 3D Time Range Picker (Start → End) ───────────────────────────────────────
+
+@Composable
+fun NeetTimeRangePickerButton(
+    value: String,
+    onValueChange: (String) -> Unit,
+    accentColor: Color = NeonCyan,
+    label: String = "Time Range",
+    modifier: Modifier = Modifier
+) {
+    val parts = remember(value) {
+        if (value.contains("–") || value.contains(" - ")) {
+            value.split(Regex("\\s*[–-]\\s*"), limit = 2)
+        } else listOf(value, "")
+    }
+    var startTime by remember(value) { mutableStateOf(parts.getOrElse(0) { "" }.trim()) }
+    var endTime   by remember(value) { mutableStateOf(parts.getOrElse(1) { "" }.trim()) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp), modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(Icons.Default.Schedule, null, tint = accentColor.copy(0.8f), modifier = Modifier.size(14.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, color = accentColor.copy(0.9f), fontWeight = FontWeight.SemiBold)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            NeetTimePickerButton(
+                selectedTime = startTime,
+                onTimeSelected = {
+                    startTime = it
+                    onValueChange(if (endTime.isNotBlank()) "$it – $endTime" else it)
+                },
+                accentColor = accentColor,
+                label = "Start",
+                modifier = Modifier.weight(1f)
+            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("→", color = accentColor, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+            }
+            NeetTimePickerButton(
+                selectedTime = endTime,
+                onTimeSelected = {
+                    endTime = it
+                    onValueChange(if (startTime.isNotBlank()) "$startTime – $it" else it)
+                },
+                accentColor = accentColor,
+                label = "End",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        if (startTime.isNotBlank() && endTime.isNotBlank()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(accentColor.copy(0.08f), RoundedCornerShape(10.dp))
+                    .border(0.5.dp, accentColor.copy(0.3f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "$startTime – $endTime",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = accentColor,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+        }
+    }
+}
+
 // ─── Comprehensive Rich Text Toolbar ──────────────────────────────────────────
 
 @Composable
@@ -120,7 +517,6 @@ fun RichTextToolbar(accentColor: Color = NeonCyan, onInsert: (String) -> Unit) {
     var showSpecial by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        // Row 1 — Text formatting
         LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             val tools = listOf(
                 "𝗕" to "**",          "𝐼" to "_",           "U̲" to "__",         "S̶" to "~~",
@@ -132,7 +528,6 @@ fun RichTextToolbar(accentColor: Color = NeonCyan, onInsert: (String) -> Unit) {
             }
         }
 
-        // Row 2 — Lists and bullets
         LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             val bullets = listOf(
                 "●" to "\n● ",   "▸" to "\n▸ ",   "▪" to "\n▪ ",   "○" to "\n○ ",
@@ -144,7 +539,6 @@ fun RichTextToolbar(accentColor: Color = NeonCyan, onInsert: (String) -> Unit) {
             }
         }
 
-        // Row 3 — Quick inserts
         LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             val quick = listOf(
                 "∴" to "∴ ", "∵" to "∵ ", "⟹" to "⟹ ", "⟺" to "⟺ ",
@@ -157,19 +551,12 @@ fun RichTextToolbar(accentColor: Color = NeonCyan, onInsert: (String) -> Unit) {
             }
         }
 
-        // Row 4 — Highlight / special
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            // Emoji toggle
             ToolButton(label = "😊", color = NeonGold) { showEmojiPicker = !showEmojiPicker }
-            // Highlight toggle
             ToolButton(label = "🖊", color = NeonGold) { showHighlights = !showHighlights }
-            // Special symbols
             ToolButton(label = "Σ", color = NeonPurple) { showSpecial = !showSpecial }
-            // Divider line
             ToolButton(label = "─", color = accentColor) { onInsert("\n─────────────────\n") }
-            // Table
             ToolButton(label = "⊞", color = accentColor) { onInsert("\n| Col 1 | Col 2 | Col 3 |\n|-------|-------|-------|\n| Data  | Data  | Data  |\n") }
-            // New line
             ToolButton(label = "↵", color = accentColor) { onInsert("\n") }
         }
 
@@ -194,7 +581,7 @@ fun RichTextToolbar(accentColor: Color = NeonCyan, onInsert: (String) -> Unit) {
                     HighlightBlue   to "Blue",
                     HighlightPink   to "Pink",
                     HighlightOrange to "Orange"
-                ).forEach { (color, name) ->
+                ).forEach { (color, _) ->
                     Box(
                         modifier = Modifier.size(30.dp)
                             .background(color, CircleShape)
@@ -455,7 +842,12 @@ fun CompletionDateDialog(dates: List<CompletionDate>, onSave: (List<CompletionDa
                 if (list.isEmpty()) { item { Text("No dates added yet", color = Color.White.copy(0.3f), fontSize = 12.sp, modifier = Modifier.padding(8.dp)) } }
             }
             NeonDivider(NeonGreen.copy(0.5f))
-            DialogTextField(value = newDate, onValueChange = { newDate = it }, label = "Date (DD/MM/YYYY)", icon = Icons.Default.CalendarToday, accentColor = NeonGreen)
+            NeetDatePickerButton(
+                selectedDate = newDate,
+                onDateSelected = { newDate = it },
+                accentColor = NeonGreen,
+                label = "Pick Completion Date"
+            )
             DialogTextField(value = newNote, onValueChange = { newNote = it }, label = "Note (optional)", icon = Icons.Default.Notes, accentColor = NeonGreen)
             Button(onClick = { if (newDate.isNotBlank()) { list = list.also { it.add(CompletionDate(newDate, newNote)) }; newDate = ""; newNote = "" } },
                 modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = NeonGreen.copy(0.15f)), border = BorderStroke(1.dp, NeonGreen.copy(0.5f))) {
@@ -525,14 +917,19 @@ fun InfoDialog(info: String, onSave: (String) -> Unit, onDismiss: () -> Unit, ac
     SpecificationDialog("Info / Details", info, onSave, onDismiss, accentColor)
 }
 
-// ─── Prefix Date Dialog ───────────────────────────────────────────────────────
+// ─── Prefix Date Dialog (3D Calendar Picker) ──────────────────────────────────
 
 @Composable
 fun PrefixDateDialog(currentDate: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
     var date by remember { mutableStateOf(currentDate) }
     NEETDialog(title = "Set Date / Schedule", icon = Icons.Default.Schedule, accentColor = NeonGold, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            DialogTextField(value = date, onValueChange = { date = it }, label = "Date (DD/MM/YYYY)", icon = Icons.Default.CalendarToday, accentColor = NeonGold)
+            NeetDatePickerButton(
+                selectedDate = date,
+                onDateSelected = { date = it },
+                accentColor = NeonGold,
+                label = "Schedule Date"
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
                 Button(onClick = { onSave(date); onDismiss() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonGold.copy(0.2f)), border = BorderStroke(1.dp, NeonGold.copy(0.6f))) {
