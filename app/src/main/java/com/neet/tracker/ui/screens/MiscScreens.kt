@@ -267,6 +267,13 @@ fun DayWasteScreen(navController: NavController, vm: DayWasteViewModel = hiltVie
     var showWastePercent by remember { mutableStateOf<DayWaste?>(null) }
     var showReason by remember { mutableStateOf<DayWaste?>(null) }
     var showTip by remember { mutableStateOf<DayWaste?>(null) }
+    var uploadSourceTarget by remember { mutableStateOf<DayWaste?>(null) }
+
+    val sourceLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { u -> uploadSourceTarget?.let { d -> vm.save(d.copy(sourceUri = u.toString())) } }
+        uploadSourceTarget = null
+    }
+
     val filtered = entries.filter { searchQuery.isBlank() || it.date.contains(searchQuery, true) }
 
     SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = NeonRed) }) {
@@ -292,6 +299,10 @@ fun DayWasteScreen(navController: NavController, vm: DayWasteViewModel = hiltVie
                                         CardIconButton(Icons.Default.Percent, NeonRed.copy(0.7f)) { showWastePercent = d }
                                         CardIconButton(Icons.Default.Warning, NeonOrange.copy(0.7f)) { showReason = d }
                                         CardIconButton(Icons.Default.Lightbulb, NeonGold.copy(0.7f)) { showTip = d }
+                                        CardIconButton(
+                                            if (d.sourceUri.isNotBlank()) Icons.Default.AttachFile else Icons.Default.UploadFile,
+                                            if (d.sourceUri.isNotBlank()) NeonCyan.copy(0.8f) else NeonCyan.copy(0.4f)
+                                        ) { uploadSourceTarget = d; sourceLauncher.launch("*/*") }
                                         CardIconButton(Icons.Default.Delete, NeonRed.copy(0.4f)) { vm.delete(d) }
                                     }
                                 }

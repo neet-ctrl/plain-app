@@ -82,6 +82,17 @@ fun PWBatchTestsScreen(navController: NavController, batchId: String, batchName:
     var showTags by remember { mutableStateOf<PWTest?>(null) }
     var showMarks by remember { mutableStateOf<PWTest?>(null) }
     var showUrl by remember { mutableStateOf<PWTest?>(null) }
+    var uploadQPTarget by remember { mutableStateOf<PWTest?>(null) }
+    var uploadSolTarget by remember { mutableStateOf<PWTest?>(null) }
+
+    val qpLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { u -> uploadQPTarget?.let { t -> vm.saveTest(t.copy(questionPaperUri = u.toString())) } }
+        uploadQPTarget = null
+    }
+    val solLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { u -> uploadSolTarget?.let { t -> vm.saveTest(t.copy(solutionUri = u.toString())) } }
+        uploadSolTarget = null
+    }
 
     val allTags = tests.flatMap { it.tags }.distinct()
     val filtered = tests.filter {
@@ -140,6 +151,14 @@ fun PWBatchTestsScreen(navController: NavController, batchId: String, batchName:
                                         CardIconButton(Icons.Default.LocalOffer, NeonPurple.copy(0.7f)) { showTags = t }
                                         CardIconButton(Icons.Default.StickyNote2, NeonGold.copy(0.6f)) { showRemark = t }
                                         CardIconButton(Icons.Default.Link, NeonCyan.copy(0.5f)) { showUrl = t }
+                                        CardIconButton(
+                                            if (t.questionPaperUri.isNotBlank()) Icons.Default.PictureAsPdf else Icons.Default.UploadFile,
+                                            if (t.questionPaperUri.isNotBlank()) NeonGreen.copy(0.8f) else NeonCyan.copy(0.4f)
+                                        ) { uploadQPTarget = t; qpLauncher.launch("*/*") }
+                                        CardIconButton(
+                                            if (t.solutionUri.isNotBlank()) Icons.Default.FilePresent else Icons.Default.NoteAdd,
+                                            if (t.solutionUri.isNotBlank()) NeonOrange.copy(0.8f) else NeonCyan.copy(0.4f)
+                                        ) { uploadSolTarget = t; solLauncher.launch("*/*") }
                                         CardIconButton(Icons.Default.Delete, NeonRed.copy(0.4f)) { vm.deleteTest(t) }
                                     }
                                 }

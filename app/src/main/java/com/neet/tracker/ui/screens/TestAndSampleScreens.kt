@@ -51,6 +51,17 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
     var showMarks by remember { mutableStateOf<TestPaper?>(null) }
     var showUrl by remember { mutableStateOf<TestPaper?>(null) }
     var editTarget by remember { mutableStateOf<TestPaper?>(null) }
+    var uploadQPTarget by remember { mutableStateOf<TestPaper?>(null) }
+    var uploadSolTarget by remember { mutableStateOf<TestPaper?>(null) }
+
+    val qpLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { u -> uploadQPTarget?.let { t -> vm.save(t.copy(questionPaperUri = u.toString())) } }
+        uploadQPTarget = null
+    }
+    val solLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { u -> uploadSolTarget?.let { t -> vm.save(t.copy(solutionUri = u.toString())) } }
+        uploadSolTarget = null
+    }
 
     val allTags = tests.flatMap { it.tags }.distinct()
     val filtered = tests.filter {
@@ -116,6 +127,14 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
                                         CardIconButton(Icons.Default.LocalOffer, NeonPurple.copy(0.7f)) { showTags = t }
                                         CardIconButton(Icons.Default.StickyNote2, NeonGold.copy(0.6f)) { showRemark = t }
                                         CardIconButton(Icons.Default.Link, NeonCyan.copy(0.5f)) { showUrl = t }
+                                        CardIconButton(
+                                            if (t.questionPaperUri.isNotBlank()) Icons.Default.PictureAsPdf else Icons.Default.UploadFile,
+                                            if (t.questionPaperUri.isNotBlank()) NeonGreen.copy(0.8f) else NeonCyan.copy(0.4f)
+                                        ) { uploadQPTarget = t; qpLauncher.launch("*/*") }
+                                        CardIconButton(
+                                            if (t.solutionUri.isNotBlank()) Icons.Default.FilePresent else Icons.Default.NoteAdd,
+                                            if (t.solutionUri.isNotBlank()) NeonOrange.copy(0.8f) else NeonCyan.copy(0.4f)
+                                        ) { uploadSolTarget = t; solLauncher.launch("*/*") }
                                     }
                                 }
                             }
@@ -150,6 +169,18 @@ fun SamplePapersScreen(navController: NavController, vm: SamplePaperViewModel = 
     var showRemark by remember { mutableStateOf<SamplePaper?>(null) }
     var showMarks by remember { mutableStateOf<SamplePaper?>(null) }
     var showPrefixDate by remember { mutableStateOf<SamplePaper?>(null) }
+    var showUrl by remember { mutableStateOf<SamplePaper?>(null) }
+    var uploadQPTarget by remember { mutableStateOf<SamplePaper?>(null) }
+    var uploadSolTarget by remember { mutableStateOf<SamplePaper?>(null) }
+
+    val qpLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { u -> uploadQPTarget?.let { p -> vm.save(p.copy(questionPaperUri = u.toString())) } }
+        uploadQPTarget = null
+    }
+    val solLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { u -> uploadSolTarget?.let { p -> vm.save(p.copy(solutionUri = u.toString())) } }
+        uploadSolTarget = null
+    }
 
     val allTags = papers.flatMap { it.tags }.distinct()
     val filtered = papers.filter {
@@ -187,6 +218,15 @@ fun SamplePapersScreen(navController: NavController, vm: SamplePaperViewModel = 
                                 CardIconButton(Icons.Default.Star, NeonGold.copy(0.7f)) { showMarks = p }
                                 CardIconButton(Icons.Default.LocalOffer, NeonPurple.copy(0.7f)) { showTags = p }
                                 CardIconButton(Icons.Default.StickyNote2, NeonGold.copy(0.6f)) { showRemark = p }
+                                CardIconButton(Icons.Default.Link, NeonCyan.copy(0.5f)) { showUrl = p }
+                                CardIconButton(
+                                    if (p.questionPaperUri.isNotBlank()) Icons.Default.PictureAsPdf else Icons.Default.UploadFile,
+                                    if (p.questionPaperUri.isNotBlank()) NeonGreen.copy(0.8f) else NeonCyan.copy(0.4f)
+                                ) { uploadQPTarget = p; qpLauncher.launch("*/*") }
+                                CardIconButton(
+                                    if (p.solutionUri.isNotBlank()) Icons.Default.FilePresent else Icons.Default.NoteAdd,
+                                    if (p.solutionUri.isNotBlank()) NeonOrange.copy(0.8f) else NeonCyan.copy(0.4f)
+                                ) { uploadSolTarget = p; solLauncher.launch("*/*") }
                                 CardIconButton(Icons.Default.Delete, NeonRed.copy(0.4f)) { vm.delete(p) }
                             }
                         )
@@ -202,4 +242,5 @@ fun SamplePapersScreen(navController: NavController, vm: SamplePaperViewModel = 
     showMarks?.let { p -> MarksDialog(p.marksObtained, onSave = { vm.save(p.copy(marksObtained = it)); showMarks = null }, onDismiss = { showMarks = null }) }
     showTags?.let { p -> TagDialog(p.tags, onSave = { vm.save(p.copy(tags = it)); showTags = null }, onDismiss = { showTags = null }) }
     showRemark?.let { p -> RemarkDialog(p.remark, onSave = { vm.save(p.copy(remark = it)); showRemark = null }, onDismiss = { showRemark = null }) }
+    showUrl?.let { p -> URLDialog(p.url, onSave = { vm.save(p.copy(url = it)); showUrl = null }, onDismiss = { showUrl = null }) }
 }
