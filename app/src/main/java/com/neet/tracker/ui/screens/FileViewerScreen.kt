@@ -309,7 +309,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                         }
                         // Share
                         IconButton(onClick = {
-                            val mime = if (isPdf) "application/pdf" else if (isImage) "image/*" else "*/*"
+                            val mime = if (tryAsPdf) "application/pdf" else if (isImage) "image/*" else "*/*"
                             val intent = Intent(Intent.ACTION_SEND).apply {
                                 type = mime; putExtra(Intent.EXTRA_STREAM, uri)
                                 flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -326,8 +326,11 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                             try { context.startActivity(Intent.createChooser(intent, "Open with")) } catch (_: Exception) {}
                         }) { Icon(Icons.Default.OpenInNew, null, tint = NeonCyan, modifier = Modifier.size(20.dp)) }
                         // Draw / annotate on PDF
+                        // NOTE: animateFloatAsState must be called unconditionally (Compose rule).
+                        val annotGlow by animateFloatAsState(
+                            if (annotationMode) 1f else 0f, tween(250), label = "annot"
+                        )
                         if (pdfPages.isNotEmpty()) {
-                            val annotGlow by animateFloatAsState(if (annotationMode) 1f else 0f, tween(250), label = "annot")
                             IconButton(onClick = {
                                 annotationMode = !annotationMode
                                 if (annotationMode) {
@@ -338,12 +341,11 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                                 Box(
                                     modifier = Modifier.size(34.dp)
                                         .background(NeonOrange.copy(0.22f * annotGlow), RoundedCornerShape(10.dp))
-                                        .border(BorderStroke((annotGlow).dp, NeonOrange.copy(0.6f * annotGlow)), RoundedCornerShape(10.dp)),
+                                        .border(BorderStroke(maxOf(0.5f, annotGlow).dp, NeonOrange.copy(0.15f + 0.5f * annotGlow)), RoundedCornerShape(10.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        Icons.Default.Edit,
-                                        null,
+                                        Icons.Default.Edit, null,
                                         tint = if (annotationMode) NeonOrange else Color.White.copy(0.6f),
                                         modifier = Modifier.size(20.dp)
                                     )
@@ -984,13 +986,16 @@ private fun PdfAnnotationOverlay(
     val liveStrokes = remember { mutableStateListOf<AnnotationStroke>() }
     SideEffect { liveStrokes.clear(); liveStrokes.addAll(strokes) }
 
+    // currentPoints and eraserPos are Compose state so Canvas reads them and redraws on change.
+    // eraseStarted is a plain coroutine-local boolean — no recomposition needed for it.
     var currentPoints by remember { mutableStateOf<List<Pair<Float, Float>>>(emptyList()) }
     var eraserPos     by remember { mutableStateOf<Pair<Float, Float>?>(null) }
-    var eraseStarted  by remember { mutableStateOf(false) }
 
     Canvas(
         modifier = modifier
             .pointerInput(tool, colorArgb, strokeWidthDp) {
+                // Local flag — persists across the three gesture callbacks in one drag gesture.
+                var eraseStarted = false
                 detectDragGestures(
                     onDragStart = { offset ->
                         val nx = (offset.x / imageWidthPx).coerceIn(0f, 1f)
