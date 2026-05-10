@@ -1162,6 +1162,8 @@ private fun UvPdfPage(
                 onStrokeCommit      = onStrokeCommit,
                 onEraseGestureStart = onEraseGestureStart,
                 onStrokesErase      = onStrokesErase,
+                onPrev              = onPrev,
+                onNext              = onNext,
             )
         }
 
@@ -1240,24 +1242,47 @@ private fun UvPdfPage(
             }
         } else {
             // Annotation mode indicator badge
-            Box(
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp)
-                    .background(NeonOrange.copy(0.18f), RoundedCornerShape(14.dp))
-                    .border(0.5.dp, NeonOrange.copy(0.5f), RoundedCornerShape(14.dp))
-                    .padding(horizontal = 14.dp, vertical = 6.dp)
+            Column(
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Icon(Icons.Default.Edit, null, tint = NeonOrange, modifier = Modifier.size(12.dp))
-                    Text(
-                        when (annotationTool) {
-                            AnnotationTool.PEN         -> "Pen  ·  Draw anywhere on the page"
-                            AnnotationTool.HIGHLIGHTER -> "Highlighter  ·  Swipe to highlight"
-                            AnnotationTool.ERASER      -> "Eraser  ·  Touch strokes to erase"
-                            AnnotationTool.ARROW       -> "Arrow  ·  Draw a curved labeling arrow"
-                            AnnotationTool.TEXT        -> "Text  ·  Tap to place a text label"
-                        },
-                        style = MaterialTheme.typography.labelSmall, color = NeonOrange.copy(0.9f)
-                    )
+                Box(
+                    modifier = Modifier
+                        .background(NeonOrange.copy(0.18f), RoundedCornerShape(14.dp))
+                        .border(0.5.dp, NeonOrange.copy(0.5f), RoundedCornerShape(14.dp))
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Icon(Icons.Default.Edit, null, tint = NeonOrange, modifier = Modifier.size(12.dp))
+                        Text(
+                            when (annotationTool) {
+                                AnnotationTool.PEN         -> "Pen  ·  Draw anywhere on the page"
+                                AnnotationTool.HIGHLIGHTER -> "Highlighter  ·  Swipe to highlight"
+                                AnnotationTool.ERASER      -> "Eraser  ·  Touch strokes to erase"
+                                AnnotationTool.ARROW       -> "Arrow  ·  Draw a curved labeling arrow"
+                                AnnotationTool.TEXT        -> "Text  ·  Tap to place a text label"
+                            },
+                            style = MaterialTheme.typography.labelSmall, color = NeonOrange.copy(0.9f)
+                        )
+                    }
+                }
+                // Swipe hint — only shown when zoom is OFF
+                if (!annotZoomEnabled) {
+                    Box(
+                        modifier = Modifier
+                            .background(NeonCyan.copy(0.12f), RoundedCornerShape(10.dp))
+                            .border(0.5.dp, NeonCyan.copy(0.35f), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 11.dp, vertical = 4.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Default.SwipeLeft, null, tint = NeonCyan.copy(0.7f), modifier = Modifier.size(11.dp))
+                            Text("Swipe ← → ↑ ↓ to change page",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 9.sp,
+                                color = NeonCyan.copy(0.75f))
+                        }
+                    }
                 }
             }
         }
@@ -1281,6 +1306,8 @@ private fun PdfAnnotationOverlay(
     onStrokeCommit: (AnnotationStroke) -> Unit,
     onEraseGestureStart: () -> Unit,
     onStrokesErase: (List<AnnotationStroke>) -> Unit,
+    onPrev: () -> Unit = {},
+    onNext: () -> Unit = {},
 ) {
     val density = LocalDensity.current
     val strokeWidthPx  = with(density) { strokeWidthDp.dp.toPx() }
@@ -1389,9 +1416,23 @@ private fun PdfAnnotationOverlay(
                             onTextBoxPlace(nx, ny)
                         }
                     } else {
-                        var eraseStarted = false
+                        // ── Single-touch: draw OR swipe-to-navigate ─────────────
+                        // A fast/long swipe (≥ swipeThresholdPx total displacement)
+                        // in the dominant axis navigates pages instead of drawing.
+                        // Two-finger touches are NOT handled here — detectDragGestures
+                        // only ever tracks the first pointer, so two fingers can never
+                        // accidentally create a stroke in this branch.
+                        val swipeThresholdPx = with(density) { 90.dp.toPx() }
+                        var eraseStarted   = false
+                        var totalDragX     = 0f
+                        var totalDragY     = 0f
+                        var isSwipeGesture = false
+
                         detectDragGestures(
                             onDragStart = { offset ->
+                                totalDragX     = 0f
+                                totalDragY     = 0f
+                                isSwipeGesture = false
                                 val nx = (offset.x / imageWidthPx).coerceIn(0f, 1f)
                                 val ny = (offset.y / imageHeightPx).coerceIn(0f, 1f)
                                 if (tool == AnnotationTool.ERASER) {
@@ -1401,43 +1442,77 @@ private fun PdfAnnotationOverlay(
                                     currentPoints = listOf(Pair(nx, ny))
                                 }
                             },
-                            onDrag = { change, _ ->
-                                val nx = (change.position.x / imageWidthPx).coerceIn(0f, 1f)
-                                val ny = (change.position.y / imageHeightPx).coerceIn(0f, 1f)
-                                if (tool == AnnotationTool.ERASER) {
-                                    eraserPos = Pair(nx, ny)
-                                    val hit = liveStrokes.filter { stroke ->
-                                        stroke.points.any { (px, py) ->
-                                            val dx = (px - nx) * imageWidthPx
-                                            val dy = (py - ny) * imageHeightPx
-                                            sqrt(dx * dx + dy * dy) < eraserRadiusPx
+                            onDrag = { change, dragAmount ->
+                                totalDragX += dragAmount.x
+                                totalDragY += dragAmount.y
+
+                                val absX = kotlin.math.abs(totalDragX)
+                                val absY = kotlin.math.abs(totalDragY)
+
+                                // Once a swipe is detected mid-drag, lock that state
+                                // and erase the stroke preview so nothing gets drawn.
+                                if (!isSwipeGesture &&
+                                    (absX > swipeThresholdPx || absY > swipeThresholdPx)) {
+                                    isSwipeGesture = true
+                                    currentPoints  = emptyList()   // discard preview stroke
+                                    eraserPos      = null
+                                }
+
+                                if (!isSwipeGesture) {
+                                    val nx = (change.position.x / imageWidthPx).coerceIn(0f, 1f)
+                                    val ny = (change.position.y / imageHeightPx).coerceIn(0f, 1f)
+                                    if (tool == AnnotationTool.ERASER) {
+                                        eraserPos = Pair(nx, ny)
+                                        val hit = liveStrokes.filter { stroke ->
+                                            stroke.points.any { (px, py) ->
+                                                val dx = (px - nx) * imageWidthPx
+                                                val dy = (py - ny) * imageHeightPx
+                                                sqrt(dx * dx + dy * dy) < eraserRadiusPx
+                                            }
                                         }
+                                        if (hit.isNotEmpty()) {
+                                            if (!eraseStarted) { onEraseGestureStart(); eraseStarted = true }
+                                            onStrokesErase(hit)
+                                        }
+                                    } else {
+                                        currentPoints = currentPoints + Pair(nx, ny)
                                     }
-                                    if (hit.isNotEmpty()) {
-                                        if (!eraseStarted) { onEraseGestureStart(); eraseStarted = true }
-                                        onStrokesErase(hit)
-                                    }
-                                } else {
-                                    currentPoints = currentPoints + Pair(nx, ny)
                                 }
                             },
                             onDragEnd = {
-                                if (tool != AnnotationTool.ERASER && currentPoints.size >= 2) {
+                                if (isSwipeGesture) {
+                                    // Navigate pages based on dominant swipe axis
+                                    val absX = kotlin.math.abs(totalDragX)
+                                    val absY = kotlin.math.abs(totalDragY)
+                                    if (absX >= absY) {
+                                        if (totalDragX < 0) onNext() else onPrev()
+                                    } else {
+                                        if (totalDragY < 0) onNext() else onPrev()
+                                    }
+                                } else if (tool != AnnotationTool.ERASER && currentPoints.size >= 2) {
                                     val isHighlight = tool == AnnotationTool.HIGHLIGHTER
                                     val finalColor  = Color(colorArgb).copy(alpha = if (isHighlight) 0.38f else 1f)
                                     onStrokeCommit(AnnotationStroke(
                                         points    = currentPoints,
                                         colorArgb = finalColor.toArgb(),
                                         widthDp   = strokeWidthDp * if (isHighlight) 3.5f else 1f,
-                                        tool      = when (tool) { AnnotationTool.ARROW -> "arrow"; AnnotationTool.HIGHLIGHTER -> "highlight"; else -> "pen" }
+                                        tool      = when (tool) {
+                                            AnnotationTool.ARROW       -> "arrow"
+                                            AnnotationTool.HIGHLIGHTER -> "highlight"
+                                            else                       -> "pen"
+                                        }
                                     ))
                                 }
-                                currentPoints = emptyList()
-                                eraserPos     = null
-                                eraseStarted  = false
+                                currentPoints  = emptyList()
+                                eraserPos      = null
+                                eraseStarted   = false
+                                isSwipeGesture = false
                             },
                             onDragCancel = {
-                                currentPoints = emptyList(); eraserPos = null; eraseStarted = false
+                                currentPoints  = emptyList()
+                                eraserPos      = null
+                                eraseStarted   = false
+                                isSwipeGesture = false
                             }
                         )
                     }
