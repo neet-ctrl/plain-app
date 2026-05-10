@@ -26,9 +26,10 @@ import com.neet.tracker.data.models.*
         SubjectShortNote::class,
         LackPoint::class,
         NEETSyllabus::class,
+        NeetSequencePdf::class,
         Reminder::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

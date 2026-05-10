@@ -189,6 +189,12 @@ interface NEETDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveSyllabus(s: NEETSyllabus)
 
+    // ── Neet Sequence PDF ─────────────────────────────────────────────────────
+    @Query("SELECT * FROM neet_sequence_pdf WHERE id='neet_sequence_pdf' LIMIT 1")
+    fun getNeetSequencePdf(): Flow<NeetSequencePdf?>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveNeetSequencePdf(p: NeetSequencePdf)
+
     // ── Reminders ─────────────────────────────────────────────────────────────
     @Query("SELECT * FROM reminders ORDER BY triggerAtMillis ASC")
     fun getReminders(): Flow<List<Reminder>>

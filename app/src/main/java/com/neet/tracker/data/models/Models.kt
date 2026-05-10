@@ -411,6 +411,13 @@ data class NEETSyllabus(
     val uploadedAt: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "neet_sequence_pdf")
+data class NeetSequencePdf(
+    @PrimaryKey val id: String = "neet_sequence_pdf",
+    val fileUri: String = "",
+    val uploadedAt: Long = System.currentTimeMillis()
+)
+
 // ─── Reminder Entity ──────────────────────────────────────────────────────────
 
 @Entity(tableName = "reminders")

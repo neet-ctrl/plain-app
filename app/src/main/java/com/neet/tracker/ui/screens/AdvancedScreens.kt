@@ -122,11 +122,13 @@ fun CalendarSection(label: String, color: Color, items: List<String>) {
 @Composable
 fun NeetSequenceScreen(navController: NavController, vm: NeetSequenceViewModel = hiltViewModel()) {
     val sequence  by vm.sequence.collectAsState()
+    val sequencePdf by vm.sequencePdf.collectAsState()
     var showAdd   by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var showStatus  by remember { mutableStateOf<NeetSequence?>(null) }
     var showRemark  by remember { mutableStateOf<NeetSequence?>(null) }
     var showTags    by remember { mutableStateOf<NeetSequence?>(null) }
+    var showPdfMenu by remember { mutableStateOf(false) }
 
     val filtered = sequence.filter { searchQuery.isBlank() || it.chapterName.contains(searchQuery, true) }
 
@@ -135,9 +137,149 @@ fun NeetSequenceScreen(navController: NavController, vm: NeetSequenceViewModel =
     val completedCount = filtered.count { it.status == Status.COMPLETED }
     val expectedCount  = filtered.count { it.status == Status.EXPECTED }
 
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val hasPdf = sequencePdf?.fileUri?.isNotBlank() == true
+
+    val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { u ->
+            scope.launch {
+                val localPath = com.neet.tracker.util.copyUriToAppFiles(context, u)
+                vm.saveSequencePdf(localPath ?: u.toString())
+            }
+        }
+    }
+
     SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = NeonPurple) }) {
         Column(modifier = Modifier.fillMaxSize()) {
-            NEETTopBar(title = "NEET Sequence", breadcrumb = "Home", onBack = { navController.popBackStack() })
+            NEETTopBar(
+                title = "NEET Sequence",
+                breadcrumb = "Home",
+                onBack = { navController.popBackStack() },
+                actions = {
+                    Box {
+                        val infiniteTransition = rememberInfiniteTransition(label = "pdf_btn")
+                        val glowAlpha by infiniteTransition.animateFloat(
+                            initialValue = if (hasPdf) 0.55f else 0.25f,
+                            targetValue  = if (hasPdf) 0.90f else 0.50f,
+                            animationSpec = infiniteRepeatable(tween(1400, easing = EaseInOutSine), RepeatMode.Reverse),
+                            label = "pdf_glow"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .padding(end = 12.dp)
+                                .size(40.dp)
+                                .shadow(
+                                    if (hasPdf) 12.dp else 6.dp,
+                                    RoundedCornerShape(13.dp),
+                                    spotColor = NeonPurple.copy(if (hasPdf) 0.6f else 0.3f)
+                                )
+                                .background(
+                                    Brush.linearGradient(
+                                        if (hasPdf)
+                                            listOf(NeonPurple.copy(0.35f), NeonPurple.copy(0.12f))
+                                        else
+                                            listOf(NeonPurple.copy(0.16f), NeonPurple.copy(0.06f))
+                                    ),
+                                    RoundedCornerShape(13.dp)
+                                )
+                                .border(
+                                    if (hasPdf) 1.dp else 0.5.dp,
+                                    Brush.linearGradient(
+                                        if (hasPdf)
+                                            listOf(NeonPurple.copy(glowAlpha), Color.White.copy(0.30f), NeonPurple.copy(glowAlpha * 0.6f))
+                                        else
+                                            listOf(Color.White.copy(0.25f), NeonPurple.copy(0.40f))
+                                    ),
+                                    RoundedCornerShape(13.dp)
+                                )
+                                .clickable { showPdfMenu = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                if (hasPdf) Icons.Default.PictureAsPdf else Icons.Default.UploadFile,
+                                null,
+                                tint = NeonPurple.copy(if (hasPdf) glowAlpha else 0.85f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = showPdfMenu,
+                            onDismissRequest = { showPdfMenu = false },
+                            modifier = Modifier
+                                .background(
+                                    Brush.linearGradient(listOf(Color(0xFF0D1830), Color(0xFF060E20))),
+                                    RoundedCornerShape(14.dp)
+                                )
+                                .border(0.5.dp, NeonPurple.copy(0.35f), RoundedCornerShape(14.dp))
+                        ) {
+                            if (hasPdf) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            Box(
+                                                modifier = Modifier.size(30.dp)
+                                                    .background(NeonPurple.copy(0.15f), RoundedCornerShape(9.dp))
+                                                    .border(0.5.dp, NeonPurple.copy(0.45f), RoundedCornerShape(9.dp)),
+                                                contentAlignment = Alignment.Center
+                                            ) { Icon(Icons.Default.PictureAsPdf, null, tint = NeonPurple, modifier = Modifier.size(15.dp)) }
+                                            Text("View PDF", color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                        }
+                                    },
+                                    onClick = {
+                                        showPdfMenu = false
+                                        navController.navigate(fileViewerRoute(sequencePdf!!.fileUri, "NEET Sequence"))
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            Box(
+                                                modifier = Modifier.size(30.dp)
+                                                    .background(NeonCyan.copy(0.12f), RoundedCornerShape(9.dp))
+                                                    .border(0.5.dp, NeonCyan.copy(0.4f), RoundedCornerShape(9.dp)),
+                                                contentAlignment = Alignment.Center
+                                            ) { Icon(Icons.Default.UploadFile, null, tint = NeonCyan, modifier = Modifier.size(15.dp)) }
+                                            Text("Replace PDF", color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                        }
+                                    },
+                                    onClick = { showPdfMenu = false; pdfLauncher.launch(arrayOf("application/pdf")) }
+                                )
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            Box(
+                                                modifier = Modifier.size(30.dp)
+                                                    .background(NeonRed.copy(0.12f), RoundedCornerShape(9.dp))
+                                                    .border(0.5.dp, NeonRed.copy(0.4f), RoundedCornerShape(9.dp)),
+                                                contentAlignment = Alignment.Center
+                                            ) { Icon(Icons.Default.DeleteOutline, null, tint = NeonRed, modifier = Modifier.size(15.dp)) }
+                                            Text("Remove PDF", color = NeonRed.copy(0.85f), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                        }
+                                    },
+                                    onClick = { showPdfMenu = false; vm.clearSequencePdf() }
+                                )
+                            } else {
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            Box(
+                                                modifier = Modifier.size(30.dp)
+                                                    .background(NeonPurple.copy(0.15f), RoundedCornerShape(9.dp))
+                                                    .border(0.5.dp, NeonPurple.copy(0.45f), RoundedCornerShape(9.dp)),
+                                                contentAlignment = Alignment.Center
+                                            ) { Icon(Icons.Default.UploadFile, null, tint = NeonPurple, modifier = Modifier.size(15.dp)) }
+                                            Text("Upload Sequence PDF", color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                        }
+                                    },
+                                    onClick = { showPdfMenu = false; pdfLauncher.launch(arrayOf("application/pdf")) }
+                                )
+                            }
+                        }
+                    }
+                }
+            )
 
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                 NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search chapters...")

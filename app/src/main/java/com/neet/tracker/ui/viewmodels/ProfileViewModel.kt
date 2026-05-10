@@ -140,9 +140,12 @@ class DayWasteViewModel @Inject constructor(private val dao: NEETDao) : ViewMode
 @HiltViewModel
 class NeetSequenceViewModel @Inject constructor(private val dao: NEETDao) : ViewModel() {
     val sequence = dao.getNeetSequence().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val sequencePdf = dao.getNeetSequencePdf().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     fun save(s: NeetSequence) = viewModelScope.launch { dao.saveNeetSequence(s) }
     fun delete(s: NeetSequence) = viewModelScope.launch { dao.deleteNeetSequence(s) }
     fun updateStatus(id: String, status: Status) = viewModelScope.launch { dao.updateNeetSequenceStatus(id, status) }
+    fun saveSequencePdf(uri: String) = viewModelScope.launch { dao.saveNeetSequencePdf(NeetSequencePdf(fileUri = uri)) }
+    fun clearSequencePdf() = viewModelScope.launch { dao.saveNeetSequencePdf(NeetSequencePdf(fileUri = "")) }
 }
 
 @HiltViewModel
