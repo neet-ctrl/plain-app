@@ -172,9 +172,10 @@ fun SpaceBackground(
         if (floatingActionButton != null) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
+                    .fillMaxSize()
                     .navigationBarsPadding()
-                    .padding(24.dp)
+                    .padding(bottom = 24.dp, end = 24.dp),
+                contentAlignment = Alignment.BottomEnd
             ) {
                 floatingActionButton()
             }
