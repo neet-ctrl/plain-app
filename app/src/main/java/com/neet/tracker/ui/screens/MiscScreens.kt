@@ -76,6 +76,16 @@ fun DictionaryNeetScreen(navController: NavController, vm: DictionaryViewModel =
     var selectedSubject by remember { mutableStateOf<Subject?>(null) }
     var showAdd by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
+    var uploadTarget by remember { mutableStateOf<DictionaryNeet?>(null) }
+    val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { u ->
+            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            uploadTarget?.let { t -> vm.saveNeet(t.copy(fileUri = u.toString())) }
+        }
+        uploadTarget = null
+    }
+
     val allTags = terms.flatMap { it.tags }.distinct()
     val filtered = terms.filter {
         (searchQuery.isBlank() || it.term.contains(searchQuery, true) || it.definition.contains(searchQuery, true)) &&
@@ -97,7 +107,12 @@ fun DictionaryNeetScreen(navController: NavController, vm: DictionaryViewModel =
                 if (filtered.isEmpty()) EmptyState("No terms yet. Tap + to add.", Icons.Default.AutoStories)
                 else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
                     itemsIndexed(filtered) { _, term ->
-                        DictionaryTermCard(term = term, onDelete = { vm.deleteNeet(term) })
+                        DictionaryTermCard(
+                            term = term,
+                            onDelete = { vm.deleteNeet(term) },
+                            onViewFile = if (term.fileUri.isNotBlank()) { { navController.navigate(fileViewerRoute(term.fileUri, term.term)) } } else null,
+                            onUploadFile = { uploadTarget = term; fileLauncher.launch("*/*") }
+                        )
                     }
                 }
             }
@@ -107,7 +122,12 @@ fun DictionaryNeetScreen(navController: NavController, vm: DictionaryViewModel =
 }
 
 @Composable
-fun DictionaryTermCard(term: DictionaryNeet, onDelete: () -> Unit) {
+fun DictionaryTermCard(
+    term: DictionaryNeet,
+    onDelete: () -> Unit,
+    onViewFile: (() -> Unit)? = null,
+    onUploadFile: (() -> Unit)? = null
+) {
     GlassCard(glowColor = NeonCyan, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -122,6 +142,37 @@ fun DictionaryTermCard(term: DictionaryNeet, onDelete: () -> Unit) {
                 Text(term.subject.name, style = MaterialTheme.typography.labelSmall, color = NeonGold)
             }
             if (term.tags.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) { items(term.tags) { t -> TagChip(t) } }
+            if (onViewFile != null || onUploadFile != null) {
+                NeonDivider(NeonCyan.copy(0.2f))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (onViewFile != null) {
+                        OutlinedButton(
+                            onClick = onViewFile,
+                            modifier = Modifier.weight(1f),
+                            border = BorderStroke(1.dp, NeonGreen.copy(0.5f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonGreen),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.FileOpen, null, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("View", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    if (onUploadFile != null) {
+                        OutlinedButton(
+                            onClick = onUploadFile,
+                            modifier = Modifier.weight(1f),
+                            border = BorderStroke(1.dp, NeonCyan.copy(0.4f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(if (term.fileUri.isNotBlank()) Icons.Default.AttachFile else Icons.Default.UploadFile, null, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(if (term.fileUri.isNotBlank()) "Replace" else "Attach", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -211,6 +262,16 @@ fun MnemonicsScreen(navController: NavController, vm: MnemonicViewModel = hiltVi
     var showAdd by remember { mutableStateOf(false) }
     val filtered = mnemonics.filter { searchQuery.isBlank() || it.name.contains(searchQuery, true) || it.chapter.contains(searchQuery, true) }
 
+    val context = LocalContext.current
+    var uploadMnemTarget by remember { mutableStateOf<Mnemonic?>(null) }
+    val mnemFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { u ->
+            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            uploadMnemTarget?.let { t -> vm.save(t.copy(fileUri = u.toString())) }
+        }
+        uploadMnemTarget = null
+    }
+
     SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = NeonPurple) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Mnemonic Lab", breadcrumb = "Home", onBack = { navController.popBackStack() })
@@ -221,18 +282,47 @@ fun MnemonicsScreen(navController: NavController, vm: MnemonicViewModel = hiltVi
                 else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
                     items(filtered) { m ->
                         GlassCard(glowColor = NeonPurple, modifier = Modifier.fillMaxWidth()) {
-                            Row(modifier = Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                ThreeDIconBox(icon = Icons.Default.Psychology, tint = NeonPurple, size = 48.dp, iconSize = 28.dp)
-                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(m.name, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Text(m.chapter, style = MaterialTheme.typography.labelSmall, color = NeonCyan)
-                                        Text(m.subject.name, style = MaterialTheme.typography.labelSmall, color = NeonGold)
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    ThreeDIconBox(icon = Icons.Default.Psychology, tint = NeonPurple, size = 48.dp, iconSize = 28.dp)
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(m.name, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Text(m.chapter, style = MaterialTheme.typography.labelSmall, color = NeonCyan)
+                                            Text(m.subject.name, style = MaterialTheme.typography.labelSmall, color = NeonGold)
+                                        }
+                                        if (m.description.isNotBlank()) Text(m.description, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.5f), maxLines = 2)
+                                        if (m.tags.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) { items(m.tags) { t -> TagChip(t) } }
                                     }
-                                    if (m.description.isNotBlank()) Text(m.description, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.5f), maxLines = 2)
-                                    if (m.tags.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) { items(m.tags) { t -> TagChip(t) } }
+                                    IconButton(onClick = { vm.delete(m) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Delete, null, tint = NeonRed.copy(0.6f), modifier = Modifier.size(16.dp)) }
                                 }
-                                IconButton(onClick = { vm.delete(m) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Delete, null, tint = NeonRed.copy(0.6f), modifier = Modifier.size(16.dp)) }
+                                NeonDivider(NeonPurple.copy(0.2f))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (m.fileUri.isNotBlank()) {
+                                        OutlinedButton(
+                                            onClick = { navController.navigate(fileViewerRoute(m.fileUri, m.name)) },
+                                            modifier = Modifier.weight(1f),
+                                            border = BorderStroke(1.dp, NeonGreen.copy(0.5f)),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonGreen),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            Icon(Icons.Default.FileOpen, null, modifier = Modifier.size(14.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("View File", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+                                    OutlinedButton(
+                                        onClick = { uploadMnemTarget = m; mnemFileLauncher.launch("*/*") },
+                                        modifier = Modifier.weight(1f),
+                                        border = BorderStroke(1.dp, NeonPurple.copy(0.4f)),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonPurple),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(if (m.fileUri.isNotBlank()) Icons.Default.AttachFile else Icons.Default.UploadFile, null, modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(if (m.fileUri.isNotBlank()) "Replace" else "Attach File", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
                             }
                         }
                     }
@@ -313,6 +403,11 @@ fun DayWasteScreen(navController: NavController, vm: DayWasteViewModel = hiltVie
                                             if (d.sourceUri.isNotBlank()) Icons.Default.AttachFile else Icons.Default.UploadFile,
                                             if (d.sourceUri.isNotBlank()) NeonCyan.copy(0.8f) else NeonCyan.copy(0.4f)
                                         ) { uploadSourceTarget = d; sourceLauncher.launch("*/*") }
+                                        if (d.sourceUri.isNotBlank()) {
+                                            CardIconButton(Icons.Default.FileOpen, NeonGreen.copy(0.8f)) {
+                                                navController.navigate(fileViewerRoute(d.sourceUri, "Source: ${d.date}"))
+                                            }
+                                        }
                                         CardIconButton(Icons.Default.Delete, NeonRed.copy(0.4f)) { vm.delete(d) }
                                     }
                                 }

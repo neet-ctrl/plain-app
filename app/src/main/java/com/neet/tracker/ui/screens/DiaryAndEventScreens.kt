@@ -1,6 +1,9 @@
 package com.neet.tracker.ui.screens
 
 import android.app.TimePickerDialog
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -25,6 +28,7 @@ import com.neet.tracker.alarm.AlarmScheduler
 import com.neet.tracker.data.models.*
 import com.neet.tracker.navigation.diaryEntryRoute
 import com.neet.tracker.navigation.dateEventDetailRoute
+import com.neet.tracker.navigation.fileViewerRoute
 import com.neet.tracker.ui.components.*
 import com.neet.tracker.ui.dialogs.*
 import com.neet.tracker.ui.theme.*
@@ -260,6 +264,16 @@ fun DateEventDetailScreen(navController: NavController, date: String, vm: DateEv
     val events by vm.eventsForDate(date).collectAsState()
     var showAdd by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
+    var uploadEventTarget by remember { mutableStateOf<DateEvent?>(null) }
+    val eventFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { u ->
+            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            uploadEventTarget?.let { e -> vm.save(e.copy(fileUri = u.toString())) }
+        }
+        uploadEventTarget = null
+    }
+
     SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = NeonGreen) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = date, breadcrumb = "Home / Events", onBack = { navController.popBackStack() })
@@ -276,7 +290,9 @@ fun DateEventDetailScreen(navController: NavController, date: String, vm: DateEv
                         onShiftToNextDate = {
                             val tomorrow = shiftDate(date)
                             vm.save(event.copy(id = java.util.UUID.randomUUID().toString(), date = tomorrow))
-                        }
+                        },
+                        onViewFile = if (event.fileUri.isNotBlank()) { { navController.navigate(fileViewerRoute(event.fileUri, event.name.ifBlank { "Event ${i + 1}" })) } } else null,
+                        onUploadFile = { uploadEventTarget = event; eventFileLauncher.launch("*/*") }
                     )
                 }
                 item {
@@ -293,7 +309,15 @@ fun DateEventDetailScreen(navController: NavController, date: String, vm: DateEv
 }
 
 @Composable
-fun DateEventCard(event: DateEvent, index: Int, onUpdate: (DateEvent) -> Unit, onDelete: () -> Unit, onShiftToNextDate: () -> Unit) {
+fun DateEventCard(
+    event: DateEvent,
+    index: Int,
+    onUpdate: (DateEvent) -> Unit,
+    onDelete: () -> Unit,
+    onShiftToNextDate: () -> Unit,
+    onViewFile: (() -> Unit)? = null,
+    onUploadFile: (() -> Unit)? = null
+) {
     val context = LocalContext.current
     var name by remember(event) { mutableStateOf(event.name) }
     var detail by remember(event) { mutableStateOf(event.detail) }
@@ -402,6 +426,37 @@ fun DateEventCard(event: DateEvent, index: Int, onUpdate: (DateEvent) -> Unit, o
                     Icon(Icons.Default.ArrowForward, null, tint = NeonOrange, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Shift to Next Date", color = NeonOrange, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+            if (onViewFile != null || onUploadFile != null) {
+                NeonDivider(NeonGreen.copy(0.2f))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (onViewFile != null) {
+                        OutlinedButton(
+                            onClick = onViewFile,
+                            modifier = Modifier.weight(1f),
+                            border = BorderStroke(1.dp, NeonGreen.copy(0.5f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonGreen),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.FileOpen, null, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("View File", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    if (onUploadFile != null) {
+                        OutlinedButton(
+                            onClick = onUploadFile,
+                            modifier = Modifier.weight(1f),
+                            border = BorderStroke(1.dp, NeonGold.copy(0.4f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonGold),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(if (event.fileUri.isNotBlank()) Icons.Default.AttachFile else Icons.Default.UploadFile, null, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(if (event.fileUri.isNotBlank()) "Replace File" else "Attach File", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
                 }
             }
         }
