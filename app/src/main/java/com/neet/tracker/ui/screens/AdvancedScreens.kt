@@ -444,6 +444,12 @@ fun DiagramsSubjectScreen(navController: NavController, subject: String, vm: Dia
     val color = if (subject == "BOTANY") NeonGreen else NeonOrange
     val filtered = diagrams.filter { searchQuery.isBlank() || it.chapter.contains(searchQuery, true) }
 
+    var uploadTarget by remember { mutableStateOf<Diagram?>(null) }
+    val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { u -> uploadTarget?.let { d -> vm.save(d.copy(fileUri = u.toString())) } }
+        uploadTarget = null
+    }
+
     SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = color) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "$subject Diagrams", breadcrumb = "Home / Diagrams Atlas", onBack = { navController.popBackStack() })
@@ -460,10 +466,21 @@ fun DiagramsSubjectScreen(navController: NavController, subject: String, vm: Dia
                     items(filtered) { d ->
                         NEETCard(
                             title = d.chapter,
-                            icon  = if (subject == "BOTANY") Icons.Default.Park else Icons.Default.Pets,
+                            icon  = if (d.fileUri.isNotBlank()) Icons.Default.PictureAsPdf else if (subject == "BOTANY") Icons.Default.Park else Icons.Default.Pets,
                             glowColor = color,
                             onClick = { if (d.fileUri.isNotBlank()) navController.navigate(diagramViewerRoute(subject, d.fileUri, d.chapter)) },
-                            bottomContent = { CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(d) } }
+                            bottomContent = {
+                                CardIconButton(
+                                    if (d.fileUri.isNotBlank()) Icons.Default.PictureAsPdf else Icons.Default.UploadFile,
+                                    if (d.fileUri.isNotBlank()) color.copy(0.85f) else color.copy(0.4f)
+                                ) { uploadTarget = d; pdfLauncher.launch("application/pdf") }
+                                if (d.fileUri.isNotBlank()) {
+                                    CardIconButton(Icons.Default.FileOpen, color.copy(0.75f)) {
+                                        navController.navigate(diagramViewerRoute(subject, d.fileUri, d.chapter))
+                                    }
+                                }
+                                CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(d) }
+                            }
                         )
                     }
                 }
@@ -503,6 +520,12 @@ fun ChapterShortNotesSubjectScreen(navController: NavController, subject: String
     val color = when (subject) { "PHYSICS" -> NeonCyan; "CHEMISTRY" -> NeonPurple; "BOTANY" -> NeonGreen; else -> NeonOrange }
     val filtered = notes.filter { searchQuery.isBlank() || it.chapter.contains(searchQuery, true) }
 
+    var uploadTarget by remember { mutableStateOf<ChapterShortNote?>(null) }
+    val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { u -> uploadTarget?.let { n -> vm.save(n.copy(fileUri = u.toString())) } }
+        uploadTarget = null
+    }
+
     SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = color) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "$subject Notes", breadcrumb = "Home / Chapter Notes", onBack = { navController.popBackStack() })
@@ -519,10 +542,21 @@ fun ChapterShortNotesSubjectScreen(navController: NavController, subject: String
                     items(filtered) { n ->
                         NEETCard(
                             title = n.chapter,
-                            icon  = Icons.Default.Article,
+                            icon  = if (n.fileUri.isNotBlank()) Icons.Default.PictureAsPdf else Icons.Default.Article,
                             glowColor = color,
                             onClick = { if (n.fileUri.isNotBlank()) navController.navigate(shortNoteViewerRoute(subject, n.fileUri, n.chapter)) },
-                            bottomContent = { CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(n) } }
+                            bottomContent = {
+                                CardIconButton(
+                                    if (n.fileUri.isNotBlank()) Icons.Default.PictureAsPdf else Icons.Default.UploadFile,
+                                    if (n.fileUri.isNotBlank()) color.copy(0.85f) else color.copy(0.4f)
+                                ) { uploadTarget = n; pdfLauncher.launch("application/pdf") }
+                                if (n.fileUri.isNotBlank()) {
+                                    CardIconButton(Icons.Default.FileOpen, color.copy(0.75f)) {
+                                        navController.navigate(shortNoteViewerRoute(subject, n.fileUri, n.chapter))
+                                    }
+                                }
+                                CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(n) }
+                            }
                         )
                     }
                 }

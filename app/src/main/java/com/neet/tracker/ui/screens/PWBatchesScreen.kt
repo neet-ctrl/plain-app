@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.neet.tracker.data.models.*
+import com.neet.tracker.navigation.fileViewerRoute
 import com.neet.tracker.navigation.pwBatchTestsRoute
 import com.neet.tracker.ui.components.*
 import com.neet.tracker.ui.dialogs.*
@@ -137,6 +138,16 @@ fun PWBatchTestsScreen(navController: NavController, batchId: String, batchName:
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                             Icon(Icons.Default.Star, null, tint = NeonGold, modifier = Modifier.size(12.dp))
                                             Text(t.marksObtained, style = MaterialTheme.typography.labelSmall, color = NeonGold)
+                                        }
+                                    }
+                                    if (t.questionPaperUri.isNotBlank()) {
+                                        TextButton(onClick = { navController.navigate(fileViewerRoute(t.questionPaperUri, "${t.name} QP")) }) {
+                                            Text("View QP", style = MaterialTheme.typography.labelSmall, color = NeonCyan)
+                                        }
+                                    }
+                                    if (t.solutionUri.isNotBlank()) {
+                                        TextButton(onClick = { navController.navigate(fileViewerRoute(t.solutionUri, "${t.name} Solution")) }) {
+                                            Text("View Sol", style = MaterialTheme.typography.labelSmall, color = NeonOrange)
                                         }
                                     }
                                 }
