@@ -117,13 +117,13 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
                         val statusGlow = statusColor(t.status)
                         val hasQP = t.questionPaperUri.isNotBlank()
                         val hasSol = t.solutionUri.isNotBlank()
-                        GlassCard(glowColor = statusGlow, modifier = Modifier.aspectRatio(0.85f)) {
+                        GlassCard(glowColor = statusGlow, modifier = Modifier.aspectRatio(0.75f)) {
                             Box(modifier = Modifier.fillMaxSize()) {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .padding(10.dp)
-                                        .padding(bottom = 36.dp)
+                                        .padding(bottom = 70.dp)
                                         .clickable(
                                             interactionSource = remember { MutableInteractionSource() },
                                             indication = null
@@ -149,12 +149,8 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
                                     }
                                     Spacer(Modifier.height(6.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        if (hasQP) {
-                                            Box(modifier = Modifier.size(8.dp).background(NeonGreen, CircleShape))
-                                        }
-                                        if (hasSol) {
-                                            Box(modifier = Modifier.size(8.dp).background(NeonOrange, CircleShape))
-                                        }
+                                        if (hasQP) Box(modifier = Modifier.size(8.dp).background(NeonGreen, CircleShape))
+                                        if (hasSol) Box(modifier = Modifier.size(8.dp).background(NeonOrange, CircleShape))
                                     }
                                 }
                                 Column(modifier = Modifier.align(Alignment.BottomCenter)) {
@@ -167,8 +163,32 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
                                         CardIconButton(Icons.Default.Star, NeonGold.copy(0.7f)) { showMarks = t }
                                         CardIconButton(Icons.Default.LocalOffer, NeonPurple.copy(0.7f)) { showTags = t }
                                         CardIconButton(Icons.Default.StickyNote2, NeonGold.copy(0.6f)) { showRemark = t }
-                                        CardIconButton(Icons.Default.Link, NeonCyan.copy(0.5f)) { showUrl = t }
+                                        CardIconButton(Icons.Default.Edit, NeonCyan.copy(0.5f)) { showUrl = t }
                                         CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(t) }
+                                    }
+                                    HorizontalDivider(color = Color.White.copy(0.06f), thickness = 0.5.dp)
+                                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 2.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                                        CardIconButton(
+                                            Icons.Default.OpenInBrowser,
+                                            if (t.url.isNotBlank()) NeonCyan.copy(0.85f) else Color.White.copy(0.18f)
+                                        ) {
+                                            if (t.url.isNotBlank()) {
+                                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(t.url))
+                                                context.startActivity(intent)
+                                            }
+                                        }
+                                        CardIconButton(
+                                            Icons.Default.PictureAsPdf,
+                                            if (hasQP) NeonGreen.copy(0.85f) else Color.White.copy(0.18f)
+                                        ) {
+                                            if (hasQP) navController.navigate(fileViewerRoute(t.questionPaperUri, "${t.name} QP"))
+                                        }
+                                        CardIconButton(
+                                            Icons.Default.FileOpen,
+                                            if (hasSol) NeonOrange.copy(0.85f) else Color.White.copy(0.18f)
+                                        ) {
+                                            if (hasSol) navController.navigate(fileViewerRoute(t.solutionUri, "${t.name} Solution"))
+                                        }
                                     }
                                 }
                             }
