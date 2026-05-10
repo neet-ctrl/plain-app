@@ -25,6 +25,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.neet.tracker.data.models.CompletionDate
@@ -1234,13 +1235,97 @@ fun MarksDialog(currentMarks: String, onSave: (String) -> Unit, onDismiss: () ->
 
 @Composable
 fun URLDialog(currentUrl: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
     var url by remember { mutableStateOf(currentUrl) }
+    var isEditing by remember { mutableStateOf(currentUrl.isBlank()) }
+
     NEETDialog(title = "Video / Link", icon = Icons.Default.Link, accentColor = NeonCyan, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            DialogTextField(value = url, onValueChange = { url = it }, label = "YouTube or PDF URL", icon = Icons.Default.Link, accentColor = NeonCyan)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
-                Button(onClick = { onSave(url); onDismiss() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonCyan.copy(0.2f)), border = BorderStroke(1.dp, NeonCyan.copy(0.6f))) { Text("Save Link", color = NeonCyan, fontWeight = FontWeight.Bold) }
+            if (!isEditing && url.isNotBlank()) {
+                // ── View mode: show URL with edit pencil + open browser ──────
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(NeonCyan.copy(0.08f), RoundedCornerShape(14.dp))
+                        .border(1.dp, NeonCyan.copy(0.35f), RoundedCornerShape(14.dp))
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.size(36.dp)
+                            .background(NeonCyan.copy(0.15f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Link, null, tint = NeonCyan, modifier = Modifier.size(18.dp))
+                    }
+                    Text(
+                        url,
+                        modifier = Modifier.weight(1f),
+                        style = androidx.compose.ui.text.TextStyle(
+                            color = NeonCyan,
+                            fontSize = 12.sp,
+                            fontFamily = ExoFont
+                        ),
+                        maxLines = 2
+                    )
+                    Box(
+                        modifier = Modifier.size(34.dp)
+                            .background(NeonGold.copy(0.12f), CircleShape)
+                            .border(1.dp, NeonGold.copy(0.4f), CircleShape)
+                            .clickable { isEditing = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Edit, null, tint = NeonGold, modifier = Modifier.size(16.dp))
+                    }
+                }
+                Button(
+                    onClick = {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                        context.startActivity(intent)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan.copy(0.15f)),
+                    border = BorderStroke(1.dp, NeonCyan.copy(0.5f))
+                ) {
+                    Icon(Icons.Default.OpenInBrowser, null, tint = NeonCyan, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Open in Browser", color = NeonCyan, fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
+                    border = BorderStroke(1.dp, Color.White.copy(0.2f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                ) { Text("Close") }
+            } else {
+                // ── Edit mode: text input + save ─────────────────────────────
+                if (url.isNotBlank()) {
+                    Text(
+                        "Editing existing link",
+                        style = androidx.compose.ui.text.TextStyle(color = NeonCyan.copy(0.6f), fontSize = 11.sp, fontFamily = ExoFont)
+                    )
+                }
+                DialogTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = "YouTube or PDF URL",
+                    icon = Icons.Default.Link,
+                    accentColor = NeonCyan
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(
+                        onClick = { if (currentUrl.isNotBlank()) { url = currentUrl; isEditing = false } else onDismiss() },
+                        modifier = Modifier.weight(1f),
+                        border = BorderStroke(1.dp, Color.White.copy(0.2f)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                    ) { Text("Cancel") }
+                    Button(
+                        onClick = { onSave(url); isEditing = false; if (url.isBlank()) onDismiss() },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan.copy(0.2f)),
+                        border = BorderStroke(1.dp, NeonCyan.copy(0.6f))
+                    ) { Text("Save Link", color = NeonCyan, fontWeight = FontWeight.Bold) }
+                }
             }
         }
     }

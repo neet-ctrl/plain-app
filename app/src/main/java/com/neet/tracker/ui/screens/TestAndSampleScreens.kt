@@ -163,20 +163,14 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
                                         CardIconButton(Icons.Default.Star, NeonGold.copy(0.7f)) { showMarks = t }
                                         CardIconButton(Icons.Default.LocalOffer, NeonPurple.copy(0.7f)) { showTags = t }
                                         CardIconButton(Icons.Default.StickyNote2, NeonGold.copy(0.6f)) { showRemark = t }
-                                        CardIconButton(Icons.Default.Edit, NeonCyan.copy(0.5f)) { showUrl = t }
                                         CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(t) }
                                     }
                                     HorizontalDivider(color = Color.White.copy(0.06f), thickness = 0.5.dp)
                                     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 2.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                                         CardIconButton(
-                                            Icons.Default.OpenInBrowser,
-                                            if (t.url.isNotBlank()) NeonCyan.copy(0.85f) else Color.White.copy(0.18f)
-                                        ) {
-                                            if (t.url.isNotBlank()) {
-                                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(t.url))
-                                                context.startActivity(intent)
-                                            }
-                                        }
+                                            Icons.Default.Link,
+                                            if (t.url.isNotBlank()) NeonCyan.copy(0.85f) else NeonCyan.copy(0.3f)
+                                        ) { showUrl = t }
                                         CardIconButton(
                                             Icons.Default.PictureAsPdf,
                                             if (hasQP) NeonGreen.copy(0.85f) else Color.White.copy(0.18f)
