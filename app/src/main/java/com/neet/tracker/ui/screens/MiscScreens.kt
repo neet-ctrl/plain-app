@@ -456,7 +456,7 @@ fun DayWasteScreen(navController: NavController, vm: DayWasteViewModel = hiltVie
     if (showAdd) AddDayWasteDialog(onSave = { vm.save(it); showAdd = false }, onDismiss = { showAdd = false })
     showWastePercent?.let { d ->
         var pct by remember { mutableStateOf(d.wastePercentage.toString()) }
-        var isViewMode by remember { mutableStateOf(false) }
+        var isViewMode by remember { mutableStateOf(d.wastePercentage > 0) }
         NEETDialog(title = "Waste Percentage", icon = Icons.Default.Percent, accentColor = NeonRed, onDismiss = { showWastePercent = null }) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 ViewEditToggle(isViewMode = isViewMode, onToggle = { isViewMode = !isViewMode })

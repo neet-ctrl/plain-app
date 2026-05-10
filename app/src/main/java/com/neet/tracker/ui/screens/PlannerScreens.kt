@@ -177,7 +177,7 @@ fun PlannerEventCard(event: PlannerEvent, index: Int, accentColor: Color, onUpda
     var selectedStatus by remember(event) { mutableStateOf(event.status) }
     var alarmTime by remember(event) { mutableStateOf(event.alarmTime) }
     var alarmLabel by remember(event) { mutableStateOf(event.alarmLabel) }
-    var isViewMode by remember { mutableStateOf(false) }
+    var isViewMode by remember(event) { mutableStateOf(event.name.isNotBlank()) }
 
     val alarmDisplayText = if (alarmTime > 0L) {
         SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(alarmTime))

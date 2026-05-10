@@ -143,7 +143,7 @@ fun DiaryEntryScreen(navController: NavController, diaryId: String, vm: DiaryVie
     val diary = entries.find { it.id == diaryId }
     var content by remember(diary) { mutableStateOf(diary?.content ?: "") }
     var showTagDialog by remember { mutableStateOf(false) }
-    var isViewMode by remember { mutableStateOf(false) }
+    var isViewMode by remember(diary) { mutableStateOf(diary?.content?.isNotBlank() == true) }
 
     val emojiTools = listOf("😊", "😔", "💪", "🔥", "📚", "✅", "❌", "🎯", "🌟", "💡", "⚡", "🧠", "📝", "🏆", "😴")
 
@@ -444,7 +444,7 @@ fun DateEventCard(
     var alarmTime by remember(event) { mutableStateOf(event.alarmTime) }
     var alarmLabel by remember(event) { mutableStateOf(event.alarmLabel) }
     var timeRange by remember(event) { mutableStateOf(event.timeRange) }
-    var isViewMode by remember { mutableStateOf(false) }
+    var isViewMode by remember(event) { mutableStateOf(event.name.isNotBlank()) }
 
     val statusColor = when (status) { "COMPLETED" -> StatusCompleted; "CROSSED" -> StatusCross; else -> NeonGreen }
     val alarmDisplayText = if (alarmTime > 0L) {
