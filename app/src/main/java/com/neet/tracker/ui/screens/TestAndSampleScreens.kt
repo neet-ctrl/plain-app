@@ -57,14 +57,14 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
     var uploadSolTarget by remember { mutableStateOf<TestPaper?>(null) }
 
     val context = LocalContext.current
-    val qpLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val qpLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { u ->
             try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             uploadQPTarget?.let { t -> vm.save(t.copy(questionPaperUri = u.toString())) }
         }
         uploadQPTarget = null
     }
-    val solLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val solLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { u ->
             try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             uploadSolTarget?.let { t -> vm.save(t.copy(solutionUri = u.toString())) }
@@ -136,14 +136,14 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
                                             if (t.questionPaperUri.isNotBlank()) NeonGreen.copy(0.8f) else NeonCyan.copy(0.4f)
                                         ) {
                                             if (t.questionPaperUri.isNotBlank()) navController.navigate(fileViewerRoute(t.questionPaperUri, "${t.name} QP"))
-                                            else { uploadQPTarget = t; qpLauncher.launch("*/*") }
+                                            else { uploadQPTarget = t; qpLauncher.launch(arrayOf("*/*")) }
                                         }
                                         CardIconButton(
                                             if (t.solutionUri.isNotBlank()) Icons.Default.FilePresent else Icons.Default.NoteAdd,
                                             if (t.solutionUri.isNotBlank()) NeonOrange.copy(0.8f) else NeonCyan.copy(0.4f)
                                         ) {
                                             if (t.solutionUri.isNotBlank()) navController.navigate(fileViewerRoute(t.solutionUri, "${t.name} Solution"))
-                                            else { uploadSolTarget = t; solLauncher.launch("*/*") }
+                                            else { uploadSolTarget = t; solLauncher.launch(arrayOf("*/*")) }
                                         }
                                         CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(t) }
                                     }
@@ -185,14 +185,14 @@ fun SamplePapersScreen(navController: NavController, vm: SamplePaperViewModel = 
     var uploadSolTarget by remember { mutableStateOf<SamplePaper?>(null) }
 
     val context = LocalContext.current
-    val qpLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val qpLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { u ->
             try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             uploadQPTarget?.let { p -> vm.save(p.copy(questionPaperUri = u.toString())) }
         }
         uploadQPTarget = null
     }
-    val solLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val solLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { u ->
             try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             uploadSolTarget?.let { p -> vm.save(p.copy(solutionUri = u.toString())) }
@@ -242,14 +242,14 @@ fun SamplePapersScreen(navController: NavController, vm: SamplePaperViewModel = 
                                     if (p.questionPaperUri.isNotBlank()) NeonGreen.copy(0.85f) else NeonCyan.copy(0.4f)
                                 ) {
                                     if (p.questionPaperUri.isNotBlank()) navController.navigate(fileViewerRoute(p.questionPaperUri, "${p.name} QP"))
-                                    else { uploadQPTarget = p; qpLauncher.launch("*/*") }
+                                    else { uploadQPTarget = p; qpLauncher.launch(arrayOf("*/*")) }
                                 }
                                 CardIconButton(
                                     if (p.solutionUri.isNotBlank()) Icons.Default.FileOpen else Icons.Default.NoteAdd,
                                     if (p.solutionUri.isNotBlank()) NeonOrange.copy(0.85f) else NeonCyan.copy(0.4f)
                                 ) {
                                     if (p.solutionUri.isNotBlank()) navController.navigate(fileViewerRoute(p.solutionUri, "${p.name} Solution"))
-                                    else { uploadSolTarget = p; solLauncher.launch("*/*") }
+                                    else { uploadSolTarget = p; solLauncher.launch(arrayOf("*/*")) }
                                 }
                                 CardIconButton(Icons.Default.Delete, NeonRed.copy(0.4f)) { vm.delete(p) }
                             }

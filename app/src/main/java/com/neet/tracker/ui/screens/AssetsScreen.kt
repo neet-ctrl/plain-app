@@ -227,7 +227,7 @@ fun SubjectShortNotesScreen(navController: NavController) {
     var uploadingSubject by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { u ->
             try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             uploadingSubject?.let { subj ->
@@ -261,7 +261,7 @@ fun SubjectShortNotesScreen(navController: NavController) {
                                 navController.navigate(com.neet.tracker.navigation.subjectNoteViewerRoute(info.third, note!!.fileUri, "${info.first} Notes"))
                             } else {
                                 uploadingSubject = info.third
-                                launcher.launch("application/pdf")
+                                launcher.launch(arrayOf("application/pdf"))
                             }
                         },
                         bottomContent = {
@@ -270,12 +270,12 @@ fun SubjectShortNotesScreen(navController: NavController) {
                                 color.copy(if (hasPdf) 0.85f else 0.7f)
                             ) {
                                 if (hasPdf) navController.navigate(com.neet.tracker.navigation.subjectNoteViewerRoute(info.third, note!!.fileUri, "${info.first} Notes"))
-                                else { uploadingSubject = info.third; launcher.launch("application/pdf") }
+                                else { uploadingSubject = info.third; launcher.launch(arrayOf("application/pdf")) }
                             }
                             if (hasPdf) {
                                 CardIconButton(Icons.Default.UploadFile, color.copy(0.4f)) {
                                     uploadingSubject = info.third
-                                    launcher.launch("application/pdf")
+                                    launcher.launch(arrayOf("application/pdf"))
                                 }
                             }
                         }

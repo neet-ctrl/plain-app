@@ -51,7 +51,7 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
     var showAddAttempt by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
-    val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             photoUri = it.toString()
@@ -111,7 +111,7 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
                                         .fillMaxSize()
                                         .background(CosmicBlue, CircleShape)
                                         .clip(CircleShape)
-                                        .clickable(enabled = editing) { photoLauncher.launch("image/*") },
+                                        .clickable(enabled = editing) { photoLauncher.launch(arrayOf("image/*")) },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     if (photoUri.isNotBlank()) {
@@ -257,7 +257,7 @@ fun ProfileField(label: String, value: String, editing: Boolean, icon: androidx.
 @Composable
 fun RowScope.FileUploadButton(label: String, uri: String, editing: Boolean, color: Color, onUpload: (String) -> Unit, onView: () -> Unit) {
     val context = LocalContext.current
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { u ->
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
         u?.let {
             try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             onUpload(it.toString())
@@ -269,7 +269,7 @@ fun RowScope.FileUploadButton(label: String, uri: String, editing: Boolean, colo
             .clip(RoundedCornerShape(12.dp))
             .background(if (uri.isNotBlank()) color.copy(0.12f) else Color.White.copy(0.04f))
             .border(1.dp, if (uri.isNotBlank()) color.copy(0.4f) else Color.White.copy(0.1f), RoundedCornerShape(12.dp))
-            .clickable { if (uri.isNotBlank()) onView() else if (editing) launcher.launch("*/*") }
+            .clickable { if (uri.isNotBlank()) onView() else if (editing) launcher.launch(arrayOf("*/*")) }
             .padding(12.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -308,19 +308,19 @@ fun NEETAttemptCard(
     var solUri by remember(attempt) { mutableStateOf(attempt.solutionPdfUri) }
 
     val context = LocalContext.current
-    val marksheetLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val marksheetLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             marksheetUri = it.toString(); onUpdate(attempt.copy(marksheetUri = marksheetUri))
         }
     }
-    val qpLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val qpLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             qpUri = it.toString(); onUpdate(attempt.copy(questionPaperUri = qpUri))
         }
     }
-    val solLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val solLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             solUri = it.toString(); onUpdate(attempt.copy(solutionPdfUri = solUri))
@@ -353,9 +353,9 @@ fun NEETAttemptCard(
                 DialogTextField(value = marks, onValueChange = { marks = it; save() }, label = "Marks Obtained", icon = Icons.Default.Score, accentColor = NeonGold)
                 DialogTextField(value = lack, onValueChange = { lack = it; save() }, label = "What was lacking?", icon = Icons.Default.TrendingDown, accentColor = NeonGold, multiline = true)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SmallFileButton("Marksheet", marksheetUri, NeonGold, { marksheetLauncher.launch("*/*") }, { onViewFile(marksheetUri, "Marksheet $year") }, Modifier.weight(1f))
-                    SmallFileButton("Question Paper", qpUri, NeonGold, { qpLauncher.launch("*/*") }, { onViewFile(qpUri, "Question Paper $year") }, Modifier.weight(1f))
-                    SmallFileButton("Solution", solUri, NeonGold, { solLauncher.launch("*/*") }, { onViewFile(solUri, "Solution $year") }, Modifier.weight(1f))
+                    SmallFileButton("Marksheet", marksheetUri, NeonGold, { marksheetLauncher.launch(arrayOf("*/*")) }, { onViewFile(marksheetUri, "Marksheet $year") }, Modifier.weight(1f))
+                    SmallFileButton("Question Paper", qpUri, NeonGold, { qpLauncher.launch(arrayOf("*/*")) }, { onViewFile(qpUri, "Question Paper $year") }, Modifier.weight(1f))
+                    SmallFileButton("Solution", solUri, NeonGold, { solLauncher.launch(arrayOf("*/*")) }, { onViewFile(solUri, "Solution $year") }, Modifier.weight(1f))
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {

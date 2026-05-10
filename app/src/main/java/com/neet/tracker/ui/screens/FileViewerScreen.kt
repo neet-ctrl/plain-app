@@ -27,7 +27,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -961,6 +963,8 @@ private fun FileFailureLog(
     context: Context
 ) {
     var showRawUri by remember { mutableStateOf(false) }
+    var copied by remember { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
 
     val uriScheme    = uri.scheme ?: "unknown"
     val uriAuthority = uri.authority ?: "—"
@@ -1019,7 +1023,51 @@ private fun FileFailureLog(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.BugReport, null, tint = NeonCyan, modifier = Modifier.size(16.dp))
                         Text("Diagnostic Log", style = MaterialTheme.typography.labelLarge,
-                            color = NeonCyan, fontWeight = FontWeight.Bold)
+                            color = NeonCyan, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f))
+                        if (copied) {
+                            LaunchedEffect(Unit) {
+                                kotlinx.coroutines.delay(2000)
+                                copied = false
+                            }
+                        }
+                        val copyText = buildString {
+                            appendLine("=== NEET Tracker File Diagnostic ===")
+                            appendLine("File Title        : $title")
+                            appendLine("Resolved Filename : $nameDisplay")
+                            appendLine("Detected MIME     : $mimeDisplay")
+                            appendLine("Detected Extension: $extDisplay")
+                            appendLine("URI Scheme        : $uriScheme")
+                            appendLine("URI Authority     : $uriAuthority")
+                            appendLine()
+                            appendLine("--- Error ---")
+                            appendLine(errorMessage.ifBlank { "No error message captured." })
+                            appendLine()
+                            appendLine("--- Raw URI ---")
+                            append(rawUri)
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                clipboardManager.setText(AnnotatedString(copyText))
+                                copied = true
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            border = BorderStroke(1.dp, if (copied) NeonGreen.copy(0.7f) else NeonCyan.copy(0.4f)),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (copied) NeonGreen else NeonCyan
+                            )
+                        ) {
+                            Icon(
+                                if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
+                                null, modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                if (copied) "Copied ✓" else "Copy All",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                     Spacer(Modifier.height(12.dp))
 

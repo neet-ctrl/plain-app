@@ -448,7 +448,7 @@ fun DiagramsSubjectScreen(navController: NavController, subject: String, vm: Dia
 
     var uploadTarget by remember { mutableStateOf<Diagram?>(null) }
     val context = LocalContext.current
-    val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { u ->
             try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             uploadTarget?.let { d -> vm.save(d.copy(fileUri = u.toString())) }
@@ -481,10 +481,10 @@ fun DiagramsSubjectScreen(navController: NavController, subject: String, vm: Dia
                                     if (d.fileUri.isNotBlank()) color.copy(0.85f) else color.copy(0.4f)
                                 ) {
                                     if (d.fileUri.isNotBlank()) navController.navigate(diagramViewerRoute(subject, d.fileUri, d.chapter))
-                                    else { uploadTarget = d; pdfLauncher.launch("application/pdf") }
+                                    else { uploadTarget = d; pdfLauncher.launch(arrayOf("application/pdf")) }
                                 }
                                 if (d.fileUri.isNotBlank()) {
-                                    CardIconButton(Icons.Default.UploadFile, color.copy(0.4f)) { uploadTarget = d; pdfLauncher.launch("application/pdf") }
+                                    CardIconButton(Icons.Default.UploadFile, color.copy(0.4f)) { uploadTarget = d; pdfLauncher.launch(arrayOf("application/pdf")) }
                                 }
                                 CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(d) }
                             }
@@ -502,7 +502,7 @@ fun AddDiagramDialog(subject: String, color: Color, onSave: (Diagram) -> Unit, o
     var chapter by remember { mutableStateOf("") }
     var fileUri by remember { mutableStateOf("") }
     val context = LocalContext.current
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             fileUri = it.toString()
@@ -511,7 +511,7 @@ fun AddDiagramDialog(subject: String, color: Color, onSave: (Diagram) -> Unit, o
     NEETDialog(title = "Add Diagram", icon = Icons.Default.AccountTree, accentColor = color, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             DialogTextField(value = chapter, onValueChange = { chapter = it }, label = "Chapter Name", icon = Icons.Default.Article, accentColor = color)
-            Button(onClick = { launcher.launch("application/pdf") }, colors = ButtonDefaults.buttonColors(containerColor = color.copy(0.12f)), border = BorderStroke(1.dp, color.copy(0.4f)), modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { launcher.launch(arrayOf("application/pdf")) }, colors = ButtonDefaults.buttonColors(containerColor = color.copy(0.12f)), border = BorderStroke(1.dp, color.copy(0.4f)), modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.UploadFile, null, tint = color); Spacer(Modifier.width(8.dp))
                 Text(if (fileUri.isBlank()) "Upload Diagram PDF" else "✓ PDF Uploaded", color = color)
             }
@@ -535,7 +535,7 @@ fun ChapterShortNotesSubjectScreen(navController: NavController, subject: String
 
     var uploadTarget by remember { mutableStateOf<ChapterShortNote?>(null) }
     val context = LocalContext.current
-    val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { u ->
             try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             uploadTarget?.let { n -> vm.save(n.copy(fileUri = u.toString())) }
@@ -568,10 +568,10 @@ fun ChapterShortNotesSubjectScreen(navController: NavController, subject: String
                                     if (n.fileUri.isNotBlank()) color.copy(0.85f) else color.copy(0.4f)
                                 ) {
                                     if (n.fileUri.isNotBlank()) navController.navigate(shortNoteViewerRoute(subject, n.fileUri, n.chapter))
-                                    else { uploadTarget = n; pdfLauncher.launch("application/pdf") }
+                                    else { uploadTarget = n; pdfLauncher.launch(arrayOf("application/pdf")) }
                                 }
                                 if (n.fileUri.isNotBlank()) {
-                                    CardIconButton(Icons.Default.UploadFile, color.copy(0.4f)) { uploadTarget = n; pdfLauncher.launch("application/pdf") }
+                                    CardIconButton(Icons.Default.UploadFile, color.copy(0.4f)) { uploadTarget = n; pdfLauncher.launch(arrayOf("application/pdf")) }
                                 }
                                 CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(n) }
                             }
@@ -590,7 +590,7 @@ fun AddChapterNoteDialog(subject: String, color: Color, onSave: (ChapterShortNot
     var fileUri by remember { mutableStateOf("") }
     val subjectEnum = try { Subject.valueOf(subject) } catch (e: Exception) { Subject.GENERAL }
     val context = LocalContext.current
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             fileUri = it.toString()
@@ -599,7 +599,7 @@ fun AddChapterNoteDialog(subject: String, color: Color, onSave: (ChapterShortNot
     NEETDialog(title = "Add Short Notes", icon = Icons.Default.Article, accentColor = color, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             DialogTextField(value = chapter, onValueChange = { chapter = it }, label = "Chapter Name", icon = Icons.Default.MenuBook, accentColor = color)
-            Button(onClick = { launcher.launch("application/pdf") }, colors = ButtonDefaults.buttonColors(containerColor = color.copy(0.12f)), border = BorderStroke(1.dp, color.copy(0.4f)), modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { launcher.launch(arrayOf("application/pdf")) }, colors = ButtonDefaults.buttonColors(containerColor = color.copy(0.12f)), border = BorderStroke(1.dp, color.copy(0.4f)), modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.UploadFile, null, tint = color); Spacer(Modifier.width(8.dp))
                 Text(if (fileUri.isBlank()) "Upload Notes PDF" else "✓ PDF Uploaded", color = color)
             }

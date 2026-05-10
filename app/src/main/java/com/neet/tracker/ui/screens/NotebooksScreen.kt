@@ -118,7 +118,7 @@ fun NotebookEditDialog(notebook: Notebook?, onSave: (Notebook) -> Unit, onDismis
     var nbNo by remember { mutableStateOf(notebook?.notebookNo ?: "") }
     var photoUri by remember { mutableStateOf(notebook?.photoUri ?: "") }
     val context = LocalContext.current
-    val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { u ->
+    val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
         u?.let {
             try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             photoUri = it.toString()
@@ -128,7 +128,7 @@ fun NotebookEditDialog(notebook: Notebook?, onSave: (Notebook) -> Unit, onDismis
     NEETDialog(title = if (notebook == null) "New Notebook" else "Edit Notebook", icon = Icons.Default.Book, accentColor = NeonCyan, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             DialogTextField(value = nbNo, onValueChange = { nbNo = it }, label = "Notebook Number / Name", icon = Icons.Default.Numbers, accentColor = NeonCyan)
-            Button(onClick = { photoLauncher.launch("image/*") }, colors = ButtonDefaults.buttonColors(containerColor = NeonCyan.copy(0.12f)), border = BorderStroke(1.dp, NeonCyan.copy(0.4f)), modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { photoLauncher.launch(arrayOf("image/*")) }, colors = ButtonDefaults.buttonColors(containerColor = NeonCyan.copy(0.12f)), border = BorderStroke(1.dp, NeonCyan.copy(0.4f)), modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.PhotoCamera, null, tint = NeonCyan); Spacer(Modifier.width(8.dp))
                 Text(if (photoUri.isBlank()) "Upload Cover Photo" else "Change Photo", color = NeonCyan)
             }

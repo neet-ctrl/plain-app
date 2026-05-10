@@ -266,7 +266,7 @@ fun DateEventDetailScreen(navController: NavController, date: String, vm: DateEv
 
     val context = LocalContext.current
     var uploadEventTarget by remember { mutableStateOf<DateEvent?>(null) }
-    val eventFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val eventFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { u ->
             try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             uploadEventTarget?.let { e -> vm.save(e.copy(fileUri = u.toString())) }
@@ -292,7 +292,7 @@ fun DateEventDetailScreen(navController: NavController, date: String, vm: DateEv
                             vm.save(event.copy(id = java.util.UUID.randomUUID().toString(), date = tomorrow))
                         },
                         onViewFile = if (event.fileUri.isNotBlank()) { { navController.navigate(fileViewerRoute(event.fileUri, event.name.ifBlank { "Event ${i + 1}" })) } } else null,
-                        onUploadFile = { uploadEventTarget = event; eventFileLauncher.launch("*/*") }
+                        onUploadFile = { uploadEventTarget = event; eventFileLauncher.launch(arrayOf("*/*")) }
                     )
                 }
                 item {

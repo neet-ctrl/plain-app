@@ -35,7 +35,7 @@ import com.neet.tracker.ui.viewmodels.*
 fun NEETSyllabusScreen(navController: NavController, vm: SyllabusViewModel = hiltViewModel()) {
     val syllabus by vm.syllabus.collectAsState()
     val context = LocalContext.current
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             vm.save(NEETSyllabus(fileUri = it.toString()))
@@ -56,7 +56,7 @@ fun NEETSyllabusScreen(navController: NavController, vm: SyllabusViewModel = hil
                         } else {
                             Text("No syllabus uploaded yet", color = Color.White.copy(0.4f))
                         }
-                        Button(onClick = { launcher.launch("application/pdf") }, colors = ButtonDefaults.buttonColors(containerColor = NeonOrange.copy(0.2f)), border = BorderStroke(1.dp, NeonOrange.copy(0.6f)), modifier = Modifier.fillMaxWidth()) {
+                        Button(onClick = { launcher.launch(arrayOf("application/pdf")) }, colors = ButtonDefaults.buttonColors(containerColor = NeonOrange.copy(0.2f)), border = BorderStroke(1.dp, NeonOrange.copy(0.6f)), modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.UploadFile, null, tint = NeonOrange); Spacer(Modifier.width(8.dp)); Text(if (syllabus?.fileUri?.isNotBlank() == true) "Replace PDF" else "Upload Syllabus PDF", color = NeonOrange, fontWeight = FontWeight.Bold)
                         }
                     }
@@ -78,7 +78,7 @@ fun DictionaryNeetScreen(navController: NavController, vm: DictionaryViewModel =
 
     val context = LocalContext.current
     var uploadTarget by remember { mutableStateOf<DictionaryNeet?>(null) }
-    val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { u ->
             try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             uploadTarget?.let { t -> vm.saveNeet(t.copy(fileUri = u.toString())) }
@@ -111,7 +111,7 @@ fun DictionaryNeetScreen(navController: NavController, vm: DictionaryViewModel =
                             term = term,
                             onDelete = { vm.deleteNeet(term) },
                             onViewFile = if (term.fileUri.isNotBlank()) { { navController.navigate(fileViewerRoute(term.fileUri, term.term)) } } else null,
-                            onUploadFile = { uploadTarget = term; fileLauncher.launch("*/*") }
+                            onUploadFile = { uploadTarget = term; fileLauncher.launch(arrayOf("*/*")) }
                         )
                     }
                 }
@@ -266,7 +266,7 @@ fun MnemonicsScreen(navController: NavController, vm: MnemonicViewModel = hiltVi
 
     val context = LocalContext.current
     var uploadMnemTarget by remember { mutableStateOf<Mnemonic?>(null) }
-    val mnemFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val mnemFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { u ->
             try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             uploadMnemTarget?.let { t -> vm.save(t.copy(fileUri = u.toString())) }
@@ -312,12 +312,12 @@ fun MnemonicsScreen(navController: NavController, vm: MnemonicViewModel = hiltVi
                                             Spacer(Modifier.width(4.dp))
                                             Text("View File", style = MaterialTheme.typography.labelSmall)
                                         }
-                                        IconButton(onClick = { uploadMnemTarget = m; mnemFileLauncher.launch("*/*") }, modifier = Modifier.size(36.dp)) {
+                                        IconButton(onClick = { uploadMnemTarget = m; mnemFileLauncher.launch(arrayOf("*/*")) }, modifier = Modifier.size(36.dp)) {
                                             Icon(Icons.Default.UploadFile, tint = NeonPurple.copy(0.5f), modifier = Modifier.size(16.dp), contentDescription = "Replace file")
                                         }
                                     } else {
                                         OutlinedButton(
-                                            onClick = { uploadMnemTarget = m; mnemFileLauncher.launch("*/*") },
+                                            onClick = { uploadMnemTarget = m; mnemFileLauncher.launch(arrayOf("*/*")) },
                                             modifier = Modifier.weight(1f),
                                             border = BorderStroke(1.dp, NeonPurple.copy(0.4f)),
                                             colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonPurple),
@@ -372,7 +372,7 @@ fun DayWasteScreen(navController: NavController, vm: DayWasteViewModel = hiltVie
     var uploadSourceTarget by remember { mutableStateOf<DayWaste?>(null) }
 
     val context = LocalContext.current
-    val sourceLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+    val sourceLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { u ->
             try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             uploadSourceTarget?.let { d -> vm.save(d.copy(sourceUri = u.toString())) }
@@ -410,10 +410,10 @@ fun DayWasteScreen(navController: NavController, vm: DayWasteViewModel = hiltVie
                                             if (d.sourceUri.isNotBlank()) NeonCyan.copy(0.8f) else NeonCyan.copy(0.4f)
                                         ) {
                                             if (d.sourceUri.isNotBlank()) navController.navigate(fileViewerRoute(d.sourceUri, "Source: ${d.date}"))
-                                            else { uploadSourceTarget = d; sourceLauncher.launch("*/*") }
+                                            else { uploadSourceTarget = d; sourceLauncher.launch(arrayOf("*/*")) }
                                         }
                                         if (d.sourceUri.isNotBlank()) {
-                                            CardIconButton(Icons.Default.UploadFile, NeonCyan.copy(0.4f)) { uploadSourceTarget = d; sourceLauncher.launch("*/*") }
+                                            CardIconButton(Icons.Default.UploadFile, NeonCyan.copy(0.4f)) { uploadSourceTarget = d; sourceLauncher.launch(arrayOf("*/*")) }
                                         }
                                         CardIconButton(Icons.Default.Delete, NeonRed.copy(0.4f)) { vm.delete(d) }
                                     }

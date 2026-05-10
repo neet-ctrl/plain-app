@@ -90,14 +90,14 @@ fun PWBatchTestsScreen(navController: NavController, batchId: String, batchName:
     var uploadSolTarget by remember { mutableStateOf<PWTest?>(null) }
 
     val context = LocalContext.current
-    val qpLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+    val qpLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { u ->
             try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             uploadQPTarget?.let { t -> vm.saveTest(t.copy(questionPaperUri = u.toString())) }
         }
         uploadQPTarget = null
     }
-    val solLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+    val solLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { u ->
             try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             uploadSolTarget?.let { t -> vm.saveTest(t.copy(solutionUri = u.toString())) }
@@ -167,14 +167,14 @@ fun PWBatchTestsScreen(navController: NavController, batchId: String, batchName:
                                             if (t.questionPaperUri.isNotBlank()) NeonGreen.copy(0.8f) else NeonCyan.copy(0.4f)
                                         ) {
                                             if (t.questionPaperUri.isNotBlank()) navController.navigate(fileViewerRoute(t.questionPaperUri, "${t.name} QP"))
-                                            else { uploadQPTarget = t; qpLauncher.launch("*/*") }
+                                            else { uploadQPTarget = t; qpLauncher.launch(arrayOf("*/*")) }
                                         }
                                         CardIconButton(
                                             if (t.solutionUri.isNotBlank()) Icons.Default.FilePresent else Icons.Default.NoteAdd,
                                             if (t.solutionUri.isNotBlank()) NeonOrange.copy(0.8f) else NeonCyan.copy(0.4f)
                                         ) {
                                             if (t.solutionUri.isNotBlank()) navController.navigate(fileViewerRoute(t.solutionUri, "${t.name} Solution"))
-                                            else { uploadSolTarget = t; solLauncher.launch("*/*") }
+                                            else { uploadSolTarget = t; solLauncher.launch(arrayOf("*/*")) }
                                         }
                                         CardIconButton(Icons.Default.Delete, NeonRed.copy(0.4f)) { vm.deleteTest(t) }
                                     }
