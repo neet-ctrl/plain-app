@@ -441,6 +441,7 @@ fun DateEventCard(
     var alarmTime by remember(event) { mutableStateOf(event.alarmTime) }
     var alarmLabel by remember(event) { mutableStateOf(event.alarmLabel) }
     var timeRange by remember(event) { mutableStateOf(event.timeRange) }
+    var isViewMode by remember { mutableStateOf(false) }
 
     val statusColor = when (status) { "COMPLETED" -> StatusCompleted; "CROSSED" -> StatusCross; else -> NeonGreen }
     val alarmDisplayText = if (alarmTime > 0L) {
@@ -449,141 +450,253 @@ fun DateEventCard(
 
     GlassCard(glowColor = statusColor, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+
+            // ── Header (always visible) ───────────────────────────────────────
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Event $index", style = MaterialTheme.typography.headlineSmall, color = statusColor, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.weight(1f))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        if (name.isNotBlank()) name else "Event $index",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = statusColor,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                }
                 if (alarmTime > 0L) {
                     Icon(Icons.Default.AlarmOn, null, tint = NeonGold, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
                 }
-                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Delete, null, tint = NeonRed.copy(0.7f), modifier = Modifier.size(16.dp)) }
-            }
-            NeonDivider(statusColor)
-            DialogTextField(value = name, onValueChange = { name = it; onUpdate(event.copy(name = name)) }, label = "Event Name", icon = Icons.Default.Event, accentColor = statusColor)
-            DialogTextField(value = detail, onValueChange = { detail = it; onUpdate(event.copy(detail = detail)) }, label = "Details", icon = Icons.Default.Description, accentColor = statusColor, multiline = true)
-
-            // 3D Time Range Picker
-            NeetTimeRangePickerButton(
-                value = timeRange,
-                onValueChange = { timeRange = it; onUpdate(event.copy(timeRange = timeRange)) },
-                accentColor = statusColor,
-                label = "Event Time Range"
-            )
-
-            if (event.url.isNotBlank()) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(Icons.Default.Link, null, tint = NeonCyan, modifier = Modifier.size(14.dp))
-                    Text(event.url, style = MaterialTheme.typography.labelSmall, color = NeonCyan, maxLines = 1)
-                }
-            }
-            if (event.totalQuestions > 0) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(Icons.Default.Quiz, null, tint = NeonPurple, modifier = Modifier.size(14.dp))
-                    Text("${event.totalQuestions} questions", style = MaterialTheme.typography.labelSmall, color = NeonPurple)
-                }
-            }
-
-            // ─── Alarm / Reminder Row ──────────────────────────────────────────
-            NeonDivider(NeonGold.copy(0.3f))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.Alarm, null, tint = NeonGold, modifier = Modifier.size(18.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Reminder / Alarm", style = MaterialTheme.typography.labelMedium, color = NeonGold, fontWeight = FontWeight.SemiBold)
-                    if (alarmDisplayText.isNotEmpty()) {
-                        Text(alarmDisplayText, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.7f))
-                    } else {
-                        Text("No alarm set", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.35f))
-                    }
-                }
-                if (alarmTime > 0L) {
-                    IconButton(
-                        onClick = {
-                            AlarmScheduler.cancelAlarm(context, event.id.hashCode())
-                            alarmTime = 0L
-                            alarmLabel = ""
-                            onUpdate(event.copy(alarmTime = 0L, alarmLabel = ""))
-                        },
-                        modifier = Modifier.size(32.dp)
-                    ) { Icon(Icons.Default.AlarmOff, null, tint = NeonRed.copy(0.7f), modifier = Modifier.size(18.dp)) }
-                }
-                IconButton(
-                    onClick = {
-                        val now = Calendar.getInstance()
-                        TimePickerDialog(context, { _, hour, minute ->
-                            val cal = Calendar.getInstance().apply {
-                                set(Calendar.HOUR_OF_DAY, hour)
-                                set(Calendar.MINUTE, minute)
-                                set(Calendar.SECOND, 0)
-                                if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
-                            }
-                            alarmTime = cal.timeInMillis
-                            alarmLabel = name.ifBlank { "Event $index" }
-                            AlarmScheduler.scheduleAlarm(context, event.id.hashCode(), cal.timeInMillis, "NEET Event Reminder", alarmLabel.ifBlank { "Scheduled event coming up!" })
-                            onUpdate(event.copy(alarmTime = cal.timeInMillis, alarmLabel = alarmLabel))
-                        }, now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), false).show()
-                    },
-                    modifier = Modifier.size(32.dp)
-                ) { Icon(Icons.Default.AddAlarm, null, tint = NeonGold, modifier = Modifier.size(18.dp)) }
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatusTickCrossButton("✓ Done", status == "COMPLETED", StatusCompleted) {
-                    status = if (status == "COMPLETED") "EXPECTED" else "COMPLETED"
-                    showCrossInput = false
-                    onUpdate(event.copy(status = status))
-                }
-                StatusTickCrossButton("✗ Missed", status == "CROSSED", StatusCross) {
-                    status = if (status == "CROSSED") "EXPECTED" else "CROSSED"
-                    showCrossInput = status == "CROSSED"
-                    onUpdate(event.copy(status = status))
-                }
-            }
-            if (showCrossInput) {
-                DialogTextField(value = crossReason, onValueChange = { crossReason = it; onUpdate(event.copy(crossReason = crossReason)) }, label = "Reason for missing", icon = Icons.Default.ReportProblem, accentColor = StatusCross)
-                Button(
-                    onClick = onShiftToNextDate,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = NeonOrange.copy(0.15f)),
-                    border = BorderStroke(1.dp, NeonOrange.copy(0.5f))
+                // Compact status badge
+                Box(
+                    modifier = Modifier
+                        .background(statusColor.copy(0.15f), RoundedCornerShape(8.dp))
+                        .border(0.5.dp, statusColor.copy(0.5f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
-                    Icon(Icons.Default.ArrowForward, null, tint = NeonOrange, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Shift to Next Date", color = NeonOrange, style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        when (status) { "COMPLETED" -> "✓"; "CROSSED" -> "✗"; else -> "○" },
+                        style = MaterialTheme.typography.labelSmall, color = statusColor, fontWeight = FontWeight.ExtraBold
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
+                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Delete, null, tint = NeonRed.copy(0.7f), modifier = Modifier.size(16.dp))
                 }
             }
-            if (onViewFile != null || onUploadFile != null) {
-                NeonDivider(NeonGreen.copy(0.2f))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (event.fileUri.isNotBlank() && onViewFile != null) {
-                        OutlinedButton(
-                            onClick = onViewFile,
-                            modifier = Modifier.weight(1f),
-                            border = BorderStroke(1.dp, NeonGreen.copy(0.5f)),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonGreen),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Icon(Icons.Default.FileOpen, null, modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("View File", style = MaterialTheme.typography.labelSmall)
+
+            NeonDivider(statusColor)
+
+            // ── View / Edit Toggle ─────────────────────────────────────────────
+            ViewEditToggle(isViewMode = isViewMode, onToggle = { isViewMode = !isViewMode })
+
+            // ── Content switches based on mode ─────────────────────────────────
+            AnimatedContent(
+                targetState = isViewMode,
+                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
+                label = "date_event_card_$index"
+            ) { viewMode ->
+                if (viewMode) {
+                    // ── View Mode ──────────────────────────────────────────────
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (name.isNotBlank())   DateEventViewField("Event Name", name,   Icons.Default.Event,       statusColor)
+                        if (detail.isNotBlank()) DateEventViewField("Details",    detail, Icons.Default.Description, statusColor)
+                        if (timeRange.isNotBlank()) DateEventViewField("Time Range", timeRange, Icons.Default.Schedule, statusColor)
+
+                        if (event.url.isNotBlank()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .background(NeonCyan.copy(0.07f), RoundedCornerShape(10.dp))
+                                    .border(0.5.dp, NeonCyan.copy(0.25f), RoundedCornerShape(10.dp))
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Default.Link, null, tint = NeonCyan, modifier = Modifier.size(14.dp))
+                                Text(event.url, style = MaterialTheme.typography.labelSmall, color = NeonCyan, maxLines = 2)
+                            }
                         }
-                        IconButton(onClick = onUploadFile ?: {}, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Default.UploadFile, tint = NeonGold.copy(0.5f), modifier = Modifier.size(16.dp), contentDescription = "Replace file")
+                        if (event.totalQuestions > 0) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .background(NeonPurple.copy(0.07f), RoundedCornerShape(10.dp))
+                                    .border(0.5.dp, NeonPurple.copy(0.25f), RoundedCornerShape(10.dp))
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Default.Quiz, null, tint = NeonPurple, modifier = Modifier.size(14.dp))
+                                Text("${event.totalQuestions} questions", style = MaterialTheme.typography.labelSmall, color = NeonPurple)
+                            }
                         }
-                    } else if (onUploadFile != null) {
-                        OutlinedButton(
-                            onClick = onUploadFile,
-                            modifier = Modifier.weight(1f),
-                            border = BorderStroke(1.dp, NeonGold.copy(0.4f)),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonGold),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        if (alarmTime > 0L) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .background(NeonGold.copy(0.08f), RoundedCornerShape(10.dp))
+                                    .border(0.5.dp, NeonGold.copy(0.3f), RoundedCornerShape(10.dp))
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Default.AlarmOn, null, tint = NeonGold, modifier = Modifier.size(16.dp))
+                                Column {
+                                    Text("Alarm Set", style = MaterialTheme.typography.labelSmall, color = NeonGold.copy(0.7f))
+                                    Text(alarmDisplayText, style = MaterialTheme.typography.bodySmall, color = NeonGold, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                        }
+
+                        // Status pill
+                        Box(
+                            modifier = Modifier
+                                .background(statusColor.copy(0.18f), RoundedCornerShape(12.dp))
+                                .border(1.dp, statusColor.copy(0.55f), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 18.dp, vertical = 9.dp)
                         ) {
-                            Icon(Icons.Default.UploadFile, null, modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Attach File", style = MaterialTheme.typography.labelSmall)
+                            Text(
+                                when (status) { "COMPLETED" -> "✓  Done"; "CROSSED" -> "✗  Missed"; else -> "○  Pending" },
+                                style = MaterialTheme.typography.labelLarge, color = statusColor, fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+
+                        if (status == "CROSSED" && crossReason.isNotBlank()) {
+                            DateEventViewField("Reason for Missing", crossReason, Icons.Default.ReportProblem, StatusCross)
+                        }
+
+                        // File buttons remain accessible in view mode (read-only action)
+                        if (event.fileUri.isNotBlank() && onViewFile != null) {
+                            NeonDivider(NeonGreen.copy(0.2f))
+                            OutlinedButton(
+                                onClick = onViewFile,
+                                modifier = Modifier.fillMaxWidth(),
+                                border = BorderStroke(1.dp, NeonGreen.copy(0.5f)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonGreen),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Icon(Icons.Default.FileOpen, null, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("View File", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+
+                } else {
+                    // ── Edit Mode ──────────────────────────────────────────────
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        DialogTextField(value = name, onValueChange = { name = it; onUpdate(event.copy(name = name)) }, label = "Event Name", icon = Icons.Default.Event, accentColor = statusColor)
+                        DialogTextField(value = detail, onValueChange = { detail = it; onUpdate(event.copy(detail = detail)) }, label = "Details", icon = Icons.Default.Description, accentColor = statusColor, multiline = true)
+                        NeetTimeRangePickerButton(value = timeRange, onValueChange = { timeRange = it; onUpdate(event.copy(timeRange = timeRange)) }, accentColor = statusColor, label = "Event Time Range")
+
+                        if (event.url.isNotBlank()) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Default.Link, null, tint = NeonCyan, modifier = Modifier.size(14.dp))
+                                Text(event.url, style = MaterialTheme.typography.labelSmall, color = NeonCyan, maxLines = 1)
+                            }
+                        }
+                        if (event.totalQuestions > 0) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Default.Quiz, null, tint = NeonPurple, modifier = Modifier.size(14.dp))
+                                Text("${event.totalQuestions} questions", style = MaterialTheme.typography.labelSmall, color = NeonPurple)
+                            }
+                        }
+
+                        NeonDivider(NeonGold.copy(0.3f))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.Alarm, null, tint = NeonGold, modifier = Modifier.size(18.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Reminder / Alarm", style = MaterialTheme.typography.labelMedium, color = NeonGold, fontWeight = FontWeight.SemiBold)
+                                if (alarmDisplayText.isNotEmpty()) Text(alarmDisplayText, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.7f))
+                                else Text("No alarm set", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.35f))
+                            }
+                            if (alarmTime > 0L) {
+                                IconButton(onClick = {
+                                    AlarmScheduler.cancelAlarm(context, event.id.hashCode())
+                                    alarmTime = 0L; alarmLabel = ""
+                                    onUpdate(event.copy(alarmTime = 0L, alarmLabel = ""))
+                                }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.AlarmOff, null, tint = NeonRed.copy(0.7f), modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            IconButton(onClick = {
+                                val now = Calendar.getInstance()
+                                TimePickerDialog(context, { _, hour, minute ->
+                                    val cal = Calendar.getInstance().apply {
+                                        set(Calendar.HOUR_OF_DAY, hour); set(Calendar.MINUTE, minute); set(Calendar.SECOND, 0)
+                                        if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
+                                    }
+                                    alarmTime = cal.timeInMillis
+                                    alarmLabel = name.ifBlank { "Event $index" }
+                                    AlarmScheduler.scheduleAlarm(context, event.id.hashCode(), cal.timeInMillis, "NEET Event Reminder", alarmLabel.ifBlank { "Scheduled event coming up!" })
+                                    onUpdate(event.copy(alarmTime = cal.timeInMillis, alarmLabel = alarmLabel))
+                                }, now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), false).show()
+                            }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Default.AddAlarm, null, tint = NeonGold, modifier = Modifier.size(18.dp))
+                            }
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            StatusTickCrossButton("✓ Done", status == "COMPLETED", StatusCompleted) {
+                                status = if (status == "COMPLETED") "EXPECTED" else "COMPLETED"
+                                showCrossInput = false
+                                onUpdate(event.copy(status = status))
+                            }
+                            StatusTickCrossButton("✗ Missed", status == "CROSSED", StatusCross) {
+                                status = if (status == "CROSSED") "EXPECTED" else "CROSSED"
+                                showCrossInput = status == "CROSSED"
+                                onUpdate(event.copy(status = status))
+                            }
+                        }
+                        if (showCrossInput) {
+                            DialogTextField(value = crossReason, onValueChange = { crossReason = it; onUpdate(event.copy(crossReason = crossReason)) }, label = "Reason for missing", icon = Icons.Default.ReportProblem, accentColor = StatusCross)
+                            Button(
+                                onClick = onShiftToNextDate,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonOrange.copy(0.15f)),
+                                border = BorderStroke(1.dp, NeonOrange.copy(0.5f))
+                            ) {
+                                Icon(Icons.Default.ArrowForward, null, tint = NeonOrange, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Shift to Next Date", color = NeonOrange, style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+
+                        if (onViewFile != null || onUploadFile != null) {
+                            NeonDivider(NeonGreen.copy(0.2f))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                if (event.fileUri.isNotBlank() && onViewFile != null) {
+                                    OutlinedButton(onClick = onViewFile, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, NeonGreen.copy(0.5f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonGreen), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+                                        Icon(Icons.Default.FileOpen, null, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)); Text("View File", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    IconButton(onClick = onUploadFile ?: {}, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Default.UploadFile, tint = NeonGold.copy(0.5f), modifier = Modifier.size(16.dp), contentDescription = "Replace file")
+                                    }
+                                } else if (onUploadFile != null) {
+                                    OutlinedButton(onClick = onUploadFile, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, NeonGold.copy(0.4f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonGold), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+                                        Icon(Icons.Default.UploadFile, null, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)); Text("Attach File", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DateEventViewField(label: String, value: String, icon: ImageVector, accentColor: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .background(accentColor.copy(0.07f), RoundedCornerShape(10.dp))
+            .border(0.5.dp, accentColor.copy(0.25f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(icon, null, tint = accentColor.copy(0.8f), modifier = Modifier.size(14.dp).padding(top = 2.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = accentColor.copy(0.7f), fontWeight = FontWeight.SemiBold)
+            Text(value, style = MaterialTheme.typography.bodySmall, color = Color.White, lineHeight = 18.sp)
         }
     }
 }

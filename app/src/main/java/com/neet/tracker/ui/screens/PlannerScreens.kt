@@ -2,6 +2,7 @@ package com.neet.tracker.ui.screens
 
 import android.app.TimePickerDialog
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -13,8 +14,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.*
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
@@ -175,93 +177,185 @@ fun PlannerEventCard(event: PlannerEvent, index: Int, accentColor: Color, onUpda
     var selectedStatus by remember(event) { mutableStateOf(event.status) }
     var alarmTime by remember(event) { mutableStateOf(event.alarmTime) }
     var alarmLabel by remember(event) { mutableStateOf(event.alarmLabel) }
+    var isViewMode by remember { mutableStateOf(false) }
 
     val alarmDisplayText = if (alarmTime > 0L) {
         SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(alarmTime))
     } else ""
 
-    GlassCard(glowColor = when (selectedStatus) { "COMPLETED" -> StatusCompleted; "CROSSED" -> StatusCross; else -> accentColor }, modifier = Modifier.fillMaxWidth()) {
+    val cardGlow = when (selectedStatus) { "COMPLETED" -> StatusCompleted; "CROSSED" -> StatusCross; else -> accentColor }
+
+    GlassCard(glowColor = cardGlow, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+
+            // ── Header (always visible) ───────────────────────────────────────
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(28.dp).background(accentColor.copy(0.2f), androidx.compose.foundation.shape.CircleShape).border(1.dp, accentColor.copy(0.5f), androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.size(28.dp)
+                        .background(accentColor.copy(0.2f), androidx.compose.foundation.shape.CircleShape)
+                        .border(1.dp, accentColor.copy(0.5f), androidx.compose.foundation.shape.CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text("$index", style = MaterialTheme.typography.labelSmall, color = accentColor, fontWeight = FontWeight.ExtraBold)
                 }
                 Spacer(Modifier.width(8.dp))
-                Text("Event $index", style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.weight(1f))
+                Text(
+                    if (name.isNotBlank()) name else "Event $index",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f)
+                )
                 if (alarmTime > 0L) {
-                    Icon(Icons.Default.AlarmOn, null, tint = NeonGold, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.AlarmOn, null, tint = NeonGold, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
                 }
-                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Delete, null, tint = NeonRed.copy(0.7f), modifier = Modifier.size(16.dp)) }
+                // Compact status badge
+                val sc = when (selectedStatus) { "COMPLETED" -> StatusCompleted; "CROSSED" -> StatusCross; else -> Color.White.copy(0.3f) }
+                Box(
+                    modifier = Modifier
+                        .background(sc.copy(0.15f), RoundedCornerShape(8.dp))
+                        .border(0.5.dp, sc.copy(0.5f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        when (selectedStatus) { "COMPLETED" -> "✓"; "CROSSED" -> "✗"; else -> "○" },
+                        style = MaterialTheme.typography.labelSmall, color = sc, fontWeight = FontWeight.ExtraBold
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
+                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Delete, null, tint = NeonRed.copy(0.7f), modifier = Modifier.size(16.dp))
+                }
             }
+
             NeonDivider(accentColor)
-            DialogTextField(value = name, onValueChange = { name = it; onUpdate(event.copy(name = name)) }, label = "Event Name", icon = Icons.Default.Event, accentColor = accentColor)
-            DialogTextField(value = notes, onValueChange = { notes = it; onUpdate(event.copy(notes = notes)) }, label = "Notes / Description", icon = Icons.Default.Notes, accentColor = accentColor, multiline = true)
 
-            // 3D Time Range Picker replacing the old text field
-            NeetTimeRangePickerButton(
-                value = timing,
-                onValueChange = { timing = it; onUpdate(event.copy(timingRange = timing)) },
-                accentColor = accentColor,
-                label = "Event Time Range"
-            )
+            // ── View / Edit Toggle ─────────────────────────────────────────────
+            ViewEditToggle(isViewMode = isViewMode, onToggle = { isViewMode = !isViewMode })
 
-            DialogTextField(value = remark, onValueChange = { remark = it; onUpdate(event.copy(remark = remark)) }, label = "Remark", icon = Icons.Default.StickyNote2, accentColor = accentColor)
+            // ── Content switches based on mode ─────────────────────────────────
+            AnimatedContent(
+                targetState = isViewMode,
+                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
+                label = "planner_card_$index"
+            ) { viewMode ->
+                if (viewMode) {
+                    // ── View Mode ──────────────────────────────────────────────
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (name.isNotBlank())   PlannerViewField("Event Name", name,   Icons.Default.Event,       accentColor)
+                        if (notes.isNotBlank())  PlannerViewField("Notes",      notes,  Icons.Default.Notes,       accentColor)
+                        if (timing.isNotBlank()) PlannerViewField("Time Range", timing, Icons.Default.Schedule,    accentColor)
+                        if (remark.isNotBlank()) PlannerViewField("Remark",     remark, Icons.Default.StickyNote2, accentColor)
 
-            // ─── Alarm / Reminder Row ──────────────────────────────────────────
-            NeonDivider(NeonGold.copy(0.3f))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.Alarm, null, tint = NeonGold, modifier = Modifier.size(18.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Reminder / Alarm", style = MaterialTheme.typography.labelMedium, color = NeonGold, fontWeight = FontWeight.SemiBold)
-                    if (alarmDisplayText.isNotEmpty()) {
-                        Text(alarmDisplayText, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.7f))
-                    } else {
-                        Text("No alarm set", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.35f))
+                        if (alarmTime > 0L) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .background(NeonGold.copy(0.08f), RoundedCornerShape(10.dp))
+                                    .border(0.5.dp, NeonGold.copy(0.3f), RoundedCornerShape(10.dp))
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Default.AlarmOn, null, tint = NeonGold, modifier = Modifier.size(16.dp))
+                                Column {
+                                    Text("Alarm Set", style = MaterialTheme.typography.labelSmall, color = NeonGold.copy(0.7f))
+                                    Text(alarmDisplayText, style = MaterialTheme.typography.bodySmall, color = NeonGold, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                        }
+
+                        // Status pill
+                        val statusColor = when (selectedStatus) { "COMPLETED" -> StatusCompleted; "CROSSED" -> StatusCross; else -> accentColor.copy(0.5f) }
+                        Box(
+                            modifier = Modifier
+                                .background(statusColor.copy(0.18f), RoundedCornerShape(12.dp))
+                                .border(1.dp, statusColor.copy(0.55f), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 18.dp, vertical = 9.dp)
+                        ) {
+                            Text(
+                                when (selectedStatus) { "COMPLETED" -> "✓  Done"; "CROSSED" -> "✗  Missed"; else -> "○  Pending" },
+                                style = MaterialTheme.typography.labelLarge,
+                                color = statusColor,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    }
+
+                } else {
+                    // ── Edit Mode ──────────────────────────────────────────────
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        DialogTextField(value = name, onValueChange = { name = it; onUpdate(event.copy(name = name)) }, label = "Event Name", icon = Icons.Default.Event, accentColor = accentColor)
+                        DialogTextField(value = notes, onValueChange = { notes = it; onUpdate(event.copy(notes = notes)) }, label = "Notes / Description", icon = Icons.Default.Notes, accentColor = accentColor, multiline = true)
+                        NeetTimeRangePickerButton(value = timing, onValueChange = { timing = it; onUpdate(event.copy(timingRange = timing)) }, accentColor = accentColor, label = "Event Time Range")
+                        DialogTextField(value = remark, onValueChange = { remark = it; onUpdate(event.copy(remark = remark)) }, label = "Remark", icon = Icons.Default.StickyNote2, accentColor = accentColor)
+
+                        NeonDivider(NeonGold.copy(0.3f))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.Alarm, null, tint = NeonGold, modifier = Modifier.size(18.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Reminder / Alarm", style = MaterialTheme.typography.labelMedium, color = NeonGold, fontWeight = FontWeight.SemiBold)
+                                if (alarmDisplayText.isNotEmpty()) Text(alarmDisplayText, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.7f))
+                                else Text("No alarm set", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.35f))
+                            }
+                            if (alarmTime > 0L) {
+                                IconButton(onClick = {
+                                    AlarmScheduler.cancelAlarm(context, event.id.hashCode())
+                                    alarmTime = 0L; alarmLabel = ""
+                                    onUpdate(event.copy(alarmTime = 0L, alarmLabel = ""))
+                                }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.AlarmOff, null, tint = NeonRed.copy(0.7f), modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            IconButton(onClick = {
+                                val now = Calendar.getInstance()
+                                TimePickerDialog(context, { _, hour, minute ->
+                                    val cal = Calendar.getInstance().apply {
+                                        set(Calendar.HOUR_OF_DAY, hour); set(Calendar.MINUTE, minute); set(Calendar.SECOND, 0)
+                                        if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
+                                    }
+                                    alarmTime = cal.timeInMillis
+                                    alarmLabel = name.ifBlank { "Event $index" }
+                                    AlarmScheduler.scheduleAlarm(context, event.id.hashCode(), cal.timeInMillis, "NEET Reminder", alarmLabel.ifBlank { "Time for your scheduled event!" })
+                                    onUpdate(event.copy(alarmTime = cal.timeInMillis, alarmLabel = alarmLabel))
+                                }, now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), false).show()
+                            }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Default.AddAlarm, null, tint = NeonGold, modifier = Modifier.size(18.dp))
+                            }
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            StatusTickCrossButton("✓ Done", selectedStatus == "COMPLETED", StatusCompleted) {
+                                selectedStatus = if (selectedStatus == "COMPLETED") "EXPECTED" else "COMPLETED"
+                                onUpdate(event.copy(status = selectedStatus))
+                            }
+                            StatusTickCrossButton("✗ Missed", selectedStatus == "CROSSED", StatusCross) {
+                                selectedStatus = if (selectedStatus == "CROSSED") "EXPECTED" else "CROSSED"
+                                onUpdate(event.copy(status = selectedStatus))
+                            }
+                        }
                     }
                 }
-                if (alarmTime > 0L) {
-                    IconButton(
-                        onClick = {
-                            AlarmScheduler.cancelAlarm(context, event.id.hashCode())
-                            alarmTime = 0L
-                            alarmLabel = ""
-                            onUpdate(event.copy(alarmTime = 0L, alarmLabel = ""))
-                        },
-                        modifier = Modifier.size(32.dp)
-                    ) { Icon(Icons.Default.AlarmOff, null, tint = NeonRed.copy(0.7f), modifier = Modifier.size(18.dp)) }
-                }
-                IconButton(
-                    onClick = {
-                        val now = Calendar.getInstance()
-                        TimePickerDialog(context, { _, hour, minute ->
-                            val cal = Calendar.getInstance().apply {
-                                set(Calendar.HOUR_OF_DAY, hour)
-                                set(Calendar.MINUTE, minute)
-                                set(Calendar.SECOND, 0)
-                                if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
-                            }
-                            alarmTime = cal.timeInMillis
-                            alarmLabel = name.ifBlank { "Event $index" }
-                            AlarmScheduler.scheduleAlarm(context, event.id.hashCode(), cal.timeInMillis, "NEET Reminder", alarmLabel.ifBlank { "Time for your scheduled event!" })
-                            onUpdate(event.copy(alarmTime = cal.timeInMillis, alarmLabel = alarmLabel))
-                        }, now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), false).show()
-                    },
-                    modifier = Modifier.size(32.dp)
-                ) { Icon(Icons.Default.AddAlarm, null, tint = NeonGold, modifier = Modifier.size(18.dp)) }
             }
+        }
+    }
+}
 
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatusTickCrossButton("✓ Done", selectedStatus == "COMPLETED", StatusCompleted) {
-                    selectedStatus = if (selectedStatus == "COMPLETED") "EXPECTED" else "COMPLETED"
-                    onUpdate(event.copy(status = selectedStatus))
-                }
-                StatusTickCrossButton("✗ Missed", selectedStatus == "CROSSED", StatusCross) {
-                    selectedStatus = if (selectedStatus == "CROSSED") "EXPECTED" else "CROSSED"
-                    onUpdate(event.copy(status = selectedStatus))
-                }
-            }
+@Composable
+private fun PlannerViewField(label: String, value: String, icon: ImageVector, accentColor: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .background(accentColor.copy(0.07f), RoundedCornerShape(10.dp))
+            .border(0.5.dp, accentColor.copy(0.25f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(icon, null, tint = accentColor.copy(0.8f), modifier = Modifier.size(14.dp).padding(top = 2.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = accentColor.copy(0.7f), fontWeight = FontWeight.SemiBold)
+            Text(value, style = MaterialTheme.typography.bodySmall, color = Color.White, lineHeight = 18.sp)
         }
     }
 }
