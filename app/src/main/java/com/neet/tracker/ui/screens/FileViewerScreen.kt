@@ -166,6 +166,13 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var isHorizontalScroll by remember { mutableStateOf(false) }
     var zoomEnabled        by remember { mutableStateOf(false) }
 
+    // ── Annotation fullscreen + floating toolbar ────────────────────────────────
+    var annotFullScreen      by remember { mutableStateOf(false) }
+    var annotToolbarExpanded by remember { mutableStateOf(true) }
+    var annotToolbarOffsetX  by remember { mutableFloatStateOf(16f) }
+    var annotToolbarOffsetY  by remember { mutableFloatStateOf(300f) }
+    var annotZoomEnabled     by remember { mutableStateOf(false) }
+
     // ── Annotation / Draw-on-PDF ───────────────────────────────────────────────
     val annoScope           = rememberCoroutineScope()
     var annotationMode      by remember { mutableStateOf(false) }
@@ -253,10 +260,11 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     }
 
     SpaceBackground {
+        Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
 
             // ── Top bar (hidden in focus mode) ─────────────────────────────────
-            AnimatedVisibility(visible = !focusMode, enter = fadeIn(), exit = fadeOut()) {
+            AnimatedVisibility(visible = !focusMode && !annotFullScreen, enter = fadeIn(), exit = fadeOut()) {
                 NEETTopBar(
                     title      = title,
                     breadcrumb = if (pdfPages.isNotEmpty() && totalPages > 0) "Page ${currentPage + 1} / $totalPages" else "File Viewer",
@@ -338,6 +346,12 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                                 if (annotationMode) {
                                     scale = 1f; panOffset = Offset.Zero
                                     focusMode = false; notesExpanded = false; showThumbs = false
+                                    annotFullScreen = true
+                                    annotToolbarExpanded = true
+                                    annotZoomEnabled = false
+                                } else {
+                                    annotFullScreen = false
+                                    annotZoomEnabled = false
                                 }
                             }) {
                                 Box(
@@ -381,7 +395,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             }
 
             // ── Reading progress bar ───────────────────────────────────────────
-            if (pdfPages.isNotEmpty()) {
+            if (pdfPages.isNotEmpty() && !annotFullScreen) {
                 Box(modifier = Modifier.fillMaxWidth().height(3.dp).background(Color.White.copy(0.07f))) {
                     val animProg by animateFloatAsState(progressFraction, tween(600), label = "prog")
                     Box(
@@ -392,7 +406,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             }
 
             // ── Viewer controls strip (scroll direction + zoom) ────────────────
-            AnimatedVisibility(visible = pdfPages.isNotEmpty() && !focusMode, enter = fadeIn(), exit = fadeOut()) {
+            AnimatedVisibility(visible = pdfPages.isNotEmpty() && !focusMode && !annotFullScreen, enter = fadeIn(), exit = fadeOut()) {
                 UvViewerControls(
                     isHorizontalScroll = isHorizontalScroll,
                     onScrollToggle = {
@@ -407,9 +421,9 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 )
             }
 
-            // ── Annotation toolbar ─────────────────────────────────────────────
+            // ── Annotation toolbar (static strip — only shown when NOT in fullscreen mode) ──
             AnimatedVisibility(
-                visible = annotationMode && pdfPages.isNotEmpty(),
+                visible = annotationMode && pdfPages.isNotEmpty() && !annotFullScreen,
                 enter = slideInVertically { -it } + fadeIn(tween(250)),
                 exit  = slideOutVertically { -it } + fadeOut(tween(200))
             ) {
@@ -448,6 +462,8 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     },
                     onDone = {
                         annotationMode = false
+                        annotFullScreen = false
+                        annotZoomEnabled = false
                         annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
                     }
                 )
@@ -455,7 +471,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
 
             // ── Bookmarks panel ────────────────────────────────────────────────
             AnimatedVisibility(
-                visible = showBookmarks && bookmarkedPages.isNotEmpty(),
+                visible = showBookmarks && bookmarkedPages.isNotEmpty() && !annotFullScreen,
                 enter = expandVertically() + fadeIn(),
                 exit  = shrinkVertically() + fadeOut()
             ) {
@@ -536,6 +552,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                                 annotationTool      = annotationTool,
                                 annotationColorArgb = annotationColorArgb,
                                 annotationWidthDp   = annotationWidthDp,
+                                annotZoomEnabled    = annotZoomEnabled,
                                 pageStrokes         = allPageStrokes[currentPage] ?: emptyList(),
                                 onStrokeCommit = { stroke ->
                                     annoUndoStack  = (annoUndoStack + allPageStrokes).takeLast(50)
@@ -631,7 +648,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
 
             // ── Per-page mark strip ────────────────────────────────────────────
             AnimatedVisibility(
-                visible = pdfPages.isNotEmpty() && !focusMode,
+                visible = pdfPages.isNotEmpty() && !focusMode && !annotFullScreen,
                 enter = fadeIn(), exit = fadeOut()
             ) {
                 Column {
@@ -672,7 +689,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
 
             // ── Thumbnail strip ────────────────────────────────────────────────
             AnimatedVisibility(
-                visible = showThumbs && pdfPages.isNotEmpty(),
+                visible = showThumbs && pdfPages.isNotEmpty() && !annotFullScreen,
                 enter = slideInVertically { it } + fadeIn(),
                 exit  = slideOutVertically { it } + fadeOut()
             ) {
@@ -682,7 +699,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             }
 
             // ── Page nav bar ───────────────────────────────────────────────────
-            if (pdfPages.isNotEmpty() && !focusMode) {
+            if (pdfPages.isNotEmpty() && !focusMode && !annotFullScreen) {
                 UvPageNavBar(
                     current = currentPage,
                     total   = totalPages,
@@ -693,13 +710,69 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
 
             // ── Annotation panel ───────────────────────────────────────────────
             AnimatedVisibility(
-                visible = notesExpanded,
+                visible = notesExpanded && !annotFullScreen,
                 enter   = slideInVertically { it } + fadeIn(tween(250)),
                 exit    = slideOutVertically { it } + fadeOut(tween(200))
             ) {
                 AnnotationPanel(text = notesText, onTextChange = { notesText = it })
             }
         }
+
+        // ── Floating annotation toolbar (fullscreen draw mode) ─────────────────
+        if (annotationMode && pdfPages.isNotEmpty()) {
+            FloatingAnnotToolbar(
+                expanded         = annotToolbarExpanded,
+                offsetX          = annotToolbarOffsetX,
+                offsetY          = annotToolbarOffsetY,
+                onDrag           = { dx, dy ->
+                    annotToolbarOffsetX = (annotToolbarOffsetX + dx).coerceAtLeast(0f)
+                    annotToolbarOffsetY = (annotToolbarOffsetY + dy).coerceAtLeast(0f)
+                },
+                onToggleExpanded = { annotToolbarExpanded = !annotToolbarExpanded },
+                tool             = annotationTool,
+                colorArgb        = annotationColorArgb,
+                widthDp          = annotationWidthDp,
+                canUndo          = annoUndoStack.isNotEmpty(),
+                canRedo          = annoRedoStack.isNotEmpty(),
+                zoomEnabled      = annotZoomEnabled,
+                onToolChange     = { annotationTool = it },
+                onColorChange    = { annotationColorArgb = it },
+                onWidthChange    = { annotationWidthDp = it },
+                onUndo = {
+                    annoUndoStack.lastOrNull()?.let { snap ->
+                        annoRedoStack  = annoRedoStack + allPageStrokes
+                        allPageStrokes = snap
+                        annoUndoStack  = annoUndoStack.dropLast(1)
+                        annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                    }
+                },
+                onRedo = {
+                    annoRedoStack.lastOrNull()?.let { snap ->
+                        annoUndoStack  = (annoUndoStack + allPageStrokes).takeLast(50)
+                        allPageStrokes = snap
+                        annoRedoStack  = annoRedoStack.dropLast(1)
+                        annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                    }
+                },
+                onClearPage = {
+                    if ((allPageStrokes[currentPage] ?: emptyList()).isNotEmpty()) {
+                        annoUndoStack  = (annoUndoStack + allPageStrokes).takeLast(50)
+                        annoRedoStack  = emptyList()
+                        allPageStrokes = allPageStrokes + (currentPage to emptyList())
+                        annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                    }
+                },
+                onZoomToggle = { annotZoomEnabled = !annotZoomEnabled },
+                onDone = {
+                    annotationMode  = false
+                    annotFullScreen = false
+                    annotZoomEnabled = false
+                    annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                }
+            )
+        }
+
+        } // end Box
 
         // ── Jump to page dialog ────────────────────────────────────────────────
         if (showJumpDialog) {
@@ -877,6 +950,7 @@ private fun UvPdfPage(
     annotationTool: AnnotationTool = AnnotationTool.PEN,
     annotationColorArgb: Int = android.graphics.Color.RED,
     annotationWidthDp: Float = 6f,
+    annotZoomEnabled: Boolean = false,
     pageStrokes: List<AnnotationStroke> = emptyList(),
     onStrokeCommit: (AnnotationStroke) -> Unit = {},
     onEraseGestureStart: () -> Unit = {},
@@ -973,6 +1047,8 @@ private fun UvPdfPage(
                 tool                = annotationTool,
                 colorArgb           = annotationColorArgb,
                 strokeWidthDp       = annotationWidthDp,
+                annotZoomEnabled    = annotZoomEnabled,
+                onZoomTransform     = onTransform,
                 onStrokeCommit      = onStrokeCommit,
                 onEraseGestureStart = onEraseGestureStart,
                 onStrokesErase      = onStrokesErase,
@@ -1039,6 +1115,8 @@ private fun PdfAnnotationOverlay(
     tool: AnnotationTool,
     colorArgb: Int,
     strokeWidthDp: Float,
+    annotZoomEnabled: Boolean = false,
+    onZoomTransform: (Float, Offset) -> Unit = { _, _ -> },
     onStrokeCommit: (AnnotationStroke) -> Unit,
     onEraseGestureStart: () -> Unit,
     onStrokesErase: (List<AnnotationStroke>) -> Unit,
@@ -1047,70 +1125,154 @@ private fun PdfAnnotationOverlay(
     val strokeWidthPx  = with(density) { strokeWidthDp.dp.toPx() }
     val eraserRadiusPx = with(density) { 26.dp.toPx() }
 
-    // Live-readable copy of strokes so the eraser coroutine always sees the latest set
     val liveStrokes = remember { mutableStateListOf<AnnotationStroke>() }
     SideEffect { liveStrokes.clear(); liveStrokes.addAll(strokes) }
 
-    // currentPoints and eraserPos are Compose state so Canvas reads them and redraws on change.
-    // eraseStarted is a plain coroutine-local boolean — no recomposition needed for it.
     var currentPoints by remember { mutableStateOf<List<Pair<Float, Float>>>(emptyList()) }
     var eraserPos     by remember { mutableStateOf<Pair<Float, Float>?>(null) }
 
     Canvas(
         modifier = modifier
-            .pointerInput(tool, colorArgb, strokeWidthDp) {
-                // Local flag — persists across the three gesture callbacks in one drag gesture.
-                var eraseStarted = false
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        val nx = (offset.x / imageWidthPx).coerceIn(0f, 1f)
-                        val ny = (offset.y / imageHeightPx).coerceIn(0f, 1f)
-                        if (tool == AnnotationTool.ERASER) {
-                            eraserPos    = Pair(nx, ny)
-                            eraseStarted = false
-                        } else {
-                            currentPoints = listOf(Pair(nx, ny))
-                        }
-                    },
-                    onDrag = { change, _ ->
-                        val nx = (change.position.x / imageWidthPx).coerceIn(0f, 1f)
-                        val ny = (change.position.y / imageHeightPx).coerceIn(0f, 1f)
-                        if (tool == AnnotationTool.ERASER) {
-                            eraserPos = Pair(nx, ny)
-                            val hit = liveStrokes.filter { stroke ->
-                                stroke.points.any { (px, py) ->
-                                    val dx = (px - nx) * imageWidthPx
-                                    val dy = (py - ny) * imageHeightPx
-                                    sqrt(dx * dx + dy * dy) < eraserRadiusPx
+            .pointerInput(tool, colorArgb, strokeWidthDp, annotZoomEnabled) {
+                if (annotZoomEnabled) {
+                    // ── Simultaneous zoom (2-finger) + draw (1-finger) ──────────
+                    awaitPointerEventScope {
+                        val drawPoints   = mutableListOf<Pair<Float, Float>>()
+                        var eraseStarted = false
+                        var wasMulti     = false
+                        var prevCx = 0f; var prevCy = 0f; var prevDist = 0f
+                        while (true) {
+                            val event   = awaitPointerEvent()
+                            val pressed = event.changes.filter { it.pressed }
+                            when {
+                                pressed.isEmpty() -> {
+                                    // All fingers up — commit any in-progress stroke
+                                    if (drawPoints.size >= 2 && tool != AnnotationTool.ERASER) {
+                                        val isH = tool == AnnotationTool.HIGHLIGHTER
+                                        val fc  = Color(colorArgb).copy(alpha = if (isH) 0.38f else 1f)
+                                        onStrokeCommit(AnnotationStroke(
+                                            points    = drawPoints.toList(),
+                                            colorArgb = fc.toArgb(),
+                                            widthDp   = strokeWidthDp * if (isH) 3.5f else 1f,
+                                            tool      = if (isH) "highlight" else "pen"
+                                        ))
+                                    }
+                                    drawPoints.clear()
+                                    currentPoints = emptyList()
+                                    eraserPos     = null
+                                    eraseStarted  = false
+                                    wasMulti      = false
+                                    prevDist      = 0f
+                                    event.changes.forEach { it.consume() }
+                                }
+                                pressed.size >= 2 -> {
+                                    // Two-finger zoom/pan — commit partial stroke first
+                                    if (drawPoints.size >= 2 && tool != AnnotationTool.ERASER) {
+                                        val isH = tool == AnnotationTool.HIGHLIGHTER
+                                        val fc  = Color(colorArgb).copy(alpha = if (isH) 0.38f else 1f)
+                                        onStrokeCommit(AnnotationStroke(drawPoints.toList(), fc.toArgb(), strokeWidthDp * if (isH) 3.5f else 1f, if (isH) "highlight" else "pen"))
+                                        drawPoints.clear(); currentPoints = emptyList()
+                                    }
+                                    val p1  = pressed[0].position
+                                    val p2  = pressed[1].position
+                                    val cx  = (p1.x + p2.x) / 2f
+                                    val cy  = (p1.y + p2.y) / 2f
+                                    val ddx = p1.x - p2.x
+                                    val ddy = p1.y - p2.y
+                                    val dist = sqrt(ddx * ddx + ddy * ddy)
+                                    if (wasMulti && prevDist > 0f) {
+                                        onZoomTransform(dist / prevDist, Offset(cx - prevCx, cy - prevCy))
+                                    }
+                                    prevCx = cx; prevCy = cy; prevDist = dist
+                                    wasMulti = true
+                                    pressed.forEach { it.consume() }
+                                }
+                                else -> {
+                                    // Single finger
+                                    if (wasMulti) {
+                                        wasMulti = false; prevDist = 0f
+                                        pressed.forEach { it.consume() }
+                                    } else {
+                                        val c  = pressed[0]
+                                        val nx = (c.position.x / imageWidthPx).coerceIn(0f, 1f)
+                                        val ny = (c.position.y / imageHeightPx).coerceIn(0f, 1f)
+                                        if (tool == AnnotationTool.ERASER) {
+                                            eraserPos = Pair(nx, ny)
+                                            val hit = liveStrokes.filter { s ->
+                                                s.points.any { (px, py) ->
+                                                    val ex = (px - nx) * imageWidthPx
+                                                    val ey = (py - ny) * imageHeightPx
+                                                    sqrt(ex * ex + ey * ey) < eraserRadiusPx
+                                                }
+                                            }
+                                            if (hit.isNotEmpty()) {
+                                                if (!eraseStarted) { onEraseGestureStart(); eraseStarted = true }
+                                                onStrokesErase(hit)
+                                            }
+                                        } else {
+                                            drawPoints.add(Pair(nx, ny))
+                                            currentPoints = drawPoints.toList()
+                                        }
+                                        c.consume()
+                                    }
                                 }
                             }
-                            if (hit.isNotEmpty()) {
-                                if (!eraseStarted) { onEraseGestureStart(); eraseStarted = true }
-                                onStrokesErase(hit)
-                            }
-                        } else {
-                            currentPoints = currentPoints + Pair(nx, ny)
                         }
-                    },
-                    onDragEnd = {
-                        if (tool != AnnotationTool.ERASER && currentPoints.size >= 2) {
-                            val isHighlight = tool == AnnotationTool.HIGHLIGHTER
-                            val finalColor  = Color(colorArgb).copy(alpha = if (isHighlight) 0.38f else 1f)
-                            onStrokeCommit(AnnotationStroke(
-                                points    = currentPoints,
-                                colorArgb = finalColor.toArgb(),
-                                widthDp   = strokeWidthDp * if (isHighlight) 3.5f else 1f,
-                                tool      = if (isHighlight) "highlight" else "pen"
-                            ))
-                        }
-                        currentPoints = emptyList()
-                        eraserPos     = null
-                        eraseStarted  = false
-                    },
-                    onDragCancel = {
-                        currentPoints = emptyList(); eraserPos = null; eraseStarted = false
                     }
-                )
+                } else {
+                    // ── Original single-touch draw-only mode ────────────────────
+                    var eraseStarted = false
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            val nx = (offset.x / imageWidthPx).coerceIn(0f, 1f)
+                            val ny = (offset.y / imageHeightPx).coerceIn(0f, 1f)
+                            if (tool == AnnotationTool.ERASER) {
+                                eraserPos    = Pair(nx, ny)
+                                eraseStarted = false
+                            } else {
+                                currentPoints = listOf(Pair(nx, ny))
+                            }
+                        },
+                        onDrag = { change, _ ->
+                            val nx = (change.position.x / imageWidthPx).coerceIn(0f, 1f)
+                            val ny = (change.position.y / imageHeightPx).coerceIn(0f, 1f)
+                            if (tool == AnnotationTool.ERASER) {
+                                eraserPos = Pair(nx, ny)
+                                val hit = liveStrokes.filter { stroke ->
+                                    stroke.points.any { (px, py) ->
+                                        val dx = (px - nx) * imageWidthPx
+                                        val dy = (py - ny) * imageHeightPx
+                                        sqrt(dx * dx + dy * dy) < eraserRadiusPx
+                                    }
+                                }
+                                if (hit.isNotEmpty()) {
+                                    if (!eraseStarted) { onEraseGestureStart(); eraseStarted = true }
+                                    onStrokesErase(hit)
+                                }
+                            } else {
+                                currentPoints = currentPoints + Pair(nx, ny)
+                            }
+                        },
+                        onDragEnd = {
+                            if (tool != AnnotationTool.ERASER && currentPoints.size >= 2) {
+                                val isHighlight = tool == AnnotationTool.HIGHLIGHTER
+                                val finalColor  = Color(colorArgb).copy(alpha = if (isHighlight) 0.38f else 1f)
+                                onStrokeCommit(AnnotationStroke(
+                                    points    = currentPoints,
+                                    colorArgb = finalColor.toArgb(),
+                                    widthDp   = strokeWidthDp * if (isHighlight) 3.5f else 1f,
+                                    tool      = if (isHighlight) "highlight" else "pen"
+                                ))
+                            }
+                            currentPoints = emptyList()
+                            eraserPos     = null
+                            eraseStarted  = false
+                        },
+                        onDragCancel = {
+                            currentPoints = emptyList(); eraserPos = null; eraseStarted = false
+                        }
+                    )
+                }
             }
     ) {
         // Draw all committed strokes for this page
@@ -1147,6 +1309,249 @@ private fun PdfAnnotationOverlay(
             drawCircle(Color.White.copy(0.65f), eraserRadiusPx, Offset(cx, cy),
                 style = DrawStyle(width = with(density) { 2.dp.toPx() }))
             drawCircle(Color.White.copy(0.9f), with(density) { 3.dp.toPx() }, Offset(cx, cy))
+        }
+    }
+}
+
+// ─── Floating Annotation Toolbar (draggable, collapsible) ─────────────────────
+
+@Composable
+private fun FloatingAnnotToolbar(
+    expanded: Boolean,
+    offsetX: Float,
+    offsetY: Float,
+    onDrag: (Float, Float) -> Unit,
+    onToggleExpanded: () -> Unit,
+    tool: AnnotationTool,
+    colorArgb: Int,
+    widthDp: Float,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    zoomEnabled: Boolean,
+    onToolChange: (AnnotationTool) -> Unit,
+    onColorChange: (Int) -> Unit,
+    onWidthChange: (Float) -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onClearPage: () -> Unit,
+    onZoomToggle: () -> Unit,
+    onDone: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .offset { IntOffset(offsetX.toInt(), offsetY.toInt()) }
+    ) {
+        if (!expanded) {
+            // ── Collapsed: floating pencil bubble ──────────────────────────────
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .shadow(14.dp, CircleShape, spotColor = NeonOrange.copy(0.55f))
+                    .background(
+                        Brush.radialGradient(listOf(NeonOrange.copy(0.38f), Color(0xFF0B1020))),
+                        CircleShape
+                    )
+                    .border(1.5.dp, NeonOrange.copy(0.85f), CircleShape)
+                    .pointerInput(Unit) {
+                        detectDragGestures { _, dragAmount -> onDrag(dragAmount.x, dragAmount.y) }
+                    }
+                    .clickable { onToggleExpanded() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Edit, null, tint = NeonOrange, modifier = Modifier.size(22.dp))
+            }
+        } else {
+            // ── Expanded: full floating panel ──────────────────────────────────
+            Column(
+                modifier = Modifier
+                    .width(IntrinsicSize.Max)
+                    .widthIn(min = 210.dp, max = 280.dp)
+                    .shadow(22.dp, RoundedCornerShape(18.dp), spotColor = NeonOrange.copy(0.45f))
+                    .background(
+                        Brush.verticalGradient(listOf(Color(0xFF0E1A2A), Color(0xFF070F1C))),
+                        RoundedCornerShape(18.dp)
+                    )
+                    .border(1.dp, NeonOrange.copy(0.55f), RoundedCornerShape(18.dp))
+                    .clip(RoundedCornerShape(18.dp))
+            ) {
+                // ── Drag handle + title + collapse ─────────────────────────────
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .pointerInput(Unit) {
+                            detectDragGestures { _, dragAmount -> onDrag(dragAmount.x, dragAmount.y) }
+                        }
+                        .background(NeonOrange.copy(0.08f))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(Icons.Default.DragHandle, null,
+                        tint = Color.White.copy(0.35f), modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Edit, null,
+                        tint = NeonOrange.copy(0.9f), modifier = Modifier.size(13.dp))
+                    Text("Draw Tools", style = MaterialTheme.typography.labelMedium,
+                        color = NeonOrange, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f))
+                    IconButton(onClick = onToggleExpanded, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.ExpandLess, null,
+                            tint = Color.White.copy(0.5f), modifier = Modifier.size(16.dp))
+                    }
+                }
+
+                Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(NeonOrange.copy(0.3f)))
+
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(9.dp)
+                ) {
+                    // ── Row 1: Tool buttons ────────────────────────────────────
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            Triple(AnnotationTool.PEN,         Icons.Default.Edit,  "Pen"),
+                            Triple(AnnotationTool.HIGHLIGHTER, Icons.Default.Brush, "High."),
+                            Triple(AnnotationTool.ERASER,      Icons.Default.Close, "Erase"),
+                        ).forEach { (t, icon, label) ->
+                            val sel = tool == t
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(if (sel) NeonOrange.copy(0.28f) else Color.White.copy(0.05f), RoundedCornerShape(10.dp))
+                                    .border(if (sel) 1.dp else 0.5.dp, if (sel) NeonOrange.copy(0.85f) else Color.White.copy(0.15f), RoundedCornerShape(10.dp))
+                                    .clickable { onToolChange(t) }
+                                    .padding(horizontal = 6.dp, vertical = 7.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Icon(icon, null,
+                                        tint = if (sel) NeonOrange else Color.White.copy(0.5f),
+                                        modifier = Modifier.size(15.dp))
+                                    Text(label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 9.sp,
+                                        color = if (sel) NeonOrange else Color.White.copy(0.4f),
+                                        fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Row 2: Color chips ─────────────────────────────────────
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ANNOT_COLORS_ARGB.forEach { argb ->
+                            val sel = argb == colorArgb
+                            Box(
+                                modifier = Modifier
+                                    .size(if (sel) 27.dp else 21.dp)
+                                    .shadow(if (sel) 5.dp else 0.dp, CircleShape, spotColor = Color(argb).copy(0.65f))
+                                    .border(if (sel) 2.dp else 0.5.dp, if (sel) Color.White else Color.White.copy(0.2f), CircleShape)
+                                    .clip(CircleShape)
+                                    .background(Color(argb))
+                                    .clickable { onColorChange(argb) }
+                            )
+                        }
+                    }
+
+                    // ── Row 3: Stroke widths ───────────────────────────────────
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        ANNOT_WIDTHS.forEach { (w, label) ->
+                            val sel = widthDp == w
+                            Box(
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .background(if (sel) NeonOrange.copy(0.22f) else Color.White.copy(0.05f), RoundedCornerShape(8.dp))
+                                    .border(if (sel) 1.dp else 0.5.dp, if (sel) NeonOrange.copy(0.75f) else Color.White.copy(0.1f), RoundedCornerShape(8.dp))
+                                    .clickable { onWidthChange(w) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(label, style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 9.sp,
+                                    color = if (sel) NeonOrange else Color.White.copy(0.45f),
+                                    fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    }
+
+                    Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(NeonOrange.copy(0.18f)))
+
+                    // ── Row 4: Actions ─────────────────────────────────────────
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        IconButton(onClick = onUndo, enabled = canUndo, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Undo, null,
+                                tint = if (canUndo) NeonCyan else Color.White.copy(0.2f),
+                                modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = onRedo, enabled = canRedo, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Redo, null,
+                                tint = if (canRedo) NeonCyan else Color.White.copy(0.2f),
+                                modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = onClearPage, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.DeleteSweep, null,
+                                tint = NeonRed.copy(0.7f), modifier = Modifier.size(16.dp))
+                        }
+
+                        Spacer(Modifier.weight(1f))
+
+                        // Zoom toggle
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .shadow(if (zoomEnabled) 6.dp else 0.dp, RoundedCornerShape(8.dp), spotColor = NeonCyan.copy(0.4f))
+                                .background(if (zoomEnabled) NeonCyan.copy(0.25f) else Color.White.copy(0.06f), RoundedCornerShape(8.dp))
+                                .border(1.dp, if (zoomEnabled) NeonCyan.copy(0.8f) else Color.White.copy(0.15f), RoundedCornerShape(8.dp))
+                                .clickable(onClick = onZoomToggle),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.ZoomIn, null,
+                                tint = if (zoomEnabled) NeonCyan else Color.White.copy(0.45f),
+                                modifier = Modifier.size(16.dp))
+                        }
+
+                        // Done
+                        Box(
+                            modifier = Modifier
+                                .shadow(8.dp, RoundedCornerShape(9.dp), spotColor = NeonGreen.copy(0.4f))
+                                .background(NeonGreen.copy(0.2f), RoundedCornerShape(9.dp))
+                                .border(1.dp, NeonGreen.copy(0.7f), RoundedCornerShape(9.dp))
+                                .clickable(onClick = onDone)
+                                .padding(horizontal = 12.dp, vertical = 7.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Icon(Icons.Default.Check, null, tint = NeonGreen, modifier = Modifier.size(13.dp))
+                                Text("Done", style = MaterialTheme.typography.labelSmall,
+                                    color = NeonGreen, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    // Zoom mode hint
+                    if (zoomEnabled) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth()
+                                .background(NeonCyan.copy(0.1f), RoundedCornerShape(8.dp))
+                                .border(0.5.dp, NeonCyan.copy(0.4f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Icon(Icons.Default.ZoomIn, null, tint = NeonCyan, modifier = Modifier.size(11.dp))
+                                Text("1 finger draws  ·  2 fingers zoom",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 9.sp, color = NeonCyan.copy(0.9f))
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
