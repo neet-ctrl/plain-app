@@ -148,7 +148,8 @@ fun NEETNavHost() {
             Routes.DATE_EVENT_DETAIL,
             arguments = listOf(navArgument("date") { type = NavType.StringType })
         ) { backStack ->
-            DateEventDetailScreen(navController, backStack.arguments?.getString("date") ?: "")
+            val date = URLDecoder.decode(backStack.arguments?.getString("date") ?: "", "UTF-8")
+            DateEventDetailScreen(navController, date)
         }
         composable(Routes.NEET_SYLLABUS) { NEETSyllabusScreen(navController) }
         composable(Routes.DICTIONARY) { DictionaryScreen(navController) }

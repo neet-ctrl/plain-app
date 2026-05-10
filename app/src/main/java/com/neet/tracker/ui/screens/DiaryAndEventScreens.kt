@@ -371,7 +371,8 @@ fun DateEventsScreen(navController: NavController, vm: DateEventViewModel = hilt
 
 @Composable
 fun DateEventDetailScreen(navController: NavController, date: String, vm: DateEventViewModel = hiltViewModel()) {
-    val events by vm.eventsForDate(date).collectAsState()
+    val eventsFlow = remember(date) { vm.eventsForDate(date) }
+    val events by eventsFlow.collectAsState()
     var showAdd by remember { mutableStateOf(false) }
 
     val context = LocalContext.current

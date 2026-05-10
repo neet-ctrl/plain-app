@@ -78,7 +78,7 @@ fun weekPlannerDetailRoute(weekId: String) = "week_planner_detail/$weekId"
 fun monthPlannerDetailRoute(monthId: String) = "month_planner_detail/$monthId"
 fun yearPlannerDetailRoute(yearId: String) = "year_planner_detail/$yearId"
 fun diaryEntryRoute(diaryId: String) = "diary_entry/$diaryId"
-fun dateEventDetailRoute(date: String) = "date_event_detail/$date"
+fun dateEventDetailRoute(date: String) = "date_event_detail/${java.net.URLEncoder.encode(date, "UTF-8")}"
 fun diagramsSubjectRoute(subject: String) = "diagrams_subject/$subject"
 fun chapterShortNotesSubjectRoute(subject: String) = "chapter_short_notes_subject/$subject"
 
