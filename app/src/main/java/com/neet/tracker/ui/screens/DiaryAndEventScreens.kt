@@ -405,7 +405,8 @@ fun DateEventDetailScreen(navController: NavController, date: String, vm: DateEv
                             vm.save(event.copy(id = java.util.UUID.randomUUID().toString(), date = tomorrow))
                         },
                         onViewFile = if (event.fileUri.isNotBlank()) { { navController.navigate(fileViewerRoute(event.fileUri, event.name.ifBlank { "Event ${i + 1}" })) } } else null,
-                        onUploadFile = { uploadEventTarget = event; eventFileLauncher.launch(arrayOf("*/*")) }
+                        onUploadFile = { uploadEventTarget = event; eventFileLauncher.launch(arrayOf("*/*")) },
+                        onRemoveFile = if (event.fileUri.isNotBlank()) { { vm.save(event.copy(fileUri = "")) } } else null
                     )
                 }
                 item {
@@ -429,7 +430,8 @@ fun DateEventCard(
     onDelete: () -> Unit,
     onShiftToNextDate: () -> Unit,
     onViewFile: (() -> Unit)? = null,
-    onUploadFile: (() -> Unit)? = null
+    onUploadFile: (() -> Unit)? = null,
+    onRemoveFile: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     var name by remember(event) { mutableStateOf(event.name) }
@@ -565,16 +567,23 @@ fun DateEventCard(
                         // File buttons remain accessible in view mode (read-only action)
                         if (event.fileUri.isNotBlank() && onViewFile != null) {
                             NeonDivider(NeonGreen.copy(0.2f))
-                            OutlinedButton(
-                                onClick = onViewFile,
-                                modifier = Modifier.fillMaxWidth(),
-                                border = BorderStroke(1.dp, NeonGreen.copy(0.5f)),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonGreen),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Icon(Icons.Default.FileOpen, null, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("View File", style = MaterialTheme.typography.labelSmall)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedButton(
+                                    onClick = onViewFile,
+                                    modifier = Modifier.weight(1f),
+                                    border = BorderStroke(1.dp, NeonGreen.copy(0.5f)),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonGreen),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.FileOpen, null, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("View File", style = MaterialTheme.typography.labelSmall)
+                                }
+                                if (onRemoveFile != null) {
+                                    IconButton(onClick = onRemoveFile, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Default.Close, tint = NeonRed.copy(0.75f), modifier = Modifier.size(16.dp), contentDescription = "Remove file")
+                                    }
+                                }
                             }
                         }
                     }
@@ -668,6 +677,11 @@ fun DateEventCard(
                                     }
                                     IconButton(onClick = onUploadFile ?: {}, modifier = Modifier.size(36.dp)) {
                                         Icon(Icons.Default.UploadFile, tint = NeonGold.copy(0.5f), modifier = Modifier.size(16.dp), contentDescription = "Replace file")
+                                    }
+                                    if (onRemoveFile != null) {
+                                        IconButton(onClick = onRemoveFile, modifier = Modifier.size(36.dp)) {
+                                            Icon(Icons.Default.Close, tint = NeonRed.copy(0.75f), modifier = Modifier.size(16.dp), contentDescription = "Remove file")
+                                        }
                                     }
                                 } else if (onUploadFile != null) {
                                     OutlinedButton(onClick = onUploadFile, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, NeonGold.copy(0.4f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonGold), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {

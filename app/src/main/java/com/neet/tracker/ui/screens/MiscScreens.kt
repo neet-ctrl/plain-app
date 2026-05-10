@@ -59,6 +59,9 @@ fun NEETSyllabusScreen(navController: NavController, vm: SyllabusViewModel = hil
                             Button(onClick = { navController.navigate(fileViewerRoute(syllabus!!.fileUri, "NEET Syllabus")) }, colors = ButtonDefaults.buttonColors(containerColor = NeonGreen.copy(0.2f)), border = BorderStroke(1.dp, NeonGreen.copy(0.6f)), modifier = Modifier.fillMaxWidth()) {
                                 Icon(Icons.Default.FileOpen, null, tint = NeonGreen); Spacer(Modifier.width(8.dp)); Text("View Syllabus PDF", color = NeonGreen, fontWeight = FontWeight.Bold)
                             }
+                            Button(onClick = { vm.save(syllabus!!.copy(fileUri = "")) }, colors = ButtonDefaults.buttonColors(containerColor = NeonRed.copy(0.15f)), border = BorderStroke(1.dp, NeonRed.copy(0.5f)), modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Default.Close, null, tint = NeonRed); Spacer(Modifier.width(8.dp)); Text("Remove PDF", color = NeonRed, fontWeight = FontWeight.Bold)
+                            }
                         } else {
                             Text("No syllabus uploaded yet", color = Color.White.copy(0.4f))
                         }
@@ -121,7 +124,8 @@ fun DictionaryNeetScreen(navController: NavController, vm: DictionaryViewModel =
                             term = term,
                             onDelete = { vm.deleteNeet(term) },
                             onViewFile = if (term.fileUri.isNotBlank()) { { navController.navigate(fileViewerRoute(term.fileUri, term.term)) } } else null,
-                            onUploadFile = { uploadTarget = term; fileLauncher.launch(arrayOf("*/*")) }
+                            onUploadFile = { uploadTarget = term; fileLauncher.launch(arrayOf("*/*")) },
+                            onRemoveFile = if (term.fileUri.isNotBlank()) { { vm.saveNeet(term.copy(fileUri = "")) } } else null
                         )
                     }
                 }
@@ -136,7 +140,8 @@ fun DictionaryTermCard(
     term: DictionaryNeet,
     onDelete: () -> Unit,
     onViewFile: (() -> Unit)? = null,
-    onUploadFile: (() -> Unit)? = null
+    onUploadFile: (() -> Unit)? = null,
+    onRemoveFile: (() -> Unit)? = null
 ) {
     GlassCard(glowColor = NeonCyan, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -169,6 +174,11 @@ fun DictionaryTermCard(
                         }
                         IconButton(onClick = onUploadFile ?: {}, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Default.UploadFile, tint = NeonCyan.copy(0.5f), modifier = Modifier.size(16.dp), contentDescription = "Replace file")
+                        }
+                        if (onRemoveFile != null) {
+                            IconButton(onClick = onRemoveFile, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.Close, tint = NeonRed.copy(0.75f), modifier = Modifier.size(16.dp), contentDescription = "Remove file")
+                            }
                         }
                     } else if (onUploadFile != null) {
                         OutlinedButton(

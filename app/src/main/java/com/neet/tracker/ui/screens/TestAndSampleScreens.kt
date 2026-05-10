@@ -146,12 +146,18 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
                                             if (t.questionPaperUri.isNotBlank()) navController.navigate(fileViewerRoute(t.questionPaperUri, "${t.name} QP"))
                                             else { uploadQPTarget = t; qpLauncher.launch(arrayOf("*/*")) }
                                         }
+                                        if (t.questionPaperUri.isNotBlank()) {
+                                            CardIconButton(Icons.Default.Close, NeonRed.copy(0.65f)) { vm.save(t.copy(questionPaperUri = "")) }
+                                        }
                                         CardIconButton(
                                             if (t.solutionUri.isNotBlank()) Icons.Default.FilePresent else Icons.Default.NoteAdd,
                                             if (t.solutionUri.isNotBlank()) NeonOrange.copy(0.8f) else NeonCyan.copy(0.4f)
                                         ) {
                                             if (t.solutionUri.isNotBlank()) navController.navigate(fileViewerRoute(t.solutionUri, "${t.name} Solution"))
                                             else { uploadSolTarget = t; solLauncher.launch(arrayOf("*/*")) }
+                                        }
+                                        if (t.solutionUri.isNotBlank()) {
+                                            CardIconButton(Icons.Default.Close, NeonRed.copy(0.65f)) { vm.save(t.copy(solutionUri = "")) }
                                         }
                                         CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(t) }
                                     }
@@ -259,12 +265,18 @@ fun SamplePapersScreen(navController: NavController, vm: SamplePaperViewModel = 
                                     if (p.questionPaperUri.isNotBlank()) navController.navigate(fileViewerRoute(p.questionPaperUri, "${p.name} QP"))
                                     else { uploadQPTarget = p; qpLauncher.launch(arrayOf("*/*")) }
                                 }
+                                if (p.questionPaperUri.isNotBlank()) {
+                                    CardIconButton(Icons.Default.Close, NeonRed.copy(0.65f)) { vm.save(p.copy(questionPaperUri = "")) }
+                                }
                                 CardIconButton(
                                     if (p.solutionUri.isNotBlank()) Icons.Default.FileOpen else Icons.Default.NoteAdd,
                                     if (p.solutionUri.isNotBlank()) NeonOrange.copy(0.85f) else NeonCyan.copy(0.4f)
                                 ) {
                                     if (p.solutionUri.isNotBlank()) navController.navigate(fileViewerRoute(p.solutionUri, "${p.name} Solution"))
                                     else { uploadSolTarget = p; solLauncher.launch(arrayOf("*/*")) }
+                                }
+                                if (p.solutionUri.isNotBlank()) {
+                                    CardIconButton(Icons.Default.Close, NeonRed.copy(0.65f)) { vm.save(p.copy(solutionUri = "")) }
                                 }
                                 CardIconButton(Icons.Default.Delete, NeonRed.copy(0.4f)) { vm.delete(p) }
                             }

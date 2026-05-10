@@ -490,6 +490,7 @@ fun DiagramsSubjectScreen(navController: NavController, subject: String, vm: Dia
                                 }
                                 if (d.fileUri.isNotBlank()) {
                                     CardIconButton(Icons.Default.UploadFile, color.copy(0.4f)) { uploadTarget = d; pdfLauncher.launch(arrayOf("application/pdf")) }
+                                    CardIconButton(Icons.Default.Close, NeonRed.copy(0.65f)) { vm.save(d.copy(fileUri = "")) }
                                 }
                                 CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(d) }
                             }
@@ -522,6 +523,11 @@ fun AddDiagramDialog(subject: String, color: Color, onSave: (Diagram) -> Unit, o
             Button(onClick = { launcher.launch(arrayOf("application/pdf")) }, colors = ButtonDefaults.buttonColors(containerColor = color.copy(0.12f)), border = BorderStroke(1.dp, color.copy(0.4f)), modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.UploadFile, null, tint = color); Spacer(Modifier.width(8.dp))
                 Text(if (fileUri.isBlank()) "Upload Diagram PDF" else "✓ PDF Uploaded", color = color)
+            }
+            if (fileUri.isNotBlank()) {
+                OutlinedButton(onClick = { fileUri = "" }, border = BorderStroke(1.dp, NeonRed.copy(0.5f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonRed), modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Close, null, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(6.dp)); Text("Remove PDF", style = MaterialTheme.typography.labelMedium)
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
@@ -584,6 +590,7 @@ fun ChapterShortNotesSubjectScreen(navController: NavController, subject: String
                                 }
                                 if (n.fileUri.isNotBlank()) {
                                     CardIconButton(Icons.Default.UploadFile, color.copy(0.4f)) { uploadTarget = n; pdfLauncher.launch(arrayOf("application/pdf")) }
+                                    CardIconButton(Icons.Default.Close, NeonRed.copy(0.65f)) { vm.save(n.copy(fileUri = "")) }
                                 }
                                 CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(n) }
                             }
@@ -617,6 +624,11 @@ fun AddChapterNoteDialog(subject: String, color: Color, onSave: (ChapterShortNot
             Button(onClick = { launcher.launch(arrayOf("application/pdf")) }, colors = ButtonDefaults.buttonColors(containerColor = color.copy(0.12f)), border = BorderStroke(1.dp, color.copy(0.4f)), modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.UploadFile, null, tint = color); Spacer(Modifier.width(8.dp))
                 Text(if (fileUri.isBlank()) "Upload Notes PDF" else "✓ PDF Uploaded", color = color)
+            }
+            if (fileUri.isNotBlank()) {
+                OutlinedButton(onClick = { fileUri = "" }, border = BorderStroke(1.dp, NeonRed.copy(0.5f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonRed), modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Close, null, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(6.dp)); Text("Remove PDF", style = MaterialTheme.typography.labelMedium)
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }

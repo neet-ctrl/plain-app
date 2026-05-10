@@ -137,7 +137,21 @@ fun NotebookEditDialog(notebook: Notebook?, onSave: (Notebook) -> Unit, onDismis
                 Text(if (photoUri.isBlank()) "Upload Cover Photo" else "Change Photo", color = NeonCyan)
             }
             if (photoUri.isNotBlank()) {
-                coil.compose.AsyncImage(model = photoUri, contentDescription = null, modifier = Modifier.size(80.dp).clip(RoundedCornerShape(12.dp)).align(Alignment.CenterHorizontally))
+                Box(modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    coil.compose.AsyncImage(model = photoUri, contentDescription = null, modifier = Modifier.size(80.dp).clip(RoundedCornerShape(12.dp)))
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .align(Alignment.TopEnd)
+                            .offset(x = 6.dp, y = (-6).dp)
+                            .background(NeonRed, CircleShape)
+                            .clip(CircleShape)
+                            .clickable { photoUri = "" },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(12.dp))
+                    }
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }

@@ -282,6 +282,9 @@ fun SubjectShortNotesScreen(navController: NavController) {
                                     uploadingSubject = info.third
                                     launcher.launch(arrayOf("application/pdf"))
                                 }
+                                CardIconButton(Icons.Default.Close, NeonRed.copy(0.65f)) {
+                                    vm.save(note!!.copy(fileUri = ""))
+                                }
                             }
                         }
                     )

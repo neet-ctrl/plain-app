@@ -204,11 +204,13 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             FileUploadButton("10th Marksheet", tenthUri, editing, NeonPurple,
                                 onUpload = { tenthUri = it },
-                                onView = { navController.navigate(fileViewerRoute(tenthUri, "10th Marksheet")) }
+                                onView = { navController.navigate(fileViewerRoute(tenthUri, "10th Marksheet")) },
+                                onRemove = { tenthUri = "" }
                             )
                             FileUploadButton("12th Marksheet", twelfthUri, editing, NeonPurple,
                                 onUpload = { twelfthUri = it },
-                                onView = { navController.navigate(fileViewerRoute(twelfthUri, "12th Marksheet")) }
+                                onView = { navController.navigate(fileViewerRoute(twelfthUri, "12th Marksheet")) },
+                                onRemove = { twelfthUri = "" }
                             )
                         }
                     }
@@ -280,7 +282,7 @@ fun ProfileField(label: String, value: String, editing: Boolean, icon: androidx.
 }
 
 @Composable
-fun RowScope.FileUploadButton(label: String, uri: String, editing: Boolean, color: Color, onUpload: (String) -> Unit, onView: () -> Unit) {
+fun RowScope.FileUploadButton(label: String, uri: String, editing: Boolean, color: Color, onUpload: (String) -> Unit, onView: () -> Unit, onRemove: (() -> Unit)? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
@@ -291,28 +293,44 @@ fun RowScope.FileUploadButton(label: String, uri: String, editing: Boolean, colo
             }
         }
     }
-    Box(
-        modifier = Modifier
-            .weight(1f)
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (uri.isNotBlank()) color.copy(0.12f) else Color.White.copy(0.04f))
-            .border(1.dp, if (uri.isNotBlank()) color.copy(0.4f) else Color.White.copy(0.1f), RoundedCornerShape(12.dp))
-            .clickable { if (uri.isNotBlank()) onView() else if (editing) launcher.launch(arrayOf("*/*")) }
-            .padding(12.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(
-                if (uri.isNotBlank()) Icons.Default.FileOpen else Icons.Default.UploadFile,
-                null,
-                tint = if (uri.isNotBlank()) color else Color.White.copy(0.3f),
-                modifier = Modifier.size(24.dp)
-            )
-            Text(label, style = MaterialTheme.typography.labelSmall, color = if (uri.isNotBlank()) color else Color.White.copy(0.4f))
-            if (uri.isNotBlank()) {
-                Text("Tap to view", style = MaterialTheme.typography.labelSmall, color = color.copy(0.6f))
-            } else if (editing) {
-                Text("Tap to upload", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.25f))
+    Box(modifier = Modifier.weight(1f)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (uri.isNotBlank()) color.copy(0.12f) else Color.White.copy(0.04f))
+                .border(1.dp, if (uri.isNotBlank()) color.copy(0.4f) else Color.White.copy(0.1f), RoundedCornerShape(12.dp))
+                .clickable { if (uri.isNotBlank()) onView() else if (editing) launcher.launch(arrayOf("*/*")) }
+                .padding(12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(
+                    if (uri.isNotBlank()) Icons.Default.FileOpen else Icons.Default.UploadFile,
+                    null,
+                    tint = if (uri.isNotBlank()) color else Color.White.copy(0.3f),
+                    modifier = Modifier.size(24.dp)
+                )
+                Text(label, style = MaterialTheme.typography.labelSmall, color = if (uri.isNotBlank()) color else Color.White.copy(0.4f))
+                if (uri.isNotBlank()) {
+                    Text("Tap to view", style = MaterialTheme.typography.labelSmall, color = color.copy(0.6f))
+                } else if (editing) {
+                    Text("Tap to upload", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.25f))
+                }
+            }
+        }
+        if (uri.isNotBlank() && onRemove != null) {
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
+                    .align(Alignment.TopEnd)
+                    .offset(x = 6.dp, y = (-6).dp)
+                    .background(NeonRed, CircleShape)
+                    .clip(CircleShape)
+                    .clickable { onRemove() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(11.dp))
             }
         }
     }
@@ -391,9 +409,9 @@ fun NEETAttemptCard(
                 DialogTextField(value = marks, onValueChange = { marks = it; save() }, label = "Marks Obtained", icon = Icons.Default.Score, accentColor = NeonGold)
                 DialogTextField(value = lack, onValueChange = { lack = it; save() }, label = "What was lacking?", icon = Icons.Default.TrendingDown, accentColor = NeonGold, multiline = true)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SmallFileButton("Marksheet", marksheetUri, NeonGold, { marksheetLauncher.launch(arrayOf("*/*")) }, { onViewFile(marksheetUri, "Marksheet $year") }, Modifier.weight(1f))
-                    SmallFileButton("Question Paper", qpUri, NeonGold, { qpLauncher.launch(arrayOf("*/*")) }, { onViewFile(qpUri, "Question Paper $year") }, Modifier.weight(1f))
-                    SmallFileButton("Solution", solUri, NeonGold, { solLauncher.launch(arrayOf("*/*")) }, { onViewFile(solUri, "Solution $year") }, Modifier.weight(1f))
+                    SmallFileButton("Marksheet", marksheetUri, NeonGold, { marksheetLauncher.launch(arrayOf("*/*")) }, { onViewFile(marksheetUri, "Marksheet $year") }, Modifier.weight(1f), onRemove = { marksheetUri = ""; onUpdate(attempt.copy(marksheetUri = "")) })
+                    SmallFileButton("Question Paper", qpUri, NeonGold, { qpLauncher.launch(arrayOf("*/*")) }, { onViewFile(qpUri, "Question Paper $year") }, Modifier.weight(1f), onRemove = { qpUri = ""; onUpdate(attempt.copy(questionPaperUri = "")) })
+                    SmallFileButton("Solution", solUri, NeonGold, { solLauncher.launch(arrayOf("*/*")) }, { onViewFile(solUri, "Solution $year") }, Modifier.weight(1f), onRemove = { solUri = ""; onUpdate(attempt.copy(solutionPdfUri = "")) })
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -426,21 +444,38 @@ fun InfoPair(label: String, value: String) {
 }
 
 @Composable
-fun SmallFileButton(label: String, uri: String, color: Color, onUpload: () -> Unit, onView: () -> Unit, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (uri.isNotBlank()) color.copy(0.15f) else Color.White.copy(0.04f))
-            .border(0.5.dp, if (uri.isNotBlank()) color.copy(0.5f) else Color.White.copy(0.1f), RoundedCornerShape(8.dp))
-            .clickable { if (uri.isNotBlank()) onView() else onUpload() }
-            .padding(8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = if (uri.isNotBlank()) "✓ $label" else "+ $label",
-            style = MaterialTheme.typography.labelSmall,
-            color = if (uri.isNotBlank()) color else Color.White.copy(0.4f)
-        )
+fun SmallFileButton(label: String, uri: String, color: Color, onUpload: () -> Unit, onView: () -> Unit, modifier: Modifier = Modifier, onRemove: (() -> Unit)? = null) {
+    Box(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (uri.isNotBlank()) color.copy(0.15f) else Color.White.copy(0.04f))
+                .border(0.5.dp, if (uri.isNotBlank()) color.copy(0.5f) else Color.White.copy(0.1f), RoundedCornerShape(8.dp))
+                .clickable { if (uri.isNotBlank()) onView() else onUpload() }
+                .padding(8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (uri.isNotBlank()) "✓ $label" else "+ $label",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (uri.isNotBlank()) color else Color.White.copy(0.4f)
+            )
+        }
+        if (uri.isNotBlank() && onRemove != null) {
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .align(Alignment.TopEnd)
+                    .offset(x = 4.dp, y = (-4).dp)
+                    .background(NeonRed, CircleShape)
+                    .clip(CircleShape)
+                    .clickable { onRemove() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(10.dp))
+            }
+        }
     }
 }
 

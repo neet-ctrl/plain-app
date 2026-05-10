@@ -177,12 +177,18 @@ fun PWBatchTestsScreen(navController: NavController, batchId: String, batchName:
                                             if (t.questionPaperUri.isNotBlank()) navController.navigate(fileViewerRoute(t.questionPaperUri, "${t.name} QP"))
                                             else { uploadQPTarget = t; qpLauncher.launch(arrayOf("*/*")) }
                                         }
+                                        if (t.questionPaperUri.isNotBlank()) {
+                                            CardIconButton(Icons.Default.Close, NeonRed.copy(0.65f)) { vm.saveTest(t.copy(questionPaperUri = "")) }
+                                        }
                                         CardIconButton(
                                             if (t.solutionUri.isNotBlank()) Icons.Default.FilePresent else Icons.Default.NoteAdd,
                                             if (t.solutionUri.isNotBlank()) NeonOrange.copy(0.8f) else NeonCyan.copy(0.4f)
                                         ) {
                                             if (t.solutionUri.isNotBlank()) navController.navigate(fileViewerRoute(t.solutionUri, "${t.name} Solution"))
                                             else { uploadSolTarget = t; solLauncher.launch(arrayOf("*/*")) }
+                                        }
+                                        if (t.solutionUri.isNotBlank()) {
+                                            CardIconButton(Icons.Default.Close, NeonRed.copy(0.65f)) { vm.saveTest(t.copy(solutionUri = "")) }
                                         }
                                         CardIconButton(Icons.Default.Delete, NeonRed.copy(0.4f)) { vm.deleteTest(t) }
                                     }
