@@ -46,12 +46,19 @@ import com.neet.tracker.ui.dialogs.RichTextToolbar
 import com.neet.tracker.ui.theme.*
 import com.neet.tracker.util.AnnotationManager
 import com.neet.tracker.util.AnnotationStroke
+import com.neet.tracker.util.AnnotationTextBox
 import com.neet.tracker.util.AnnotationTool
 import kotlin.math.sqrt
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.UUID
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.text.font.FontStyle
 
 private val UV_PAGE_MARKS = listOf(
     "✅" to "Got It",
@@ -80,6 +87,13 @@ private val ANNOT_COLORS_ARGB = listOf(
     android.graphics.Color.BLACK,
 )
 private val ANNOT_WIDTHS = listOf(3f to "XS", 6f to "S", 10f to "M", 16f to "L", 24f to "XL")
+private val TEXTBOX_BG_OPTIONS = listOf(
+    0 to "None",
+    android.graphics.Color.argb(0xDD, 0x07, 0x0F, 0x1C) to "Dark",
+    android.graphics.Color.argb(0xDD, 0xFF, 0xFF, 0xFF) to "White",
+    android.graphics.Color.argb(0xCC, 0xFF, 0xEB, 0x3B) to "Yellow",
+    android.graphics.Color.argb(0xCC, 0x1B, 0x3A, 0x2F) to "Forest",
+)
 
 // ─── Universal File Viewer ─────────────────────────────────────────────────────
 
@@ -182,6 +196,8 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var allPageStrokes      by remember { mutableStateOf<Map<Int, List<AnnotationStroke>>>(emptyMap()) }
     var annoUndoStack       by remember { mutableStateOf<List<Map<Int, List<AnnotationStroke>>>>(emptyList()) }
     var annoRedoStack       by remember { mutableStateOf<List<Map<Int, List<AnnotationStroke>>>>(emptyList()) }
+    var allPageTextBoxes    by remember { mutableStateOf<Map<Int, List<AnnotationTextBox>>>(emptyMap()) }
+    var pendingTextPos      by remember { mutableStateOf<Pair<Float, Float>?>(null) }
 
     // ── Notes ──────────────────────────────────────────────────────────────────
     var notesText by remember(noteKey) { mutableStateOf(prefs.getString(noteKey, "") ?: "") }
@@ -216,6 +232,12 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
         if (tryAsPdf) {
             val loaded = AnnotationManager.load(context, fileUri)
             if (loaded.isNotEmpty()) allPageStrokes = loaded
+        }
+    }
+    LaunchedEffect(fileUri) {
+        if (tryAsPdf) {
+            val loadedTexts = AnnotationManager.loadTextBoxes(context, fileUri)
+            if (loadedTexts.isNotEmpty()) allPageTextBoxes = loadedTexts
         }
     }
 
@@ -464,7 +486,10 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                         annotationMode = false
                         annotFullScreen = false
                         annotZoomEnabled = false
-                        annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                        annoScope.launch {
+                            AnnotationManager.save(context, fileUri, allPageStrokes)
+                            AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes)
+                        }
                     }
                 )
             }
@@ -572,6 +597,14 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                                     val updated    = current.filter { it !in removedSet }
                                     allPageStrokes = allPageStrokes + (currentPage to updated)
                                     annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                                },
+                                pageTextBoxes   = allPageTextBoxes[currentPage] ?: emptyList(),
+                                onTextBoxPlace  = { xNorm, yNorm -> pendingTextPos = Pair(xNorm, yNorm) },
+                                onTextBoxDelete = { id ->
+                                    val cur = allPageTextBoxes[currentPage] ?: emptyList()
+                                    val upd = cur.filter { it.id != id }
+                                    allPageTextBoxes = allPageTextBoxes + (currentPage to upd)
+                                    annoScope.launch { AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes) }
                                 }
                             )
                             pdfError -> {
@@ -735,7 +768,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 canUndo          = annoUndoStack.isNotEmpty(),
                 canRedo          = annoRedoStack.isNotEmpty(),
                 zoomEnabled      = annotZoomEnabled,
-                onToolChange     = { annotationTool = it },
+                onToolChange     = { annotationTool = it; if (it == AnnotationTool.TEXT) annotZoomEnabled = false },
                 onColorChange    = { annotationColorArgb = it },
                 onWidthChange    = { annotationWidthDp = it },
                 onUndo = {
@@ -767,7 +800,10 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     annotationMode  = false
                     annotFullScreen = false
                     annotZoomEnabled = false
-                    annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                    annoScope.launch {
+                        AnnotationManager.save(context, fileUri, allPageStrokes)
+                        AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes)
+                    }
                 }
             )
         }
@@ -809,6 +845,19 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     }
                 }
             }
+        }
+        pendingTextPos?.let { (xNorm, yNorm) ->
+            TextBoxEditorDialog(
+                xNorm = xNorm,
+                yNorm = yNorm,
+                onSave = { tb ->
+                    val cur = allPageTextBoxes[currentPage] ?: emptyList()
+                    allPageTextBoxes = allPageTextBoxes + (currentPage to cur + tb)
+                    annoScope.launch { AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes) }
+                    pendingTextPos = null
+                },
+                onDismiss = { pendingTextPos = null }
+            )
         }
     }
 }
@@ -955,6 +1004,9 @@ private fun UvPdfPage(
     onStrokeCommit: (AnnotationStroke) -> Unit = {},
     onEraseGestureStart: () -> Unit = {},
     onStrokesErase: (List<AnnotationStroke>) -> Unit = {},
+    pageTextBoxes: List<AnnotationTextBox> = emptyList(),
+    onTextBoxPlace: (Float, Float) -> Unit = { _, _ -> },
+    onTextBoxDelete: (String) -> Unit = {},
 ) {
     val density = LocalDensity.current
 
@@ -1033,6 +1085,22 @@ private fun UvPdfPage(
                     }
                     drawPath(path, Color(stroke.colorArgb),
                         style = DrawStyle(width = swPx, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                    if (stroke.tool == "arrow" && stroke.points.size >= 2) {
+                        val tipPt  = stroke.points.last()
+                        val prevPt = stroke.points[(stroke.points.lastIndex - 1).coerceAtLeast(0)]
+                        val tipX   = tipPt.first  * imageWidthPx
+                        val tipY   = tipPt.second * imageHeightPx
+                        val angle  = atan2(tipY - prevPt.second * imageHeightPx, tipX - prevPt.first * imageWidthPx)
+                        val aLen   = swPx * 4.5f
+                        val wing   = kotlin.math.PI.toFloat() * 0.72f
+                        val arrowPath = Path().apply {
+                            moveTo(tipX, tipY)
+                            lineTo(tipX + aLen * cos(angle + wing), tipY + aLen * sin(angle + wing))
+                            lineTo(tipX + aLen * cos(angle - wing), tipY + aLen * sin(angle - wing))
+                            close()
+                        }
+                        drawPath(arrowPath, Color(stroke.colorArgb))
+                    }
                 }
             }
         }
@@ -1040,7 +1108,7 @@ private fun UvPdfPage(
         // Interactive annotation overlay (annotation mode only)
         if (annotationMode) {
             PdfAnnotationOverlay(
-                modifier = Modifier.fillMaxWidth().height(imageHeightDp).clip(RoundedCornerShape(8.dp)),
+                modifier            = Modifier.fillMaxWidth().height(imageHeightDp).clip(RoundedCornerShape(8.dp)),
                 imageWidthPx        = imageWidthPx,
                 imageHeightPx       = imageHeightPx,
                 strokes             = pageStrokes,
@@ -1049,10 +1117,59 @@ private fun UvPdfPage(
                 strokeWidthDp       = annotationWidthDp,
                 annotZoomEnabled    = annotZoomEnabled,
                 onZoomTransform     = onTransform,
+                onTextBoxPlace      = onTextBoxPlace,
                 onStrokeCommit      = onStrokeCommit,
                 onEraseGestureStart = onEraseGestureStart,
                 onStrokesErase      = onStrokesErase,
             )
+        }
+
+        // Text box composable overlays (visible in both read and annotation mode)
+        if (pageTextBoxes.isNotEmpty()) {
+            Box(modifier = Modifier.fillMaxWidth().height(imageHeightDp)) {
+                pageTextBoxes.forEach { tb ->
+                    val xDp = with(density) { (tb.xNorm * imageWidthPx).toDp() }
+                    val yDp = with(density) { (tb.yNorm * imageHeightPx).toDp() }
+                    Box(
+                        modifier = Modifier
+                            .offset(xDp, yDp)
+                            .shadow(8.dp, RoundedCornerShape(8.dp), spotColor = Color(tb.colorArgb).copy(0.2f))
+                            .background(
+                                if (tb.bgArgb == 0) Color.Transparent else Color(tb.bgArgb),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .then(
+                                if (tb.hasBorder) Modifier.border(1.dp, Color(tb.colorArgb).copy(0.75f), RoundedCornerShape(8.dp))
+                                else Modifier
+                            )
+                            .padding(horizontal = 7.dp, vertical = 5.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text       = tb.text,
+                                color      = Color(tb.colorArgb),
+                                fontSize   = tb.fontSizeSp.sp,
+                                fontWeight = if (tb.isBold) FontWeight.Bold else FontWeight.Normal,
+                                fontStyle  = if (tb.isItalic) FontStyle.Italic else FontStyle.Normal,
+                                lineHeight = (tb.fontSizeSp * 1.35f).sp
+                            )
+                            if (annotationMode) {
+                                Spacer(Modifier.width(3.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(17.dp)
+                                        .background(NeonRed.copy(0.88f), CircleShape)
+                                        .border(1.dp, NeonRed, CircleShape)
+                                        .clickable { onTextBoxDelete(tb.id) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(10.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Hints
@@ -1095,6 +1212,8 @@ private fun UvPdfPage(
                             AnnotationTool.PEN         -> "Pen  ·  Draw anywhere on the page"
                             AnnotationTool.HIGHLIGHTER -> "Highlighter  ·  Swipe to highlight"
                             AnnotationTool.ERASER      -> "Eraser  ·  Touch strokes to erase"
+                            AnnotationTool.ARROW       -> "Arrow  ·  Draw a curved labeling arrow"
+                            AnnotationTool.TEXT        -> "Text  ·  Tap to place a text label"
                         },
                         style = MaterialTheme.typography.labelSmall, color = NeonOrange.copy(0.9f)
                     )
@@ -1117,6 +1236,7 @@ private fun PdfAnnotationOverlay(
     strokeWidthDp: Float,
     annotZoomEnabled: Boolean = false,
     onZoomTransform: (Float, Offset) -> Unit = { _, _ -> },
+    onTextBoxPlace: (Float, Float) -> Unit = { _, _ -> },
     onStrokeCommit: (AnnotationStroke) -> Unit,
     onEraseGestureStart: () -> Unit,
     onStrokesErase: (List<AnnotationStroke>) -> Unit,
@@ -1154,7 +1274,7 @@ private fun PdfAnnotationOverlay(
                                             points    = drawPoints.toList(),
                                             colorArgb = fc.toArgb(),
                                             widthDp   = strokeWidthDp * if (isH) 3.5f else 1f,
-                                            tool      = if (isH) "highlight" else "pen"
+                                            tool      = when (tool) { AnnotationTool.ARROW -> "arrow"; AnnotationTool.HIGHLIGHTER -> "highlight"; else -> "pen" }
                                         ))
                                     }
                                     drawPoints.clear()
@@ -1170,7 +1290,7 @@ private fun PdfAnnotationOverlay(
                                     if (drawPoints.size >= 2 && tool != AnnotationTool.ERASER) {
                                         val isH = tool == AnnotationTool.HIGHLIGHTER
                                         val fc  = Color(colorArgb).copy(alpha = if (isH) 0.38f else 1f)
-                                        onStrokeCommit(AnnotationStroke(drawPoints.toList(), fc.toArgb(), strokeWidthDp * if (isH) 3.5f else 1f, if (isH) "highlight" else "pen"))
+                                        onStrokeCommit(AnnotationStroke(drawPoints.toList(), fc.toArgb(), strokeWidthDp * if (isH) 3.5f else 1f, when (tool) { AnnotationTool.ARROW -> "arrow"; AnnotationTool.HIGHLIGHTER -> "highlight"; else -> "pen" }))
                                         drawPoints.clear(); currentPoints = emptyList()
                                     }
                                     val p1  = pressed[0].position
@@ -1221,57 +1341,65 @@ private fun PdfAnnotationOverlay(
                     }
                 } else {
                     // ── Original single-touch draw-only mode ────────────────────
-                    var eraseStarted = false
-                    detectDragGestures(
-                        onDragStart = { offset ->
+                    if (tool == AnnotationTool.TEXT) {
+                        detectTapGestures { offset ->
                             val nx = (offset.x / imageWidthPx).coerceIn(0f, 1f)
                             val ny = (offset.y / imageHeightPx).coerceIn(0f, 1f)
-                            if (tool == AnnotationTool.ERASER) {
-                                eraserPos    = Pair(nx, ny)
-                                eraseStarted = false
-                            } else {
-                                currentPoints = listOf(Pair(nx, ny))
-                            }
-                        },
-                        onDrag = { change, _ ->
-                            val nx = (change.position.x / imageWidthPx).coerceIn(0f, 1f)
-                            val ny = (change.position.y / imageHeightPx).coerceIn(0f, 1f)
-                            if (tool == AnnotationTool.ERASER) {
-                                eraserPos = Pair(nx, ny)
-                                val hit = liveStrokes.filter { stroke ->
-                                    stroke.points.any { (px, py) ->
-                                        val dx = (px - nx) * imageWidthPx
-                                        val dy = (py - ny) * imageHeightPx
-                                        sqrt(dx * dx + dy * dy) < eraserRadiusPx
-                                    }
-                                }
-                                if (hit.isNotEmpty()) {
-                                    if (!eraseStarted) { onEraseGestureStart(); eraseStarted = true }
-                                    onStrokesErase(hit)
-                                }
-                            } else {
-                                currentPoints = currentPoints + Pair(nx, ny)
-                            }
-                        },
-                        onDragEnd = {
-                            if (tool != AnnotationTool.ERASER && currentPoints.size >= 2) {
-                                val isHighlight = tool == AnnotationTool.HIGHLIGHTER
-                                val finalColor  = Color(colorArgb).copy(alpha = if (isHighlight) 0.38f else 1f)
-                                onStrokeCommit(AnnotationStroke(
-                                    points    = currentPoints,
-                                    colorArgb = finalColor.toArgb(),
-                                    widthDp   = strokeWidthDp * if (isHighlight) 3.5f else 1f,
-                                    tool      = if (isHighlight) "highlight" else "pen"
-                                ))
-                            }
-                            currentPoints = emptyList()
-                            eraserPos     = null
-                            eraseStarted  = false
-                        },
-                        onDragCancel = {
-                            currentPoints = emptyList(); eraserPos = null; eraseStarted = false
+                            onTextBoxPlace(nx, ny)
                         }
-                    )
+                    } else {
+                        var eraseStarted = false
+                        detectDragGestures(
+                            onDragStart = { offset ->
+                                val nx = (offset.x / imageWidthPx).coerceIn(0f, 1f)
+                                val ny = (offset.y / imageHeightPx).coerceIn(0f, 1f)
+                                if (tool == AnnotationTool.ERASER) {
+                                    eraserPos    = Pair(nx, ny)
+                                    eraseStarted = false
+                                } else {
+                                    currentPoints = listOf(Pair(nx, ny))
+                                }
+                            },
+                            onDrag = { change, _ ->
+                                val nx = (change.position.x / imageWidthPx).coerceIn(0f, 1f)
+                                val ny = (change.position.y / imageHeightPx).coerceIn(0f, 1f)
+                                if (tool == AnnotationTool.ERASER) {
+                                    eraserPos = Pair(nx, ny)
+                                    val hit = liveStrokes.filter { stroke ->
+                                        stroke.points.any { (px, py) ->
+                                            val dx = (px - nx) * imageWidthPx
+                                            val dy = (py - ny) * imageHeightPx
+                                            sqrt(dx * dx + dy * dy) < eraserRadiusPx
+                                        }
+                                    }
+                                    if (hit.isNotEmpty()) {
+                                        if (!eraseStarted) { onEraseGestureStart(); eraseStarted = true }
+                                        onStrokesErase(hit)
+                                    }
+                                } else {
+                                    currentPoints = currentPoints + Pair(nx, ny)
+                                }
+                            },
+                            onDragEnd = {
+                                if (tool != AnnotationTool.ERASER && currentPoints.size >= 2) {
+                                    val isHighlight = tool == AnnotationTool.HIGHLIGHTER
+                                    val finalColor  = Color(colorArgb).copy(alpha = if (isHighlight) 0.38f else 1f)
+                                    onStrokeCommit(AnnotationStroke(
+                                        points    = currentPoints,
+                                        colorArgb = finalColor.toArgb(),
+                                        widthDp   = strokeWidthDp * if (isHighlight) 3.5f else 1f,
+                                        tool      = when (tool) { AnnotationTool.ARROW -> "arrow"; AnnotationTool.HIGHLIGHTER -> "highlight"; else -> "pen" }
+                                    ))
+                                }
+                                currentPoints = emptyList()
+                                eraserPos     = null
+                                eraseStarted  = false
+                            },
+                            onDragCancel = {
+                                currentPoints = emptyList(); eraserPos = null; eraseStarted = false
+                            }
+                        )
+                    }
                 }
             }
     ) {
@@ -1286,6 +1414,23 @@ private fun PdfAnnotationOverlay(
             }
             drawPath(path, Color(stroke.colorArgb),
                 style = DrawStyle(width = swPx, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            // Filled arrowhead for arrow strokes
+            if (stroke.tool == "arrow" && stroke.points.size >= 2) {
+                val tipPt  = stroke.points.last()
+                val prevPt = stroke.points[(stroke.points.lastIndex - 1).coerceAtLeast(0)]
+                val tipX   = tipPt.first  * imageWidthPx
+                val tipY   = tipPt.second * imageHeightPx
+                val angle  = atan2(tipY - prevPt.second * imageHeightPx, tipX - prevPt.first * imageWidthPx)
+                val aLen   = swPx * 4.5f
+                val wing   = kotlin.math.PI.toFloat() * 0.72f
+                val arrowPath = Path().apply {
+                    moveTo(tipX, tipY)
+                    lineTo(tipX + aLen * cos(angle + wing), tipY + aLen * sin(angle + wing))
+                    lineTo(tipX + aLen * cos(angle - wing), tipY + aLen * sin(angle - wing))
+                    close()
+                }
+                drawPath(arrowPath, Color(stroke.colorArgb))
+            }
         }
 
         // Draw the in-progress stroke in real-time
@@ -1300,6 +1445,23 @@ private fun PdfAnnotationOverlay(
             }
             drawPath(path, liveColor,
                 style = DrawStyle(width = liveWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            // Live arrowhead preview
+            if (tool == AnnotationTool.ARROW && currentPoints.size >= 2) {
+                val tipPt  = currentPoints.last()
+                val prevPt = currentPoints[currentPoints.lastIndex - 1]
+                val tipX   = tipPt.first  * imageWidthPx
+                val tipY   = tipPt.second * imageHeightPx
+                val angle  = atan2(tipY - prevPt.second * imageHeightPx, tipX - prevPt.first * imageWidthPx)
+                val aLen   = strokeWidthPx * 4.5f
+                val wing   = kotlin.math.PI.toFloat() * 0.72f
+                val arrowPath = Path().apply {
+                    moveTo(tipX, tipY)
+                    lineTo(tipX + aLen * cos(angle + wing), tipY + aLen * sin(angle + wing))
+                    lineTo(tipX + aLen * cos(angle - wing), tipY + aLen * sin(angle - wing))
+                    close()
+                }
+                drawPath(arrowPath, liveColor)
+            }
         }
 
         // Eraser circle cursor
@@ -1439,7 +1601,40 @@ private fun FloatingAnnotToolbar(
                         }
                     }
 
-                    // ── Row 2: Color chips ─────────────────────────────────────
+                    // ── Row 2: Arrow + Text tools ──────────────────────────────
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            Triple(AnnotationTool.ARROW, Icons.Default.ArrowForward, "Arrow"),
+                            Triple(AnnotationTool.TEXT,  Icons.Default.TextFields,   "Text"),
+                        ).forEach { (t, icon, label) ->
+                            val sel = tool == t
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(if (sel) NeonCyan.copy(0.28f) else Color.White.copy(0.05f), RoundedCornerShape(10.dp))
+                                    .border(if (sel) 1.dp else 0.5.dp, if (sel) NeonCyan.copy(0.85f) else Color.White.copy(0.15f), RoundedCornerShape(10.dp))
+                                    .clickable { onToolChange(t) }
+                                    .padding(horizontal = 6.dp, vertical = 7.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Icon(icon, null,
+                                        tint = if (sel) NeonCyan else Color.White.copy(0.5f),
+                                        modifier = Modifier.size(15.dp))
+                                    Text(label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 9.sp,
+                                        color = if (sel) NeonCyan else Color.White.copy(0.4f),
+                                        fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Row 3: Color chips ─────────────────────────────────────
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -1636,6 +1831,35 @@ private fun PdfAnnotationToolbar(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Icon(Icons.Default.Check, null, tint = NeonGreen, modifier = Modifier.size(14.dp))
                     Text("Done", style = MaterialTheme.typography.labelMedium, color = NeonGreen, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // ── Row 1b: Arrow + Text tools ────────────────────────────────────────
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            listOf(
+                Triple(AnnotationTool.ARROW, Icons.Default.ArrowForward, "Arrow"),
+                Triple(AnnotationTool.TEXT,  Icons.Default.TextFields,   "Text"),
+            ).forEach { (t, icon, label) ->
+                val sel = tool == t
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(if (sel) NeonCyan.copy(0.25f) else Color.White.copy(0.05f), RoundedCornerShape(10.dp))
+                        .border(if (sel) 1.dp else 0.5.dp, if (sel) NeonCyan.copy(0.85f) else Color.White.copy(0.15f), RoundedCornerShape(10.dp))
+                        .clickable { onToolChange(t) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Icon(icon, null, tint = if (sel) NeonCyan else Color.White.copy(0.5f), modifier = Modifier.size(15.dp))
+                        Text(label, style = MaterialTheme.typography.labelSmall, fontSize = 9.sp,
+                            color = if (sel) NeonCyan else Color.White.copy(0.4f),
+                            fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
+                    }
                 }
             }
         }
@@ -2409,6 +2633,295 @@ private fun UvViewerControls(
             }
         }
     }
+}
+
+// ─── Text Box Editor Dialog ────────────────────────────────────────────────────
+
+@Composable
+private fun TextBoxEditorDialog(
+    xNorm: Float,
+    yNorm: Float,
+    onSave: (AnnotationTextBox) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var text      by remember { mutableStateOf("") }
+    var colorArgb by remember { mutableIntStateOf(android.graphics.Color.WHITE) }
+    var fontSize  by remember { mutableFloatStateOf(14f) }
+    var isBold    by remember { mutableStateOf(false) }
+    var isItalic  by remember { mutableStateOf(false) }
+    var bgArgb    by remember { mutableIntStateOf(0) }
+    var hasBorder by remember { mutableStateOf(true) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = Color(0xFF08122A),
+        shape            = RoundedCornerShape(24.dp),
+        title            = null,
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // ── Header ────────────────────────────────────────────────────
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .shadow(10.dp, RoundedCornerShape(13.dp), spotColor = NeonCyan.copy(0.5f))
+                            .background(Brush.linearGradient(listOf(NeonCyan.copy(0.28f), NeonCyan.copy(0.07f))), RoundedCornerShape(13.dp))
+                            .border(1.dp, NeonCyan.copy(0.6f), RoundedCornerShape(13.dp)),
+                        contentAlignment = Alignment.Center
+                    ) { Icon(Icons.Default.TextFields, null, tint = NeonCyan, modifier = Modifier.size(22.dp)) }
+                    Column {
+                        Text("Add Text Label", style = MaterialTheme.typography.headlineSmall, color = NeonCyan, fontWeight = FontWeight.ExtraBold)
+                        Text("Customise & place on PDF", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.38f))
+                    }
+                }
+                Box(modifier = Modifier.fillMaxWidth().height(0.5.dp)
+                    .background(Brush.horizontalGradient(listOf(Color.Transparent, NeonCyan.copy(0.35f), Color.Transparent))))
+
+                // ── Text input ────────────────────────────────────────────────
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(4.dp, RoundedCornerShape(14.dp), spotColor = NeonCyan.copy(0.15f))
+                        .background(Color.White.copy(0.04f), RoundedCornerShape(14.dp))
+                        .border(1.dp, NeonCyan.copy(0.28f), RoundedCornerShape(14.dp))
+                        .padding(12.dp)
+                ) {
+                    if (text.isEmpty()) {
+                        Text("Enter label text…", color = Color.White.copy(0.22f), style = MaterialTheme.typography.bodyMedium)
+                    }
+                    BasicTextField(
+                        value         = text,
+                        onValueChange = { text = it },
+                        textStyle     = TextStyle(
+                            color      = Color(colorArgb),
+                            fontSize   = fontSize.sp,
+                            fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
+                            fontStyle  = if (isItalic) FontStyle.Italic else FontStyle.Normal,
+                            lineHeight = (fontSize * 1.4f).sp
+                        ),
+                        modifier  = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                        maxLines  = 8
+                    )
+                }
+
+                // ── Font size slider ──────────────────────────────────────────
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.FormatSize, null, tint = NeonCyan.copy(0.6f), modifier = Modifier.size(14.dp))
+                        Text("Font Size", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
+                        Spacer(Modifier.weight(1f))
+                        Box(
+                            modifier = Modifier
+                                .shadow(3.dp, RoundedCornerShape(7.dp), spotColor = NeonCyan.copy(0.3f))
+                                .background(NeonCyan.copy(0.12f), RoundedCornerShape(7.dp))
+                                .border(0.5.dp, NeonCyan.copy(0.4f), RoundedCornerShape(7.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text("${fontSize.toInt()} sp", style = MaterialTheme.typography.labelSmall, color = NeonCyan, fontWeight = FontWeight.ExtraBold)
+                        }
+                    }
+                    Slider(
+                        value         = fontSize,
+                        onValueChange = { fontSize = it },
+                        valueRange    = 8f..52f,
+                        steps         = 43,
+                        colors        = SliderDefaults.colors(
+                            thumbColor         = NeonCyan,
+                            activeTrackColor   = NeonCyan.copy(0.7f),
+                            inactiveTrackColor = Color.White.copy(0.12f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                // ── Text color ────────────────────────────────────────────────
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Text Color", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
+                    Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ANNOT_COLORS_ARGB.forEach { argb ->
+                            val sel = argb == colorArgb
+                            Box(
+                                modifier = Modifier
+                                    .size(if (sel) 30.dp else 23.dp)
+                                    .shadow(if (sel) 6.dp else 0.dp, CircleShape, spotColor = Color(argb).copy(0.6f))
+                                    .border(if (sel) 2.dp else 0.8.dp, if (sel) Color.White else Color.White.copy(0.25f), CircleShape)
+                                    .clip(CircleShape)
+                                    .background(Color(argb))
+                                    .clickable { colorArgb = argb }
+                            )
+                        }
+                    }
+                }
+
+                // ── Style toggles ─────────────────────────────────────────────
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Style", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val boldSel = isBold
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .shadow(if (boldSel) 6.dp else 0.dp, RoundedCornerShape(10.dp), spotColor = NeonCyan.copy(0.4f))
+                                .background(if (boldSel) NeonCyan.copy(0.22f) else Color.White.copy(0.05f), RoundedCornerShape(10.dp))
+                                .border(if (boldSel) 1.dp else 0.5.dp, if (boldSel) NeonCyan.copy(0.8f) else Color.White.copy(0.15f), RoundedCornerShape(10.dp))
+                                .clickable { isBold = !isBold },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("B", color = if (boldSel) NeonCyan else Color.White.copy(0.5f), fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                        }
+                        val italicSel = isItalic
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .shadow(if (italicSel) 6.dp else 0.dp, RoundedCornerShape(10.dp), spotColor = NeonCyan.copy(0.4f))
+                                .background(if (italicSel) NeonCyan.copy(0.22f) else Color.White.copy(0.05f), RoundedCornerShape(10.dp))
+                                .border(if (italicSel) 1.dp else 0.5.dp, if (italicSel) NeonCyan.copy(0.8f) else Color.White.copy(0.15f), RoundedCornerShape(10.dp))
+                                .clickable { isItalic = !isItalic },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("I", color = if (italicSel) NeonCyan else Color.White.copy(0.5f), fontWeight = FontWeight.Bold, fontSize = 15.sp, fontStyle = FontStyle.Italic)
+                        }
+                    }
+                }
+
+                // ── Background ────────────────────────────────────────────────
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Background", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        TEXTBOX_BG_OPTIONS.forEach { (argb, label) ->
+                            val sel     = bgArgb == argb
+                            val bgColor = if (argb == 0) Color.White.copy(0.06f) else Color(argb)
+                            Box(
+                                modifier = Modifier
+                                    .shadow(if (sel) 5.dp else 0.dp, RoundedCornerShape(9.dp), spotColor = NeonCyan.copy(0.3f))
+                                    .background(bgColor, RoundedCornerShape(9.dp))
+                                    .border(
+                                        if (sel) 1.5.dp else 0.5.dp,
+                                        if (sel) NeonCyan.copy(0.85f) else Color.White.copy(0.18f),
+                                        RoundedCornerShape(9.dp)
+                                    )
+                                    .clickable { bgArgb = argb }
+                                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    label,
+                                    style      = MaterialTheme.typography.labelSmall,
+                                    color      = if (argb == 0 || bgColor.luminance() > 0.4f) Color(0xFF0A0A1A) else Color.White,
+                                    fontWeight = if (sel) FontWeight.ExtraBold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // ── Border toggle ─────────────────────────────────────────────
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White.copy(0.04f), RoundedCornerShape(10.dp))
+                        .border(0.5.dp, if (hasBorder) NeonCyan.copy(0.35f) else Color.White.copy(0.08f), RoundedCornerShape(10.dp))
+                        .clickable { hasBorder = !hasBorder }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        if (hasBorder) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
+                        null,
+                        tint     = if (hasBorder) NeonCyan else Color.White.copy(0.35f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text("Show Border", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.8f))
+                }
+
+                // ── Live preview ──────────────────────────────────────────────
+                if (text.isNotBlank()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text("Preview", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.4f))
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        if (bgArgb == 0) Color.Transparent else Color(bgArgb),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .then(
+                                        if (hasBorder) Modifier.border(1.5.dp, Color(colorArgb).copy(0.7f), RoundedCornerShape(8.dp))
+                                        else Modifier
+                                    )
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text       = text,
+                                    color      = Color(colorArgb),
+                                    fontSize   = fontSize.sp,
+                                    fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
+                                    fontStyle  = if (isItalic) FontStyle.Italic else FontStyle.Normal,
+                                    lineHeight = (fontSize * 1.4f).sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Box(
+                modifier = Modifier
+                    .shadow(8.dp, RoundedCornerShape(13.dp), spotColor = NeonCyan.copy(0.5f))
+                    .background(
+                        Brush.linearGradient(listOf(NeonCyan.copy(if (text.isBlank()) 0.10f else 0.32f), NeonCyan.copy(0.08f))),
+                        RoundedCornerShape(13.dp)
+                    )
+                    .border(1.dp, NeonCyan.copy(if (text.isBlank()) 0.2f else 0.65f), RoundedCornerShape(13.dp))
+                    .clickable(enabled = text.isNotBlank()) {
+                        if (text.isNotBlank()) {
+                            onSave(AnnotationTextBox(
+                                xNorm      = xNorm,
+                                yNorm      = yNorm,
+                                text       = text,
+                                colorArgb  = colorArgb,
+                                fontSizeSp = fontSize,
+                                isBold     = isBold,
+                                isItalic   = isItalic,
+                                bgArgb     = bgArgb,
+                                hasBorder  = hasBorder
+                            ))
+                        }
+                    }
+                    .padding(horizontal = 18.dp, vertical = 10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Default.TextFields, null,
+                        tint     = NeonCyan.copy(if (text.isBlank()) 0.35f else 1f),
+                        modifier = Modifier.size(14.dp))
+                    Text("Place Label",
+                        color      = NeonCyan.copy(if (text.isBlank()) 0.35f else 1f),
+                        fontWeight = FontWeight.ExtraBold,
+                        style      = MaterialTheme.typography.labelLarge)
+                }
+            }
+        },
+        dismissButton = {
+            Box(
+                modifier = Modifier
+                    .shadow(4.dp, RoundedCornerShape(13.dp))
+                    .background(Color.White.copy(0.05f), RoundedCornerShape(13.dp))
+                    .border(1.dp, Color.White.copy(0.15f), RoundedCornerShape(13.dp))
+                    .clickable { onDismiss() }
+                    .padding(horizontal = 18.dp, vertical = 10.dp)
+            ) {
+                Text("Cancel", color = Color.White.copy(0.55f), style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    )
 }
 
 // ─── File Error View ──────────────────────────────────────────────────────────
