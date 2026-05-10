@@ -5,6 +5,7 @@ import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -17,9 +18,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
@@ -443,11 +445,53 @@ fun DayWasteScreen(navController: NavController, vm: DayWasteViewModel = hiltVie
     }
     if (showAdd) AddDayWasteDialog(onSave = { vm.save(it); showAdd = false }, onDismiss = { showAdd = false })
     showWastePercent?.let { d ->
+        var pct by remember { mutableStateOf(d.wastePercentage.toString()) }
+        var isViewMode by remember { mutableStateOf(false) }
         NEETDialog(title = "Waste Percentage", icon = Icons.Default.Percent, accentColor = NeonRed, onDismiss = { showWastePercent = null }) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                var pct by remember { mutableStateOf(d.wastePercentage.toString()) }
-                DialogTextField(value = pct, onValueChange = { pct = it }, label = "Waste % (0-100)", icon = Icons.Default.Percent, accentColor = NeonRed)
-                Button(onClick = { vm.save(d.copy(wastePercentage = pct.toIntOrNull() ?: 0)); showWastePercent = null }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = NeonRed.copy(0.2f)), border = BorderStroke(1.dp, NeonRed.copy(0.6f))) { Text("Save", color = NeonRed, fontWeight = FontWeight.Bold) }
+                ViewEditToggle(isViewMode = isViewMode, onToggle = { isViewMode = !isViewMode })
+                AnimatedContent(targetState = isViewMode, transitionSpec = {
+                    fadeIn(tween(220)) togetherWith fadeOut(tween(180))
+                }, label = "wpct_content") { viewMode ->
+                    if (viewMode) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(
+                                modifier = Modifier.fillMaxWidth()
+                                    .shadow(10.dp, RoundedCornerShape(20.dp), spotColor = NeonRed.copy(0.3f))
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Brush.linearGradient(listOf(NeonRed.copy(0.15f), Color(0xFF080F1F), NeonRed.copy(0.08f))))
+                                    .border(1.dp, NeonRed.copy(0.4f), RoundedCornerShape(20.dp))
+                                    .padding(vertical = 24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Icon(Icons.Default.Percent, null, tint = NeonRed, modifier = Modifier.size(30.dp))
+                                    Text(
+                                        if (pct.isBlank()) "—" else "$pct%",
+                                        style = MaterialTheme.typography.displaySmall,
+                                        color = NeonRed,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                            Button(onClick = { showWastePercent = null }, modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonRed.copy(0.15f)), border = BorderStroke(1.dp, NeonRed.copy(0.4f))) {
+                                Icon(Icons.Default.Close, null, tint = NeonRed, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Close", color = NeonRed, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            DialogTextField(value = pct, onValueChange = { pct = it }, label = "Waste % (0-100)", icon = Icons.Default.Percent, accentColor = NeonRed)
+                            Button(onClick = { vm.save(d.copy(wastePercentage = pct.toIntOrNull() ?: 0)); showWastePercent = null },
+                                modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = NeonRed.copy(0.2f)), border = BorderStroke(1.dp, NeonRed.copy(0.6f))) {
+                                Text("Save", color = NeonRed, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
             }
         }
     }

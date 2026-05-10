@@ -6,6 +6,7 @@ import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -17,7 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -141,6 +142,7 @@ fun DiaryEntryScreen(navController: NavController, diaryId: String, vm: DiaryVie
     val diary = entries.find { it.id == diaryId }
     var content by remember(diary) { mutableStateOf(diary?.content ?: "") }
     var showTagDialog by remember { mutableStateOf(false) }
+    var isViewMode by remember { mutableStateOf(false) }
 
     val emojiTools = listOf("😊", "😔", "💪", "🔥", "📚", "✅", "❌", "🎯", "🌟", "💡", "⚡", "🧠", "📝", "🏆", "😴")
 
@@ -154,61 +156,157 @@ fun DiaryEntryScreen(navController: NavController, diaryId: String, vm: DiaryVie
                     navController.popBackStack()
                 },
                 actions = {
-                    IconButton(onClick = { showTagDialog = true }) { Icon(Icons.Default.LocalOffer, null, tint = NeonPurple) }
-                    IconButton(onClick = { diary?.let { vm.save(it.copy(content = content)) } }) { Icon(Icons.Default.Save, null, tint = NeonGold) }
+                    // 3D View/Edit toggle pill in top bar
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 4.dp)
+                            .shadow(6.dp, RoundedCornerShape(50.dp), spotColor = if (isViewMode) NeonPurple.copy(0.4f) else NeonCyan.copy(0.3f))
+                            .clip(RoundedCornerShape(50.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    if (isViewMode) listOf(NeonPurple.copy(0.25f), NeonPurple.copy(0.1f))
+                                    else listOf(NeonCyan.copy(0.2f), NeonCyan.copy(0.08f))
+                                )
+                            )
+                            .border(1.dp, if (isViewMode) NeonPurple.copy(0.6f) else NeonCyan.copy(0.5f), RoundedCornerShape(50.dp))
+                            .clickable { isViewMode = !isViewMode }
+                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(
+                                if (isViewMode) Icons.Default.Visibility else Icons.Default.Edit,
+                                null,
+                                tint = if (isViewMode) NeonPurple else NeonCyan,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                if (isViewMode) "View" else "Edit",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (isViewMode) NeonPurple else NeonCyan,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    }
+                    if (!isViewMode) {
+                        IconButton(onClick = { showTagDialog = true }) { Icon(Icons.Default.LocalOffer, null, tint = NeonPurple) }
+                        IconButton(onClick = { diary?.let { vm.save(it.copy(content = content)) } }) { Icon(Icons.Default.Save, null, tint = NeonGold) }
+                    }
                 }
             )
 
             Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                // Diary header card
                 GlassCard(glowColor = NeonGold) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Icon(Icons.Default.AutoAwesome, null, tint = NeonGold, modifier = Modifier.size(20.dp))
                             Text(diary?.date ?: "", style = MaterialTheme.typography.headlineMedium, color = NeonGold, fontWeight = FontWeight.ExtraBold)
+                            Spacer(Modifier.weight(1f))
+                            if (isViewMode) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(NeonPurple.copy(0.18f), RoundedCornerShape(8.dp))
+                                        .border(0.5.dp, NeonPurple.copy(0.4f), RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text("Read Only", style = MaterialTheme.typography.labelSmall, color = NeonPurple, fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
                         if (diary?.nickName?.isNotBlank() == true) {
                             Text(diary.nickName, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.5f))
                         }
+                        if (diary?.tags?.isNotEmpty() == true) {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(diary.tags) { tag ->
+                                    Box(modifier = Modifier.background(NeonPurple.copy(0.15f), RoundedCornerShape(12.dp)).border(0.5.dp, NeonPurple.copy(0.4f), RoundedCornerShape(12.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+                                        Text("# $tag", style = MaterialTheme.typography.labelSmall, color = NeonPurple)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
                 Spacer(Modifier.height(12.dp))
 
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(emojiTools) { emoji ->
+                AnimatedContent(
+                    targetState = isViewMode,
+                    transitionSpec = { fadeIn(tween(250)) togetherWith fadeOut(tween(200)) },
+                    modifier = Modifier.weight(1f),
+                    label = "diary_mode"
+                ) { viewMode ->
+                    if (viewMode) {
+                        // ── View Mode ──────────────────────────────────────────
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
-                                .background(NeonGold.copy(0.1f), RoundedCornerShape(10.dp))
-                                .border(0.5.dp, NeonGold.copy(0.3f), RoundedCornerShape(10.dp))
-                                .clickable { content += emoji },
-                            contentAlignment = Alignment.Center
-                        ) { Text(emoji, fontSize = 18.sp) }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                RichTextToolbar(accentColor = NeonGold, onInsert = { content += it })
-                Spacer(Modifier.height(12.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(NeonGold.copy(0.04f))
-                        .border(1.dp, NeonGold.copy(0.2f), RoundedCornerShape(16.dp))
-                        .padding(16.dp)
-                ) {
-                    BasicTextField(
-                        value = content,
-                        onValueChange = { content = it },
-                        modifier = Modifier.fillMaxSize(),
-                        textStyle = TextStyle(color = Color.White, fontSize = 15.sp, fontFamily = ExoFont, lineHeight = 24.sp),
-                        decorationBox = { inner ->
-                            if (content.isEmpty()) Text("Start writing your thoughts, experiences, what you learned today, how you feel...", color = Color.White.copy(0.25f), fontSize = 15.sp, fontFamily = ExoFont, lineHeight = 24.sp)
-                            inner()
+                                .fillMaxSize()
+                                .shadow(8.dp, RoundedCornerShape(20.dp), spotColor = NeonGold.copy(0.2f))
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Brush.linearGradient(listOf(NeonGold.copy(0.07f), Color(0xFF06091A), NeonGold.copy(0.03f))))
+                                .border(1.dp, NeonGold.copy(0.25f), RoundedCornerShape(20.dp))
+                                .padding(18.dp)
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            if (content.isEmpty()) {
+                                Text(
+                                    "Nothing written yet. Switch to Edit mode to start writing.",
+                                    color = Color.White.copy(0.3f),
+                                    fontSize = 15.sp,
+                                    fontFamily = ExoFont,
+                                    lineHeight = 24.sp,
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                                )
+                            } else {
+                                Text(
+                                    content,
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontFamily = ExoFont,
+                                    lineHeight = 24.sp
+                                )
+                            }
                         }
-                    )
+                    } else {
+                        // ── Edit Mode ──────────────────────────────────────────
+                        Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(emojiTools) { emoji ->
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .background(NeonGold.copy(0.1f), RoundedCornerShape(10.dp))
+                                            .border(0.5.dp, NeonGold.copy(0.3f), RoundedCornerShape(10.dp))
+                                            .clickable { content += emoji },
+                                        contentAlignment = Alignment.Center
+                                    ) { Text(emoji, fontSize = 18.sp) }
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            RichTextToolbar(accentColor = NeonGold, onInsert = { content += it })
+                            Spacer(Modifier.height(12.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(NeonGold.copy(0.04f))
+                                    .border(1.dp, NeonGold.copy(0.2f), RoundedCornerShape(16.dp))
+                                    .padding(16.dp)
+                            ) {
+                                BasicTextField(
+                                    value = content,
+                                    onValueChange = { content = it },
+                                    modifier = Modifier.fillMaxSize(),
+                                    textStyle = TextStyle(color = Color.White, fontSize = 15.sp, fontFamily = ExoFont, lineHeight = 24.sp),
+                                    decorationBox = { inner ->
+                                        if (content.isEmpty()) Text("Start writing your thoughts, experiences, what you learned today, how you feel...", color = Color.White.copy(0.25f), fontSize = 15.sp, fontFamily = ExoFont, lineHeight = 24.sp)
+                                        inner()
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
