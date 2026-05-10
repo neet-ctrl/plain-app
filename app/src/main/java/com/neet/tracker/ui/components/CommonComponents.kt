@@ -773,8 +773,9 @@ fun NeonFAB(onClick: () -> Unit, icon: ImageVector = Icons.Default.Add, color: C
         label = "fab_glow"
     )
 
-    Box(contentAlignment = Alignment.Center) {
-        // Outer pulse ring
+    // Explicit 56 dp size so the FAB never expands to fill a fillMaxSize parent
+    Box(modifier = Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+        // Outer pulse ring (visual only — scale is graphical, layout stays 56 dp)
         Box(modifier = Modifier.size(56.dp).scale(pulseScale).background(color.copy(pulseAlpha), CircleShape))
         // Secondary pulse
         Box(modifier = Modifier.size(56.dp).scale(pulseScale * 0.7f).background(color.copy(pulseAlpha * 0.5f), CircleShape))
@@ -783,6 +784,7 @@ fun NeonFAB(onClick: () -> Unit, icon: ImageVector = Icons.Default.Add, color: C
             containerColor = Color.Transparent,
             contentColor = color,
             modifier = Modifier
+                .size(56.dp)          // hard-lock the FAB to 56 dp — prevents full-screen expansion
                 .shadow(20.dp, CircleShape, spotColor = color.copy(glowAlpha))
                 .background(
                     Brush.linearGradient(
@@ -798,7 +800,6 @@ fun NeonFAB(onClick: () -> Unit, icon: ImageVector = Icons.Default.Add, color: C
                     CircleShape
                 )
         ) {
-            // Shine on FAB
             Box(Modifier.fillMaxSize()) {
                 Box(
                     Modifier.size(28.dp).align(Alignment.TopStart).offset(4.dp, 4.dp)

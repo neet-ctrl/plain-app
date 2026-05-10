@@ -1,5 +1,10 @@
 package com.neet.tracker.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.Settings
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -18,10 +23,14 @@ import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
 import com.neet.tracker.data.models.StudentProfile
 import com.neet.tracker.navigation.*
@@ -46,8 +55,24 @@ fun HomeScreen(
     vm: ProfileViewModel = hiltViewModel(),
     countsVm: HomeCountViewModel = hiltViewModel()
 ) {
+    val context      = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val profile by vm.profile.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
+
+    // ── All-Files storage permission state ────────────────────────────────────
+    fun checkStoragePermission() =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager()
+        else true   // READ_EXTERNAL_STORAGE covers older Android
+
+    var hasStoragePermission by remember { mutableStateOf(checkStoragePermission()) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) hasStoragePermission = checkStoragePermission()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val assetsCount      by countsVm.assetsCount.collectAsState()
     val diaryCount       by countsVm.diaryCount.collectAsState()
@@ -115,6 +140,26 @@ fun HomeScreen(
                         style = MaterialTheme.typography.labelSmall,
                         color = NeonCyan.copy(0.45f),
                         modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                    )
+                }
+
+                // Storage permission banner — shown until the user grants access
+                AnimatedVisibility(
+                    visible = !hasStoragePermission && searchQuery.isBlank(),
+                    enter = expandVertically() + fadeIn(tween(350)),
+                    exit  = shrinkVertically() + fadeOut(tween(250))
+                ) {
+                    StoragePermissionBanner(
+                        modifier = Modifier.padding(bottom = 12.dp),
+                        onAllow = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                val intent = Intent(
+                                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                                context.startActivity(intent)
+                            }
+                        }
                     )
                 }
 
@@ -553,6 +598,115 @@ fun HomeModuleCard(card: MainCard, count: Int? = null, onClick: () -> Unit) {
                 textAlign = TextAlign.Center,
                 maxLines = 2
             )
+        }
+    }
+}
+
+// ─── Storage Permission Banner ────────────────────────────────────────────────
+
+@Composable
+private fun StoragePermissionBanner(modifier: Modifier = Modifier, onAllow: () -> Unit) {
+    val context = LocalContext.current
+    val pulse by rememberInfiniteTransition(label = "spb_pulse").animateFloat(
+        initialValue = 0.5f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1400, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "spb_glow"
+    )
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(16.dp, RoundedCornerShape(18.dp), spotColor = NeonOrange.copy(pulse * 0.5f))
+            .background(
+                Brush.linearGradient(listOf(Color(0xFF1A0E00), Color(0xFF120A00), Color(0xFF0E0A00))),
+                RoundedCornerShape(18.dp)
+            )
+            .border(
+                BorderStroke(1.dp, Brush.horizontalGradient(listOf(NeonOrange.copy(0.8f), NeonGold.copy(0.5f), NeonOrange.copy(0.4f)))),
+                RoundedCornerShape(18.dp)
+            )
+            .padding(16.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Header row
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .shadow(10.dp, RoundedCornerShape(12.dp), spotColor = NeonOrange.copy(pulse * 0.6f))
+                        .background(NeonOrange.copy(0.15f), RoundedCornerShape(12.dp))
+                        .border(1.dp, NeonOrange.copy(0.5f), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.FolderOpen, null, tint = NeonOrange, modifier = Modifier.size(22.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Manage All Files Access",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = NeonOrange,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        "Required to open any PDF or file directly from storage",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(0.5f)
+                    )
+                }
+            }
+
+            // Why this is needed
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(NeonOrange.copy(0.07f), RoundedCornerShape(10.dp))
+                    .border(0.5.dp, NeonOrange.copy(0.2f), RoundedCornerShape(10.dp))
+                    .padding(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Icon(Icons.Default.Info, null, tint = NeonGold.copy(0.7f), modifier = Modifier.size(14.dp).padding(top = 1.dp))
+                Text(
+                    "Without this permission, some PDFs and files attached to your notes may fail to open inside the app. " +
+                    "Tap Allow Access, then enable \"Allow access to manage all files\" for NEET Tracker.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(0.55f),
+                    lineHeight = 17.sp
+                )
+            }
+
+            // Button row
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = onAllow,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonOrange.copy(0.18f)),
+                    border = BorderStroke(1.dp, NeonOrange.copy(0.75f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.CheckCircle, null, tint = NeonOrange, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Allow Access", color = NeonOrange, fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick = {
+                        val intent = Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:${context.packageName}")
+                        )
+                        runCatching { context.startActivity(intent) }
+                    },
+                    modifier = Modifier,
+                    border = BorderStroke(1.dp, Color.White.copy(0.12f)),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White.copy(0.4f))
+                ) {
+                    Icon(Icons.Default.Settings, null, modifier = Modifier.size(15.dp))
+                }
+            }
         }
     }
 }
