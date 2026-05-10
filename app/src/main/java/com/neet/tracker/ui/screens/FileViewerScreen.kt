@@ -95,6 +95,17 @@ private val TEXTBOX_BG_OPTIONS = listOf(
     android.graphics.Color.argb(0xCC, 0x1B, 0x3A, 0x2F) to "Forest",
 )
 
+private val LINE_POINTER_COLORS = listOf(
+    android.graphics.Color.parseColor("#FF1744"),
+    android.graphics.Color.parseColor("#FF6D00"),
+    android.graphics.Color.parseColor("#FFD600"),
+    android.graphics.Color.parseColor("#00E676"),
+    android.graphics.Color.parseColor("#00E5FF"),
+    android.graphics.Color.parseColor("#2979FF"),
+    android.graphics.Color.parseColor("#D500F9"),
+    android.graphics.Color.parseColor("#FF4081"),
+)
+
 // ─── Universal File Viewer ─────────────────────────────────────────────────────
 
 @Composable
@@ -186,6 +197,11 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var annotToolbarOffsetX  by remember { mutableFloatStateOf(16f) }
     var annotToolbarOffsetY  by remember { mutableFloatStateOf(300f) }
     var annotZoomEnabled     by remember { mutableStateOf(false) }
+
+    // ── Line Pointer ───────────────────────────────────────────────────────────
+    var linePointerEnabled      by remember { mutableStateOf(false) }
+    var linePointerColorArgb    by remember { mutableIntStateOf(android.graphics.Color.parseColor("#FF1744")) }
+    var linePointerYFraction    by remember { mutableFloatStateOf(0.35f) }
 
     // ── Annotation / Draw-on-PDF ───────────────────────────────────────────────
     val annoScope           = rememberCoroutineScope()
@@ -799,14 +815,30 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 onZoomToggle = { annotZoomEnabled = !annotZoomEnabled },
                 solutionUri = solutionUri,
                 onOpenSolution = { showSolutionWindow = true },
+                linePointerEnabled   = linePointerEnabled,
+                linePointerColorArgb = linePointerColorArgb,
+                onLinePointerToggle      = { linePointerEnabled = !linePointerEnabled },
+                onLinePointerColorChange = { linePointerColorArgb = it },
                 onDone = {
                     annotationMode  = false
                     annotFullScreen = false
                     annotZoomEnabled = false
+                    linePointerEnabled = false
                     annoScope.launch {
                         AnnotationManager.save(context, fileUri, allPageStrokes)
                         AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes)
                     }
+                }
+            )
+        }
+
+        // ── Line Pointer Overlay (draggable glowing line across the page) ─────
+        if (linePointerEnabled && pdfPages.isNotEmpty()) {
+            LinePointerOverlay(
+                colorArgb  = linePointerColorArgb,
+                yFraction  = linePointerYFraction,
+                onDragY    = { dy, totalHeightPx ->
+                    linePointerYFraction = (linePointerYFraction + dy / totalHeightPx).coerceIn(0.02f, 0.98f)
                 }
             )
         }
@@ -1484,6 +1516,86 @@ private fun PdfAnnotationOverlay(
     }
 }
 
+// ─── Line Pointer Overlay ──────────────────────────────────────────────────────
+// A full-screen transparent overlay that renders a bright glowing horizontal
+// reading-ruler line. The user drags it vertically to point at any line of text.
+
+@Composable
+private fun LinePointerOverlay(
+    colorArgb: Int,
+    yFraction: Float,
+    onDragY: (dy: Float, totalHeightPx: Float) -> Unit,
+) {
+    val density   = LocalDensity.current
+    val lineColor = Color(colorArgb)
+
+    val inf     = rememberInfiniteTransition(label = "lp_pulse")
+    val pulse   by inf.animateFloat(
+        initialValue  = 0.55f,
+        targetValue   = 1f,
+        animationSpec = infiniteRepeatable(tween(900, easing = EaseInOutSine), RepeatMode.Reverse),
+        label         = "lp_pulse_v"
+    )
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val totalHeightPx = with(density) { maxHeight.toPx() }
+        val yPx           = totalHeightPx * yFraction
+
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(yFraction) {
+                    detectDragGestures { _, drag ->
+                        onDragY(drag.y, totalHeightPx)
+                    }
+                }
+        ) {
+            val w = size.width
+
+            // Soft outer glow band
+            drawRect(
+                brush  = Brush.verticalGradient(
+                    colors     = listOf(Color.Transparent, lineColor.copy(alpha = 0.18f * pulse), Color.Transparent),
+                    startY     = yPx - 18.dp.toPx(),
+                    endY       = yPx + 18.dp.toPx()
+                ),
+                topLeft = Offset(0f, yPx - 18.dp.toPx()),
+                size    = androidx.compose.ui.geometry.Size(w, 36.dp.toPx())
+            )
+
+            // Medium glow line
+            drawLine(
+                color       = lineColor.copy(alpha = 0.38f * pulse),
+                start       = Offset(0f, yPx),
+                end         = Offset(w, yPx),
+                strokeWidth = 8.dp.toPx(),
+                cap         = StrokeCap.Round
+            )
+
+            // Bright core line
+            drawLine(
+                color       = lineColor.copy(alpha = 0.92f),
+                start       = Offset(0f, yPx),
+                end         = Offset(w, yPx),
+                strokeWidth = 2.5.dp.toPx(),
+                cap         = StrokeCap.Round
+            )
+
+            // Drag handle dot at left edge
+            drawCircle(
+                color  = lineColor,
+                radius = 6.dp.toPx(),
+                center = Offset(18.dp.toPx(), yPx)
+            )
+            drawCircle(
+                color  = Color.White.copy(0.9f),
+                radius = 3.dp.toPx(),
+                center = Offset(18.dp.toPx(), yPx)
+            )
+        }
+    }
+}
+
 // ─── Floating Annotation Toolbar (draggable, collapsible) ─────────────────────
 
 @Composable
@@ -1508,6 +1620,10 @@ private fun FloatingAnnotToolbar(
     onZoomToggle: () -> Unit,
     solutionUri: String = "",
     onOpenSolution: () -> Unit = {},
+    linePointerEnabled: Boolean = false,
+    linePointerColorArgb: Int = android.graphics.Color.parseColor("#FF1744"),
+    onLinePointerToggle: () -> Unit = {},
+    onLinePointerColorChange: (Int) -> Unit = {},
     onDone: () -> Unit,
 ) {
     Box(
@@ -1680,6 +1796,117 @@ private fun FloatingAnnotToolbar(
                                     fontSize = 9.sp,
                                     color = if (sel) NeonOrange else Color.White.copy(0.45f),
                                     fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    }
+
+                    // ── Line Pointer section ───────────────────────────────────
+                    Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color.White.copy(0.12f)))
+
+                    val lpColor = Color(linePointerColorArgb)
+                    val lpGlow by animateFloatAsState(if (linePointerEnabled) 1f else 0f, tween(300), label = "lp_glow")
+
+                    // Toggle row
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(if (linePointerEnabled) 10.dp else 0.dp, RoundedCornerShape(11.dp),
+                                spotColor = lpColor.copy(0.6f * lpGlow))
+                            .background(
+                                if (linePointerEnabled)
+                                    Brush.horizontalGradient(listOf(lpColor.copy(0.18f), lpColor.copy(0.07f)))
+                                else
+                                    Brush.horizontalGradient(listOf(Color.White.copy(0.04f), Color.White.copy(0.02f))),
+                                RoundedCornerShape(11.dp)
+                            )
+                            .border(
+                                width  = if (linePointerEnabled) 1.dp else 0.5.dp,
+                                color  = if (linePointerEnabled) lpColor.copy(0.75f) else Color.White.copy(0.12f),
+                                shape  = RoundedCornerShape(11.dp)
+                            )
+                            .padding(horizontal = 10.dp, vertical = 7.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(7.dp)
+                        ) {
+                            // Line pointer icon — three stacked lines with middle one highlighted
+                            Canvas(modifier = Modifier.size(width = 18.dp, height = 14.dp)) {
+                                val w = size.width; val h = size.height
+                                val lineColor = if (linePointerEnabled) lpColor else Color.White.copy(0.3f)
+                                val dimColor  = Color.White.copy(0.15f)
+                                drawLine(dimColor,  Offset(0f, h * 0.15f), Offset(w, h * 0.15f), strokeWidth = 1.5.dp.toPx(), cap = StrokeCap.Round)
+                                drawLine(lineColor, Offset(0f, h * 0.5f),  Offset(w, h * 0.5f),  strokeWidth = if (linePointerEnabled) 3.dp.toPx() else 1.5.dp.toPx(), cap = StrokeCap.Round)
+                                if (linePointerEnabled) {
+                                    drawLine(lpColor.copy(0.35f), Offset(0f, h * 0.5f), Offset(w, h * 0.5f),
+                                        strokeWidth = 8.dp.toPx(), cap = StrokeCap.Round)
+                                }
+                                drawLine(dimColor,  Offset(0f, h * 0.85f), Offset(w, h * 0.85f), strokeWidth = 1.5.dp.toPx(), cap = StrokeCap.Round)
+                            }
+
+                            Text(
+                                "Line Pointer",
+                                style      = MaterialTheme.typography.labelMedium,
+                                color      = if (linePointerEnabled) Color.White else Color.White.copy(0.55f),
+                                fontWeight = if (linePointerEnabled) FontWeight.Bold else FontWeight.Normal,
+                                modifier   = Modifier.weight(1f)
+                            )
+
+                            Switch(
+                                checked  = linePointerEnabled,
+                                onCheckedChange = { onLinePointerToggle() },
+                                modifier = Modifier.height(24.dp).width(44.dp),
+                                colors   = SwitchDefaults.colors(
+                                    checkedThumbColor   = lpColor,
+                                    checkedTrackColor   = lpColor.copy(0.38f),
+                                    checkedBorderColor  = lpColor.copy(0.7f),
+                                    uncheckedThumbColor = Color.White.copy(0.4f),
+                                    uncheckedTrackColor = Color.White.copy(0.08f),
+                                    uncheckedBorderColor= Color.White.copy(0.18f)
+                                )
+                            )
+                        }
+                    }
+
+                    // Color chips for Line Pointer (revealed when enabled)
+                    AnimatedVisibility(
+                        visible = linePointerEnabled,
+                        enter   = expandVertically(tween(220)) + fadeIn(tween(220)),
+                        exit    = shrinkVertically(tween(180)) + fadeOut(tween(180))
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            LINE_POINTER_COLORS.forEach { argb ->
+                                val sel  = argb == linePointerColorArgb
+                                val c    = Color(argb)
+                                val inf  = rememberInfiniteTransition(label = "lp_chip_$argb")
+                                val glow by inf.animateFloat(
+                                    initialValue    = 0.5f,
+                                    targetValue     = 1f,
+                                    animationSpec   = infiniteRepeatable(tween(700, easing = EaseInOutSine), RepeatMode.Reverse),
+                                    label           = "lp_chip_glow_$argb"
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(if (sel) 27.dp else 21.dp)
+                                        .shadow(
+                                            if (sel) (12.dp * glow) else 0.dp,
+                                            CircleShape,
+                                            spotColor = c.copy(if (sel) 0.9f * glow else 0f)
+                                        )
+                                        .border(
+                                            if (sel) 2.5.dp else 0.5.dp,
+                                            if (sel) Color.White else Color.White.copy(0.25f),
+                                            CircleShape
+                                        )
+                                        .clip(CircleShape)
+                                        .background(c)
+                                        .clickable { onLinePointerColorChange(argb) }
+                                )
                             }
                         }
                     }
