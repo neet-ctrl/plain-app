@@ -731,7 +731,7 @@ fun StatusSelectorDialog(current: Status, onSelect: (Status) -> Unit, onDismiss:
 @Composable
 fun RemarkDialog(remark: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
     var text by remember { mutableStateOf(remark) }
-    var isViewMode by remember { mutableStateOf(false) }
+    var isViewMode by remember { mutableStateOf(remark.isNotBlank()) }
 
     NEETDialog(title = "Remarks", icon = Icons.Default.StickyNote2, accentColor = NeonGold, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -785,7 +785,7 @@ val PRESET_TAGS = listOf(
 fun TagDialog(currentTags: List<String>, onSave: (List<String>) -> Unit, onDismiss: () -> Unit) {
     var selectedTags by remember { mutableStateOf(currentTags.toList()) }
     var customTag by remember { mutableStateOf("") }
-    var isViewMode by remember { mutableStateOf(false) }
+    var isViewMode by remember { mutableStateOf(currentTags.isNotEmpty()) }
 
     NEETDialog(title = "Manage Tags", icon = Icons.Default.LocalOffer, accentColor = NeonPurple, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -864,12 +864,13 @@ fun TagDialog(currentTags: List<String>, onSave: (List<String>) -> Unit, onDismi
                                         .background(if (selected) NeonPurple.copy(0.25f) else Color.White.copy(0.05f), RoundedCornerShape(20.dp))
                                         .border(0.5.dp, if (selected) NeonPurple.copy(0.7f) else Color.White.copy(0.12f), RoundedCornerShape(20.dp))
                                         .clickable {
-                                            // Fixed: create new list to trigger recomposition
-                                            selectedTags = if (selected) {
+                                            val newList = if (selected) {
                                                 selectedTags.filter { it != tag }
                                             } else {
                                                 selectedTags + tag
                                             }
+                                            selectedTags = newList
+                                            onSave(newList)
                                         }
                                         .padding(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
@@ -926,7 +927,7 @@ fun CompletionDateDialog(dates: List<CompletionDate>, onSave: (List<CompletionDa
     var list by remember { mutableStateOf(dates.toList()) }
     var newDate by remember { mutableStateOf("") }
     var newNote by remember { mutableStateOf("") }
-    var isViewMode by remember { mutableStateOf(false) }
+    var isViewMode by remember { mutableStateOf(dates.isNotEmpty()) }
 
     NEETDialog(title = "Completion Dates", icon = Icons.Default.DateRange, accentColor = NeonGreen, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1012,7 +1013,7 @@ fun CompletionDateDialog(dates: List<CompletionDate>, onSave: (List<CompletionDa
 @Composable
 fun WrongQuestionsDialog(wrongQuestions: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
     var text by remember { mutableStateOf(wrongQuestions) }
-    var isViewMode by remember { mutableStateOf(false) }
+    var isViewMode by remember { mutableStateOf(wrongQuestions.isNotBlank()) }
 
     NEETDialog(title = "Wrong Questions", icon = Icons.Default.ErrorOutline, accentColor = NeonRed, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -1056,7 +1057,7 @@ fun WrongQuestionsDialog(wrongQuestions: String, onSave: (String) -> Unit, onDis
 @Composable
 fun SpecificationDialog(title: String, content: String, onSave: (String) -> Unit, onDismiss: () -> Unit, accentColor: Color = NeonCyan) {
     var text by remember { mutableStateOf(content) }
-    var isViewMode by remember { mutableStateOf(false) }
+    var isViewMode by remember { mutableStateOf(content.isNotBlank()) }
 
     NEETDialog(title = title, icon = Icons.Default.Info, accentColor = accentColor, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1128,7 +1129,7 @@ fun PrefixDateDialog(currentDate: String, onSave: (String) -> Unit, onDismiss: (
 @Composable
 fun TopicsDialog(currentTopics: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
     var topics by remember { mutableStateOf(currentTopics) }
-    var isViewMode by remember { mutableStateOf(false) }
+    var isViewMode by remember { mutableStateOf(currentTopics.isNotBlank()) }
 
     NEETDialog(title = "Topics Asked", icon = Icons.Default.Topic, accentColor = NeonCyan, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -1177,7 +1178,7 @@ fun TopicsDialog(currentTopics: String, onSave: (String) -> Unit, onDismiss: () 
 @Composable
 fun MarksDialog(currentMarks: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
     var marks by remember { mutableStateOf(currentMarks) }
-    var isViewMode by remember { mutableStateOf(false) }
+    var isViewMode by remember { mutableStateOf(currentMarks.isNotBlank()) }
 
     NEETDialog(title = "Marks Obtained", icon = Icons.Default.Star, accentColor = NeonGold, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
