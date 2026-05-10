@@ -731,13 +731,21 @@ fun TagChip(tag: String, selected: Boolean = false, onRemove: (() -> Unit)? = nu
                 RoundedCornerShape(20.dp)
             )
             .border(0.5.dp, Brush.linearGradient(listOf(Color.White.copy(0.2f), color.copy(0.5f))), RoundedCornerShape(20.dp))
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+            .padding(start = 10.dp, end = if (onRemove != null) 2.dp else 10.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text("# $tag", style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.SemiBold)
         if (onRemove != null) {
-            Icon(Icons.Default.Close, null, tint = color, modifier = Modifier.size(11.dp).clickable { onRemove() })
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .clickable { onRemove() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Close, null, tint = color.copy(0.85f), modifier = Modifier.size(13.dp))
+            }
         }
     }
 }

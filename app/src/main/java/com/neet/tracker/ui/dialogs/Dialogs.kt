@@ -797,25 +797,57 @@ fun TagDialog(currentTags: List<String>, onSave: (List<String>) -> Unit, onDismi
             }, label = "tag_content") { viewMode ->
                 if (viewMode) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        // Hint label
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.LocalOffer, null, tint = NeonPurple.copy(0.7f), modifier = Modifier.size(13.dp))
+                            Text(
+                                "Tap × on any tag to remove it",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(0.4f)
+                            )
+                        }
+
                         if (selectedTags.isEmpty()) {
-                            ViewModeBox(content = "", accentColor = NeonPurple, emptyHint = "No tags selected", minHeight = 60.dp)
+                            ViewModeBox(content = "", accentColor = NeonPurple, emptyHint = "No tags selected — switch to Edit to add tags", minHeight = 60.dp)
                         } else {
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 selectedTags.forEach { tag ->
-                                    Box(
+                                    Row(
                                         modifier = Modifier
-                                            .shadow(4.dp, RoundedCornerShape(20.dp), spotColor = NeonPurple.copy(0.3f))
+                                            .shadow(5.dp, RoundedCornerShape(20.dp), spotColor = NeonPurple.copy(0.35f))
                                             .background(NeonPurple.copy(0.22f), RoundedCornerShape(20.dp))
-                                            .border(0.5.dp, NeonPurple.copy(0.6f), RoundedCornerShape(20.dp))
-                                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                                            .border(0.5.dp, NeonPurple.copy(0.65f), RoundedCornerShape(20.dp))
+                                            .padding(start = 14.dp, end = 4.dp, top = 7.dp, bottom = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
                                         Text("# $tag", style = MaterialTheme.typography.labelMedium, color = NeonPurple, fontWeight = FontWeight.Bold)
+                                        // Proper-sized remove button
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                                .background(NeonRed.copy(0.12f))
+                                                .clickable {
+                                                    val newList = selectedTags.filter { it != tag }
+                                                    selectedTags = newList
+                                                    onSave(newList)
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.Close, null, tint = NeonRed.copy(0.8f), modifier = Modifier.size(13.dp))
+                                        }
                                     }
                                 }
                             }
                         }
-                        Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = NeonPurple.copy(0.15f)), border = BorderStroke(1.dp, NeonPurple.copy(0.4f))) {
+
+                        Button(
+                            onClick = onDismiss,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonPurple.copy(0.15f)),
+                            border = BorderStroke(1.dp, NeonPurple.copy(0.4f))
+                        ) {
                             Icon(Icons.Default.Close, null, tint = NeonPurple, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Close", color = NeonPurple, fontWeight = FontWeight.Bold)
