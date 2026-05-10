@@ -1,8 +1,10 @@
 package com.neet.tracker.ui.screens
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.*
@@ -54,12 +56,19 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
     var uploadQPTarget by remember { mutableStateOf<TestPaper?>(null) }
     var uploadSolTarget by remember { mutableStateOf<TestPaper?>(null) }
 
+    val context = LocalContext.current
     val qpLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { u -> uploadQPTarget?.let { t -> vm.save(t.copy(questionPaperUri = u.toString())) } }
+        uri?.let { u ->
+            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            uploadQPTarget?.let { t -> vm.save(t.copy(questionPaperUri = u.toString())) }
+        }
         uploadQPTarget = null
     }
     val solLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { u -> uploadSolTarget?.let { t -> vm.save(t.copy(solutionUri = u.toString())) } }
+        uri?.let { u ->
+            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            uploadSolTarget?.let { t -> vm.save(t.copy(solutionUri = u.toString())) }
+        }
         uploadSolTarget = null
     }
 
@@ -179,12 +188,19 @@ fun SamplePapersScreen(navController: NavController, vm: SamplePaperViewModel = 
     var uploadQPTarget by remember { mutableStateOf<SamplePaper?>(null) }
     var uploadSolTarget by remember { mutableStateOf<SamplePaper?>(null) }
 
+    val context = LocalContext.current
     val qpLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { u -> uploadQPTarget?.let { p -> vm.save(p.copy(questionPaperUri = u.toString())) } }
+        uri?.let { u ->
+            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            uploadQPTarget?.let { p -> vm.save(p.copy(questionPaperUri = u.toString())) }
+        }
         uploadQPTarget = null
     }
     val solLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { u -> uploadSolTarget?.let { p -> vm.save(p.copy(solutionUri = u.toString())) } }
+        uri?.let { u ->
+            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            uploadSolTarget?.let { p -> vm.save(p.copy(solutionUri = u.toString())) }
+        }
         uploadSolTarget = null
     }
 

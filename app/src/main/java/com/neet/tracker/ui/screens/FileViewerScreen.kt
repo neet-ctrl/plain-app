@@ -51,12 +51,22 @@ private val QUICK_EMOJIS_FILE = listOf(
 fun FileViewerScreen(navController: NavController, fileUri: String, title: String) {
     val context = LocalContext.current
     val uri = remember(fileUri) { try { Uri.parse(fileUri) } catch (e: Exception) { null } }
-    val extension = remember(fileUri) {
-        MimeTypeMap.getFileExtensionFromUrl(fileUri)?.lowercase()
+    val mimeType = remember(fileUri) {
+        if (uri != null) {
+            context.contentResolver.getType(uri)
+                ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(
+                    fileUri.substringAfterLast('.', "").lowercase()
+                )
+                ?: ""
+        } else ""
+    }
+    val extension = remember(fileUri, mimeType) {
+        MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
+            ?: MimeTypeMap.getFileExtensionFromUrl(fileUri)?.lowercase()
             ?: fileUri.substringAfterLast('.', "").lowercase()
     }
-    val isImage = extension in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
-    val isPdf   = extension == "pdf" || fileUri.contains("pdf", ignoreCase = true)
+    val isImage = mimeType.startsWith("image/") || extension in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
+    val isPdf   = mimeType == "application/pdf" || extension == "pdf" || fileUri.contains("pdf", ignoreCase = true)
 
     // ── Persistent notes via SharedPreferences ─────────────────────────────────
     val prefs   = remember { context.getSharedPreferences("file_annotations", Context.MODE_PRIVATE) }
@@ -533,11 +543,12 @@ private fun GenericFileView(uri: Uri, title: String, extension: String, context:
                     Text("Open this file in its native app for full viewing.", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.45f), textAlign = TextAlign.Center)
                     Button(
                         onClick = {
+                            val mime = context.contentResolver.getType(uri) ?: "*/*"
                             val intent = Intent(Intent.ACTION_VIEW).apply {
-                                data  = uri
+                                setDataAndType(uri, mime)
                                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
                             }
-                            try { context.startActivity(intent) } catch (e: Exception) {}
+                            try { context.startActivity(Intent.createChooser(intent, "Open with")) } catch (e: Exception) {}
                         },
                         modifier = Modifier.fillMaxWidth(),
                         colors   = ButtonDefaults.buttonColors(containerColor = NeonCyan.copy(0.18f)),

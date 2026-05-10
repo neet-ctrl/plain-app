@@ -1,8 +1,10 @@
 package com.neet.tracker.ui.screens
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -115,7 +117,13 @@ fun NotebookCard(notebook: Notebook, onClick: () -> Unit, onEdit: () -> Unit, on
 fun NotebookEditDialog(notebook: Notebook?, onSave: (Notebook) -> Unit, onDismiss: () -> Unit) {
     var nbNo by remember { mutableStateOf(notebook?.notebookNo ?: "") }
     var photoUri by remember { mutableStateOf(notebook?.photoUri ?: "") }
-    val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { u -> u?.let { photoUri = it.toString() } }
+    val context = LocalContext.current
+    val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { u ->
+        u?.let {
+            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            photoUri = it.toString()
+        }
+    }
 
     NEETDialog(title = if (notebook == null) "New Notebook" else "Edit Notebook", icon = Icons.Default.Book, accentColor = NeonCyan, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {

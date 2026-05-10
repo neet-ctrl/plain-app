@@ -1,8 +1,10 @@
 package com.neet.tracker.ui.screens
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -32,8 +34,12 @@ import com.neet.tracker.ui.viewmodels.*
 @Composable
 fun NEETSyllabusScreen(navController: NavController, vm: SyllabusViewModel = hiltViewModel()) {
     val syllabus by vm.syllabus.collectAsState()
+    val context = LocalContext.current
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { vm.save(NEETSyllabus(fileUri = it.toString())) }
+        uri?.let {
+            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            vm.save(NEETSyllabus(fileUri = it.toString()))
+        }
     }
     SpaceBackground {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -269,8 +275,12 @@ fun DayWasteScreen(navController: NavController, vm: DayWasteViewModel = hiltVie
     var showTip by remember { mutableStateOf<DayWaste?>(null) }
     var uploadSourceTarget by remember { mutableStateOf<DayWaste?>(null) }
 
+    val context = LocalContext.current
     val sourceLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { u -> uploadSourceTarget?.let { d -> vm.save(d.copy(sourceUri = u.toString())) } }
+        uri?.let { u ->
+            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            uploadSourceTarget?.let { d -> vm.save(d.copy(sourceUri = u.toString())) }
+        }
         uploadSourceTarget = null
     }
 

@@ -1,8 +1,10 @@
 package com.neet.tracker.ui.screens
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
@@ -224,8 +226,10 @@ fun SubjectShortNotesScreen(navController: NavController) {
     val vm: SubjectNoteViewModel = hiltViewModel()
     var uploadingSubject by remember { mutableStateOf<String?>(null) }
 
+    val context = LocalContext.current
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { u ->
+            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             uploadingSubject?.let { subj ->
                 val subjectEnum = try { Subject.valueOf(subj) } catch (e: Exception) { Subject.GENERAL }
                 vm.save(SubjectShortNote(subject = subjectEnum, fileUri = u.toString()))

@@ -1,8 +1,10 @@
 package com.neet.tracker.ui.screens
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -445,8 +447,12 @@ fun DiagramsSubjectScreen(navController: NavController, subject: String, vm: Dia
     val filtered = diagrams.filter { searchQuery.isBlank() || it.chapter.contains(searchQuery, true) }
 
     var uploadTarget by remember { mutableStateOf<Diagram?>(null) }
+    val context = LocalContext.current
     val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { u -> uploadTarget?.let { d -> vm.save(d.copy(fileUri = u.toString())) } }
+        uri?.let { u ->
+            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            uploadTarget?.let { d -> vm.save(d.copy(fileUri = u.toString())) }
+        }
         uploadTarget = null
     }
 
@@ -494,7 +500,13 @@ fun DiagramsSubjectScreen(navController: NavController, subject: String, vm: Dia
 fun AddDiagramDialog(subject: String, color: Color, onSave: (Diagram) -> Unit, onDismiss: () -> Unit) {
     var chapter by remember { mutableStateOf("") }
     var fileUri by remember { mutableStateOf("") }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { fileUri = it.toString() } }
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let {
+            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            fileUri = it.toString()
+        }
+    }
     NEETDialog(title = "Add Diagram", icon = Icons.Default.AccountTree, accentColor = color, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             DialogTextField(value = chapter, onValueChange = { chapter = it }, label = "Chapter Name", icon = Icons.Default.Article, accentColor = color)
@@ -521,8 +533,12 @@ fun ChapterShortNotesSubjectScreen(navController: NavController, subject: String
     val filtered = notes.filter { searchQuery.isBlank() || it.chapter.contains(searchQuery, true) }
 
     var uploadTarget by remember { mutableStateOf<ChapterShortNote?>(null) }
+    val context = LocalContext.current
     val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { u -> uploadTarget?.let { n -> vm.save(n.copy(fileUri = u.toString())) } }
+        uri?.let { u ->
+            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            uploadTarget?.let { n -> vm.save(n.copy(fileUri = u.toString())) }
+        }
         uploadTarget = null
     }
 
@@ -571,7 +587,13 @@ fun AddChapterNoteDialog(subject: String, color: Color, onSave: (ChapterShortNot
     var chapter by remember { mutableStateOf("") }
     var fileUri by remember { mutableStateOf("") }
     val subjectEnum = try { Subject.valueOf(subject) } catch (e: Exception) { Subject.GENERAL }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { fileUri = it.toString() } }
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let {
+            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            fileUri = it.toString()
+        }
+    }
     NEETDialog(title = "Add Short Notes", icon = Icons.Default.Article, accentColor = color, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             DialogTextField(value = chapter, onValueChange = { chapter = it }, label = "Chapter Name", icon = Icons.Default.MenuBook, accentColor = color)

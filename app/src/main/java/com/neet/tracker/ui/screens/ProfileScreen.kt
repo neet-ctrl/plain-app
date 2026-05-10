@@ -1,8 +1,10 @@
 package com.neet.tracker.ui.screens
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -48,8 +50,12 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
     var attempts by remember(profile) { mutableStateOf(profile?.neetAttempts ?: emptyList()) }
     var showAddAttempt by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
     val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { photoUri = it.toString() }
+        uri?.let {
+            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            photoUri = it.toString()
+        }
     }
 
     SpaceBackground {
@@ -250,7 +256,13 @@ fun ProfileField(label: String, value: String, editing: Boolean, icon: androidx.
 
 @Composable
 fun RowScope.FileUploadButton(label: String, uri: String, editing: Boolean, color: Color, onUpload: (String) -> Unit, onView: () -> Unit) {
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { u -> u?.let { onUpload(it.toString()) } }
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { u ->
+        u?.let {
+            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            onUpload(it.toString())
+        }
+    }
     Box(
         modifier = Modifier
             .weight(1f)
@@ -295,14 +307,24 @@ fun NEETAttemptCard(
     var qpUri by remember(attempt) { mutableStateOf(attempt.questionPaperUri) }
     var solUri by remember(attempt) { mutableStateOf(attempt.solutionPdfUri) }
 
+    val context = LocalContext.current
     val marksheetLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { marksheetUri = it.toString(); onUpdate(attempt.copy(marksheetUri = marksheetUri)) }
+        uri?.let {
+            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            marksheetUri = it.toString(); onUpdate(attempt.copy(marksheetUri = marksheetUri))
+        }
     }
     val qpLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { qpUri = it.toString(); onUpdate(attempt.copy(questionPaperUri = qpUri)) }
+        uri?.let {
+            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            qpUri = it.toString(); onUpdate(attempt.copy(questionPaperUri = qpUri))
+        }
     }
     val solLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { solUri = it.toString(); onUpdate(attempt.copy(solutionPdfUri = solUri)) }
+        uri?.let {
+            try { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            solUri = it.toString(); onUpdate(attempt.copy(solutionPdfUri = solUri))
+        }
     }
 
     val save = { onUpdate(attempt.copy(year = year, rollNo = rollNo, marksObtained = marks, lackDescription = lack, marksheetUri = marksheetUri, questionPaperUri = qpUri, solutionPdfUri = solUri)) }

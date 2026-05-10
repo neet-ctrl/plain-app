@@ -14,7 +14,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.neet.tracker.data.models.*
@@ -87,12 +89,19 @@ fun PWBatchTestsScreen(navController: NavController, batchId: String, batchName:
     var uploadQPTarget by remember { mutableStateOf<PWTest?>(null) }
     var uploadSolTarget by remember { mutableStateOf<PWTest?>(null) }
 
+    val context = LocalContext.current
     val qpLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { u -> uploadQPTarget?.let { t -> vm.saveTest(t.copy(questionPaperUri = u.toString())) } }
+        uri?.let { u ->
+            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            uploadQPTarget?.let { t -> vm.saveTest(t.copy(questionPaperUri = u.toString())) }
+        }
         uploadQPTarget = null
     }
     val solLauncher = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { u -> uploadSolTarget?.let { t -> vm.saveTest(t.copy(solutionUri = u.toString())) } }
+        uri?.let { u ->
+            try { context.contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            uploadSolTarget?.let { t -> vm.saveTest(t.copy(solutionUri = u.toString())) }
+        }
         uploadSolTarget = null
     }
 
