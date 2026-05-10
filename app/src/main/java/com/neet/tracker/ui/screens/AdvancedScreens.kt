@@ -26,6 +26,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.neet.tracker.data.models.*
 import com.neet.tracker.navigation.fileViewerRoute
+import com.neet.tracker.navigation.diagramViewerRoute
+import com.neet.tracker.navigation.shortNoteViewerRoute
 import com.neet.tracker.ui.components.*
 import com.neet.tracker.ui.dialogs.*
 import com.neet.tracker.ui.theme.*
@@ -463,7 +465,7 @@ fun DiagramsSubjectScreen(navController: NavController, subject: String, vm: Dia
                             title = d.chapter,
                             icon  = if (subject == "BOTANY") Icons.Default.Park else Icons.Default.Pets,
                             glowColor = color,
-                            onClick = { if (d.fileUri.isNotBlank()) navController.navigate(fileViewerRoute(d.fileUri, d.chapter)) },
+                            onClick = { if (d.fileUri.isNotBlank()) navController.navigate(diagramViewerRoute(subject, d.fileUri, d.chapter)) },
                             bottomContent = { CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(d) } }
                         )
                     }
@@ -523,7 +525,7 @@ fun ChapterShortNotesSubjectScreen(navController: NavController, subject: String
                             title = n.chapter,
                             icon  = Icons.Default.Article,
                             glowColor = color,
-                            onClick = { if (n.fileUri.isNotBlank()) navController.navigate(fileViewerRoute(n.fileUri, n.chapter)) },
+                            onClick = { if (n.fileUri.isNotBlank()) navController.navigate(shortNoteViewerRoute(subject, n.fileUri, n.chapter)) },
                             bottomContent = { CardIconButton(Icons.Default.Delete, NeonRed.copy(0.5f)) { vm.delete(n) } }
                         )
                     }

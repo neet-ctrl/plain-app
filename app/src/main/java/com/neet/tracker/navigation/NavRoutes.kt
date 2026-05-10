@@ -54,6 +54,11 @@ object Routes {
 
     // File Viewer
     const val FILE_VIEWER = "file_viewer/{encodedUri}/{title}"
+
+    // Specialized Viewers
+    const val DIAGRAM_VIEWER     = "diagram_viewer/{subject}/{title}/{encodedUri}"
+    const val SHORT_NOTE_VIEWER  = "short_note_viewer/{subject}/{title}/{encodedUri}"
+    const val SUBJECT_NOTE_VIEWER = "subject_note_viewer/{subject}/{title}/{encodedUri}"
 }
 
 fun notebookChaptersRoute(notebookId: String, notebookNo: String) =
@@ -79,3 +84,12 @@ fun chapterShortNotesSubjectRoute(subject: String) = "chapter_short_notes_subjec
 
 fun fileViewerRoute(encodedUri: String, title: String) =
     "file_viewer/${java.net.URLEncoder.encode(encodedUri, "UTF-8")}/${java.net.URLEncoder.encode(title, "UTF-8")}"
+
+fun diagramViewerRoute(subject: String, fileUri: String, title: String) =
+    "diagram_viewer/$subject/${java.net.URLEncoder.encode(title, "UTF-8")}/${java.net.URLEncoder.encode(fileUri, "UTF-8")}"
+
+fun shortNoteViewerRoute(subject: String, fileUri: String, title: String) =
+    "short_note_viewer/$subject/${java.net.URLEncoder.encode(title, "UTF-8")}/${java.net.URLEncoder.encode(fileUri, "UTF-8")}"
+
+fun subjectNoteViewerRoute(subject: String, fileUri: String, title: String) =
+    "subject_note_viewer/$subject/${java.net.URLEncoder.encode(title, "UTF-8")}/${java.net.URLEncoder.encode(fileUri, "UTF-8")}"

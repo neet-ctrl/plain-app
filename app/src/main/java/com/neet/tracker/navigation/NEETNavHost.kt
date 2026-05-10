@@ -186,5 +186,48 @@ fun NEETNavHost() {
             val title = URLDecoder.decode(backStack.arguments?.getString("title") ?: "", "UTF-8")
             FileViewerScreen(navController, uri, title)
         }
+
+        // Specialized Viewers
+        composable(
+            Routes.DIAGRAM_VIEWER,
+            arguments = listOf(
+                navArgument("subject") { type = NavType.StringType },
+                navArgument("title") { type = NavType.StringType },
+                navArgument("encodedUri") { type = NavType.StringType }
+            )
+        ) { backStack ->
+            val subject  = backStack.arguments?.getString("subject") ?: "BOTANY"
+            val title    = URLDecoder.decode(backStack.arguments?.getString("title") ?: "", "UTF-8")
+            val fileUri  = URLDecoder.decode(backStack.arguments?.getString("encodedUri") ?: "", "UTF-8")
+            DiagramViewerScreen(navController, subject, fileUri, title)
+        }
+
+        composable(
+            Routes.SHORT_NOTE_VIEWER,
+            arguments = listOf(
+                navArgument("subject") { type = NavType.StringType },
+                navArgument("title") { type = NavType.StringType },
+                navArgument("encodedUri") { type = NavType.StringType }
+            )
+        ) { backStack ->
+            val subject  = backStack.arguments?.getString("subject") ?: "PHYSICS"
+            val title    = URLDecoder.decode(backStack.arguments?.getString("title") ?: "", "UTF-8")
+            val fileUri  = URLDecoder.decode(backStack.arguments?.getString("encodedUri") ?: "", "UTF-8")
+            ShortNoteViewerScreen(navController, subject, fileUri, title)
+        }
+
+        composable(
+            Routes.SUBJECT_NOTE_VIEWER,
+            arguments = listOf(
+                navArgument("subject") { type = NavType.StringType },
+                navArgument("title") { type = NavType.StringType },
+                navArgument("encodedUri") { type = NavType.StringType }
+            )
+        ) { backStack ->
+            val subject  = backStack.arguments?.getString("subject") ?: "PHYSICS"
+            val title    = URLDecoder.decode(backStack.arguments?.getString("title") ?: "", "UTF-8")
+            val fileUri  = URLDecoder.decode(backStack.arguments?.getString("encodedUri") ?: "", "UTF-8")
+            SubjectNoteViewerScreen(navController, subject, fileUri, title)
+        }
     }
 }

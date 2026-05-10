@@ -254,7 +254,7 @@ fun SubjectShortNotesScreen(navController: NavController) {
                         glowColor = color,
                         onClick = {
                             if (hasPdf) {
-                                navController.navigate(com.neet.tracker.navigation.fileViewerRoute(note!!.fileUri, "${info.first} Notes"))
+                                navController.navigate(com.neet.tracker.navigation.subjectNoteViewerRoute(info.third, note!!.fileUri, "${info.first} Notes"))
                             } else {
                                 uploadingSubject = info.third
                                 launcher.launch("application/pdf")
@@ -267,7 +267,7 @@ fun SubjectShortNotesScreen(navController: NavController) {
                             }
                             if (hasPdf) {
                                 CardIconButton(Icons.Default.FileOpen, color.copy(0.7f)) {
-                                    navController.navigate(com.neet.tracker.navigation.fileViewerRoute(note!!.fileUri, "${info.first} Notes"))
+                                    navController.navigate(com.neet.tracker.navigation.subjectNoteViewerRoute(info.third, note!!.fileUri, "${info.first} Notes"))
                                 }
                             }
                         }
