@@ -98,7 +98,7 @@ private val TEXTBOX_BG_OPTIONS = listOf(
 // ─── Universal File Viewer ─────────────────────────────────────────────────────
 
 @Composable
-fun FileViewerScreen(navController: NavController, fileUri: String, title: String) {
+fun FileViewerScreen(navController: NavController, fileUri: String, title: String, solutionUri: String = "") {
     val context = LocalContext.current
     // Local file paths (copied to app-internal storage) start with "/".
     // Content:// URIs are used for backwards-compat with old uploads.
@@ -198,6 +198,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var annoRedoStack       by remember { mutableStateOf<List<Map<Int, List<AnnotationStroke>>>>(emptyList()) }
     var allPageTextBoxes    by remember { mutableStateOf<Map<Int, List<AnnotationTextBox>>>(emptyMap()) }
     var pendingTextPos      by remember { mutableStateOf<Pair<Float, Float>?>(null) }
+    var showSolutionWindow  by remember { mutableStateOf(false) }
 
     // ── Notes ──────────────────────────────────────────────────────────────────
     var notesText by remember(noteKey) { mutableStateOf(prefs.getString(noteKey, "") ?: "") }
@@ -796,6 +797,8 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     }
                 },
                 onZoomToggle = { annotZoomEnabled = !annotZoomEnabled },
+                solutionUri = solutionUri,
+                onOpenSolution = { showSolutionWindow = true },
                 onDone = {
                     annotationMode  = false
                     annotFullScreen = false
@@ -805,6 +808,12 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                         AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes)
                     }
                 }
+            )
+        }
+        if (showSolutionWindow && solutionUri.isNotBlank()) {
+            FloatingSolutionViewer(
+                solutionUri = solutionUri,
+                onDismiss   = { showSolutionWindow = false }
             )
         }
 
@@ -1497,6 +1506,8 @@ private fun FloatingAnnotToolbar(
     onRedo: () -> Unit,
     onClearPage: () -> Unit,
     onZoomToggle: () -> Unit,
+    solutionUri: String = "",
+    onOpenSolution: () -> Unit = {},
     onDone: () -> Unit,
 ) {
     Box(
@@ -1669,6 +1680,37 @@ private fun FloatingAnnotToolbar(
                                     fontSize = 9.sp,
                                     color = if (sel) NeonOrange else Color.White.copy(0.45f),
                                     fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    }
+
+                    // ── Solution opener (shown only when a solution file exists) ─
+                    if (solutionUri.isNotBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .shadow(6.dp, RoundedCornerShape(11.dp), spotColor = NeonGold.copy(0.4f))
+                                .background(
+                                    Brush.horizontalGradient(listOf(NeonGold.copy(0.22f), NeonGold.copy(0.08f))),
+                                    RoundedCornerShape(11.dp)
+                                )
+                                .border(1.dp, NeonGold.copy(0.65f), RoundedCornerShape(11.dp))
+                                .clickable { onOpenSolution() }
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(7.dp)
+                            ) {
+                                Icon(Icons.Default.PictureAsPdf, null,
+                                    tint = NeonGold, modifier = Modifier.size(14.dp))
+                                Text("View Solution",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = NeonGold, fontWeight = FontWeight.ExtraBold)
+                                Spacer(Modifier.weight(1f))
+                                Icon(Icons.Default.OpenInNew, null,
+                                    tint = NeonGold.copy(0.6f), modifier = Modifier.size(11.dp))
                             }
                         }
                     }
@@ -2922,6 +2964,324 @@ private fun TextBoxEditorDialog(
             }
         }
     )
+}
+
+// ─── Floating Solution Viewer ─────────────────────────────────────────────────
+
+@Composable
+private fun FloatingSolutionViewer(
+    solutionUri: String,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val density = LocalDensity.current
+
+    // ── Window state ──────────────────────────────────────────────────────────
+    var offsetX        by remember { mutableFloatStateOf(20f) }
+    var offsetY        by remember { mutableFloatStateOf(72f) }
+    var windowWidthDp  by remember { mutableFloatStateOf(320f) }
+    var windowHeightDp by remember { mutableFloatStateOf(480f) }
+    var isHorizontal   by remember { mutableStateOf(false) }
+    var zoomEnabled    by remember { mutableStateOf(false) }
+    var scale          by remember { mutableFloatStateOf(1f) }
+    var panOffset      by remember { mutableStateOf(Offset.Zero) }
+
+    // ── PDF state ─────────────────────────────────────────────────────────────
+    var pages    by remember { mutableStateOf<List<Bitmap>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMsg  by remember { mutableStateOf("") }
+
+    LaunchedEffect(solutionUri) {
+        withContext(Dispatchers.IO) {
+            try {
+                val isLocal = solutionUri.startsWith("/")
+                val fd = if (isLocal) {
+                    ParcelFileDescriptor.open(File(solutionUri), ParcelFileDescriptor.MODE_READ_ONLY)
+                } else {
+                    context.contentResolver.openFileDescriptor(Uri.parse(solutionUri), "r")
+                }
+                fd?.use { pfd ->
+                    PdfRenderer(pfd).use { renderer ->
+                        val bitmaps = mutableListOf<Bitmap>()
+                        for (i in 0 until renderer.pageCount) {
+                            renderer.openPage(i).use { page ->
+                                val w   = (page.width * 2).coerceAtMost(1080)
+                                val h   = (w.toFloat() * page.height / page.width).toInt()
+                                val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                                bmp.eraseColor(android.graphics.Color.WHITE)
+                                page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                                bitmaps.add(bmp)
+                            }
+                        }
+                        pages = bitmaps
+                    }
+                }
+            } catch (e: Exception) {
+                errorMsg = e.message ?: "Failed"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    // ── Full-screen transparent host (floating above everything) ──────────────
+    Box(modifier = Modifier.fillMaxSize()) {
+
+        // ── Floating window ───────────────────────────────────────────────────
+        Box(
+            modifier = Modifier
+                .offset {
+                    IntOffset(
+                        with(density) { offsetX.dp.roundToPx() },
+                        with(density) { offsetY.dp.roundToPx() }
+                    )
+                }
+                .width(windowWidthDp.dp)
+                .height(windowHeightDp.dp)
+                .shadow(28.dp, RoundedCornerShape(16.dp), spotColor = NeonGold.copy(0.55f))
+                .background(Color(0xFF060D1B), RoundedCornerShape(16.dp))
+                .border(1.5.dp, NeonGold.copy(0.65f), RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(16.dp))
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+
+                // ── Header / drag handle bar ──────────────────────────────────
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .pointerInput(Unit) {
+                            detectDragGestures { _, drag ->
+                                offsetX += with(density) { drag.x.toDp().value }
+                                offsetY += with(density) { drag.y.toDp().value }
+                            }
+                        }
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(NeonGold.copy(0.18f), NeonGold.copy(0.06f))
+                            )
+                        )
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Three-line drag indicator
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                        modifier = Modifier.padding(end = 3.dp)
+                    ) {
+                        repeat(3) {
+                            Box(
+                                modifier = Modifier
+                                    .width(18.dp)
+                                    .height(2.dp)
+                                    .background(NeonGold.copy(0.55f), RoundedCornerShape(1.dp))
+                            )
+                        }
+                    }
+                    Icon(Icons.Default.PictureAsPdf, null,
+                        tint = NeonGold, modifier = Modifier.size(13.dp))
+                    Text(
+                        "Solution",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = NeonGold,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    // V/H scroll toggle
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(
+                                if (isHorizontal) NeonCyan.copy(0.22f) else Color.White.copy(0.07f),
+                                RoundedCornerShape(7.dp)
+                            )
+                            .border(
+                                1.dp,
+                                if (isHorizontal) NeonCyan.copy(0.7f) else Color.White.copy(0.18f),
+                                RoundedCornerShape(7.dp)
+                            )
+                            .clickable {
+                                isHorizontal = !isHorizontal
+                                scale = 1f; panOffset = Offset.Zero
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            if (isHorizontal) Icons.Default.MoreHoriz else Icons.Default.MoreVert,
+                            null,
+                            tint = if (isHorizontal) NeonCyan else Color.White.copy(0.45f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+
+                    // Zoom toggle
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(
+                                if (zoomEnabled) NeonGold.copy(0.25f) else Color.White.copy(0.07f),
+                                RoundedCornerShape(7.dp)
+                            )
+                            .border(
+                                1.dp,
+                                if (zoomEnabled) NeonGold.copy(0.7f) else Color.White.copy(0.18f),
+                                RoundedCornerShape(7.dp)
+                            )
+                            .clickable {
+                                zoomEnabled = !zoomEnabled
+                                scale = 1f; panOffset = Offset.Zero
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            if (zoomEnabled) Icons.Default.ZoomIn else Icons.Default.ZoomOut,
+                            null,
+                            tint = if (zoomEnabled) NeonGold else Color.White.copy(0.45f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+
+                    // Close button
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .background(NeonRed.copy(0.18f), CircleShape)
+                            .border(1.dp, NeonRed.copy(0.5f), CircleShape)
+                            .clickable { onDismiss() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Close, null,
+                            tint = NeonRed, modifier = Modifier.size(12.dp))
+                    }
+                }
+
+                // Header bottom divider
+                Box(modifier = Modifier
+                    .fillMaxWidth().height(1.dp)
+                    .background(NeonGold.copy(0.3f)))
+
+                // ── PDF content area ──────────────────────────────────────────
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF050B16))
+                        .then(
+                            if (zoomEnabled) {
+                                Modifier.pointerInput(zoomEnabled) {
+                                    detectTransformGestures { _, pan, zoom, _ ->
+                                        scale     = (scale * zoom).coerceIn(0.5f, 4f)
+                                        panOffset = panOffset + pan
+                                    }
+                                }
+                            } else Modifier
+                        )
+                ) {
+                    when {
+                        isLoading -> {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        color  = NeonGold,
+                                        modifier = Modifier.size(28.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Text("Loading solution…",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = NeonGold.copy(0.6f))
+                                }
+                            }
+                        }
+                        errorMsg.isNotBlank() || pages.isEmpty() -> {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(Icons.Default.BrokenImage, null,
+                                        tint = NeonRed.copy(0.6f), modifier = Modifier.size(32.dp))
+                                    Text("Could not open solution",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(0.38f))
+                                }
+                            }
+                        }
+                        else -> {
+                            val contentMod = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    scaleX       = scale
+                                    scaleY       = scale
+                                    translationX = panOffset.x
+                                    translationY = panOffset.y
+                                }
+                            if (isHorizontal) {
+                                LazyRow(
+                                    modifier            = contentMod,
+                                    contentPadding      = PaddingValues(8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    items(pages) { bmp ->
+                                        Image(
+                                            bitmap             = bmp.asImageBitmap(),
+                                            contentDescription = null,
+                                            modifier           = Modifier
+                                                .fillMaxHeight()
+                                                .wrapContentWidth()
+                                                .shadow(6.dp, RoundedCornerShape(6.dp))
+                                                .clip(RoundedCornerShape(6.dp))
+                                        )
+                                    }
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier           = contentMod,
+                                    contentPadding     = PaddingValues(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    items(pages) { bmp ->
+                                        Image(
+                                            bitmap             = bmp.asImageBitmap(),
+                                            contentDescription = null,
+                                            modifier           = Modifier
+                                                .fillMaxWidth()
+                                                .wrapContentHeight()
+                                                .shadow(6.dp, RoundedCornerShape(6.dp))
+                                                .clip(RoundedCornerShape(6.dp))
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Resize handle (bottom-right corner) ───────────────────────────
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(32.dp)
+                    .padding(4.dp)
+                    .shadow(4.dp, RoundedCornerShape(7.dp), spotColor = NeonGold.copy(0.3f))
+                    .background(NeonGold.copy(0.14f), RoundedCornerShape(7.dp))
+                    .border(1.dp, NeonGold.copy(0.45f), RoundedCornerShape(7.dp))
+                    .pointerInput(Unit) {
+                        detectDragGestures { _, drag ->
+                            windowWidthDp  = (windowWidthDp  + with(density) { drag.x.toDp().value }).coerceIn(240f, 520f)
+                            windowHeightDp = (windowHeightDp + with(density) { drag.y.toDp().value }).coerceIn(280f, 720f)
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.OpenWith, null,
+                    tint = NeonGold.copy(0.65f), modifier = Modifier.size(13.dp))
+            }
+        }
+    }
 }
 
 // ─── File Error View ──────────────────────────────────────────────────────────

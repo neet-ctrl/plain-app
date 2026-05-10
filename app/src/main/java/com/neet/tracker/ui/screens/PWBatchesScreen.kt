@@ -174,7 +174,7 @@ fun PWBatchTestsScreen(navController: NavController, batchId: String, batchName:
                                             if (t.questionPaperUri.isNotBlank()) Icons.Default.PictureAsPdf else Icons.Default.UploadFile,
                                             if (t.questionPaperUri.isNotBlank()) NeonGreen.copy(0.8f) else NeonCyan.copy(0.4f)
                                         ) {
-                                            if (t.questionPaperUri.isNotBlank()) navController.navigate(fileViewerRoute(t.questionPaperUri, "${t.name} QP"))
+                                            if (t.questionPaperUri.isNotBlank()) navController.navigate(fileViewerRoute(t.questionPaperUri, "${t.name} QP", t.solutionUri))
                                             else { uploadQPTarget = t; qpLauncher.launch(arrayOf("*/*")) }
                                         }
                                         if (t.questionPaperUri.isNotBlank()) {

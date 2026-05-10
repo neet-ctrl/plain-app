@@ -180,12 +180,14 @@ fun NEETNavHost() {
             Routes.FILE_VIEWER,
             arguments = listOf(
                 navArgument("encodedUri") { type = NavType.StringType },
-                navArgument("title") { type = NavType.StringType }
+                navArgument("title") { type = NavType.StringType },
+                navArgument("solutionUri") { type = NavType.StringType; defaultValue = "" }
             )
         ) { backStack ->
-            val uri = URLDecoder.decode(backStack.arguments?.getString("encodedUri") ?: "", "UTF-8")
-            val title = URLDecoder.decode(backStack.arguments?.getString("title") ?: "", "UTF-8")
-            FileViewerScreen(navController, uri, title)
+            val uri         = URLDecoder.decode(backStack.arguments?.getString("encodedUri")   ?: "", "UTF-8")
+            val title       = URLDecoder.decode(backStack.arguments?.getString("title")        ?: "", "UTF-8")
+            val solutionUri = URLDecoder.decode(backStack.arguments?.getString("solutionUri")  ?: "", "UTF-8")
+            FileViewerScreen(navController, uri, title, solutionUri)
         }
 
         // All specialized viewers route through the single universal FileViewerScreen

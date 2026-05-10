@@ -53,7 +53,7 @@ object Routes {
     const val LACK_POINTS = "lack_points"
 
     // File Viewer
-    const val FILE_VIEWER = "file_viewer/{encodedUri}/{title}"
+    const val FILE_VIEWER = "file_viewer/{encodedUri}/{title}?solutionUri={solutionUri}"
 
     // Specialized Viewers
     const val DIAGRAM_VIEWER     = "diagram_viewer/{subject}/{title}/{encodedUri}"
@@ -82,8 +82,9 @@ fun dateEventDetailRoute(date: String) = "date_event_detail/${java.net.URLEncode
 fun diagramsSubjectRoute(subject: String) = "diagrams_subject/$subject"
 fun chapterShortNotesSubjectRoute(subject: String) = "chapter_short_notes_subject/$subject"
 
-fun fileViewerRoute(encodedUri: String, title: String) =
-    "file_viewer/${java.net.URLEncoder.encode(encodedUri, "UTF-8")}/${java.net.URLEncoder.encode(title, "UTF-8")}"
+fun fileViewerRoute(encodedUri: String, title: String, solutionUri: String = "") =
+    "file_viewer/${java.net.URLEncoder.encode(encodedUri, "UTF-8")}/${java.net.URLEncoder.encode(title, "UTF-8")}" +
+    if (solutionUri.isNotBlank()) "?solutionUri=${java.net.URLEncoder.encode(solutionUri, "UTF-8")}" else ""
 
 fun diagramViewerRoute(subject: String, fileUri: String, title: String) =
     "diagram_viewer/$subject/${java.net.URLEncoder.encode(title, "UTF-8")}/${java.net.URLEncoder.encode(fileUri, "UTF-8")}"

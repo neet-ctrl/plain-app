@@ -175,7 +175,7 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
                                             Icons.Default.PictureAsPdf,
                                             if (hasQP) NeonGreen.copy(0.85f) else Color.White.copy(0.18f)
                                         ) {
-                                            if (hasQP) navController.navigate(fileViewerRoute(t.questionPaperUri, "${t.name} QP"))
+                                            if (hasQP) navController.navigate(fileViewerRoute(t.questionPaperUri, "${t.name} QP", t.solutionUri))
                                         }
                                         CardIconButton(
                                             Icons.Default.FileOpen,
@@ -213,7 +213,7 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
                 onUploadSol = { uploadSolTarget = liveTest; solLauncher.launch(arrayOf("*/*")) },
                 onRemoveQP = { vm.save(liveTest.copy(questionPaperUri = "")) },
                 onRemoveSol = { vm.save(liveTest.copy(solutionUri = "")) },
-                onViewQP = { navController.navigate(fileViewerRoute(liveTest.questionPaperUri, "${liveTest.name} QP")); filesTargetId = null },
+                onViewQP = { navController.navigate(fileViewerRoute(liveTest.questionPaperUri, "${liveTest.name} QP", liveTest.solutionUri)); filesTargetId = null },
                 onViewSol = { navController.navigate(fileViewerRoute(liveTest.solutionUri, "${liveTest.name} Solution")); filesTargetId = null }
             )
         }
@@ -300,7 +300,7 @@ fun SamplePapersScreen(navController: NavController, vm: SamplePaperViewModel = 
                                     if (p.questionPaperUri.isNotBlank()) Icons.Default.PictureAsPdf else Icons.Default.UploadFile,
                                     if (p.questionPaperUri.isNotBlank()) NeonGreen.copy(0.85f) else NeonCyan.copy(0.4f)
                                 ) {
-                                    if (p.questionPaperUri.isNotBlank()) navController.navigate(fileViewerRoute(p.questionPaperUri, "${p.name} QP"))
+                                    if (p.questionPaperUri.isNotBlank()) navController.navigate(fileViewerRoute(p.questionPaperUri, "${p.name} QP", p.solutionUri))
                                     else { uploadQPTarget = p; qpLauncher.launch(arrayOf("*/*")) }
                                 }
                                 if (p.questionPaperUri.isNotBlank()) {
