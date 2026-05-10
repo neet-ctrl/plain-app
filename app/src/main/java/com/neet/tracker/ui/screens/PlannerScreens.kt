@@ -286,10 +286,10 @@ fun PlannerEventCard(event: PlannerEvent, index: Int, accentColor: Color, onUpda
                 } else {
                     // ── Edit Mode ──────────────────────────────────────────────
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        DialogTextField(value = name, onValueChange = { name = it; onUpdate(event.copy(name = name)) }, label = "Event Name", icon = Icons.Default.Event, accentColor = accentColor)
-                        DialogTextField(value = notes, onValueChange = { notes = it; onUpdate(event.copy(notes = notes)) }, label = "Notes / Description", icon = Icons.Default.Notes, accentColor = accentColor, multiline = true)
-                        NeetTimeRangePickerButton(value = timing, onValueChange = { timing = it; onUpdate(event.copy(timingRange = timing)) }, accentColor = accentColor, label = "Event Time Range")
-                        DialogTextField(value = remark, onValueChange = { remark = it; onUpdate(event.copy(remark = remark)) }, label = "Remark", icon = Icons.Default.StickyNote2, accentColor = accentColor)
+                        DialogTextField(value = name, onValueChange = { name = it }, label = "Event Name", icon = Icons.Default.Event, accentColor = accentColor)
+                        DialogTextField(value = notes, onValueChange = { notes = it }, label = "Notes / Description", icon = Icons.Default.Notes, accentColor = accentColor, multiline = true)
+                        NeetTimeRangePickerButton(value = timing, onValueChange = { timing = it }, accentColor = accentColor, label = "Event Time Range")
+                        DialogTextField(value = remark, onValueChange = { remark = it }, label = "Remark", icon = Icons.Default.StickyNote2, accentColor = accentColor)
 
                         NeonDivider(NeonGold.copy(0.3f))
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -303,7 +303,6 @@ fun PlannerEventCard(event: PlannerEvent, index: Int, accentColor: Color, onUpda
                                 IconButton(onClick = {
                                     AlarmScheduler.cancelAlarm(context, event.id.hashCode())
                                     alarmTime = 0L; alarmLabel = ""
-                                    onUpdate(event.copy(alarmTime = 0L, alarmLabel = ""))
                                 }, modifier = Modifier.size(32.dp)) {
                                     Icon(Icons.Default.AlarmOff, null, tint = NeonRed.copy(0.7f), modifier = Modifier.size(18.dp))
                                 }
@@ -318,7 +317,6 @@ fun PlannerEventCard(event: PlannerEvent, index: Int, accentColor: Color, onUpda
                                     alarmTime = cal.timeInMillis
                                     alarmLabel = name.ifBlank { "Event $index" }
                                     AlarmScheduler.scheduleAlarm(context, event.id.hashCode(), cal.timeInMillis, "NEET Reminder", alarmLabel.ifBlank { "Time for your scheduled event!" })
-                                    onUpdate(event.copy(alarmTime = cal.timeInMillis, alarmLabel = alarmLabel))
                                 }, now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), false).show()
                             }, modifier = Modifier.size(32.dp)) {
                                 Icon(Icons.Default.AddAlarm, null, tint = NeonGold, modifier = Modifier.size(18.dp))
@@ -328,12 +326,35 @@ fun PlannerEventCard(event: PlannerEvent, index: Int, accentColor: Color, onUpda
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             StatusTickCrossButton("✓ Done", selectedStatus == "COMPLETED", StatusCompleted) {
                                 selectedStatus = if (selectedStatus == "COMPLETED") "EXPECTED" else "COMPLETED"
-                                onUpdate(event.copy(status = selectedStatus))
                             }
                             StatusTickCrossButton("✗ Missed", selectedStatus == "CROSSED", StatusCross) {
                                 selectedStatus = if (selectedStatus == "CROSSED") "EXPECTED" else "CROSSED"
-                                onUpdate(event.copy(status = selectedStatus))
                             }
+                        }
+
+                        NeonDivider(accentColor.copy(0.2f))
+                        Button(
+                            onClick = {
+                                onUpdate(
+                                    event.copy(
+                                        name = name,
+                                        notes = notes,
+                                        timingRange = timing,
+                                        remark = remark,
+                                        status = selectedStatus,
+                                        alarmTime = alarmTime,
+                                        alarmLabel = alarmLabel
+                                    )
+                                )
+                                isViewMode = true
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = accentColor.copy(0.2f)),
+                            border = BorderStroke(1.dp, accentColor.copy(0.7f))
+                        ) {
+                            Icon(Icons.Default.Save, null, tint = accentColor, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Save Event", color = accentColor, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
