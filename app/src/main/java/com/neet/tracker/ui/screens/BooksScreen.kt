@@ -116,8 +116,8 @@ fun BookCard(book: Book, onStatusClick: () -> Unit, onTagClick: () -> Unit, onRe
     }
     GlassCard(glowColor = statusGlow, modifier = Modifier.aspectRatio(1f)) {
         Box(modifier = Modifier.fillMaxSize()) {
-            Column(modifier = Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.MenuBook, null, tint = statusGlow, modifier = Modifier.size(32.dp))
+            Column(modifier = Modifier.fillMaxSize().padding(10.dp).padding(bottom = 36.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                ThreeDIconBox(icon = Icons.Default.MenuBook, tint = statusGlow, size = 44.dp, iconSize = 24.dp)
                 Spacer(Modifier.height(8.dp))
                 Text(book.name, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 3)
                 Spacer(Modifier.height(4.dp))

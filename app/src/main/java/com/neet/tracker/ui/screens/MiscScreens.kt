@@ -41,7 +41,7 @@ fun NEETSyllabusScreen(navController: NavController, vm: SyllabusViewModel = hil
             Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 GlassCard(glowColor = NeonOrange) {
                     Column(modifier = Modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                        Icon(Icons.Default.School, null, tint = NeonOrange, modifier = Modifier.size(72.dp))
+                        ThreeDIconBox(icon = Icons.Default.School, tint = NeonOrange, size = 80.dp, iconSize = 44.dp)
                         Text("NEET Syllabus", style = MaterialTheme.typography.displaySmall, color = NeonOrange, fontWeight = FontWeight.ExtraBold)
                         if (syllabus?.fileUri?.isNotBlank() == true) {
                             Button(onClick = { navController.navigate(fileViewerRoute(syllabus!!.fileUri, "NEET Syllabus")) }, colors = ButtonDefaults.buttonColors(containerColor = NeonGreen.copy(0.2f)), border = BorderStroke(1.dp, NeonGreen.copy(0.6f)), modifier = Modifier.fillMaxWidth()) {
@@ -218,9 +218,7 @@ fun MnemonicsScreen(navController: NavController, vm: MnemonicViewModel = hiltVi
                     items(filtered) { m ->
                         GlassCard(glowColor = NeonPurple, modifier = Modifier.fillMaxWidth()) {
                             Row(modifier = Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Box(modifier = Modifier.size(48.dp).background(NeonPurple.copy(0.15f), RoundedCornerShape(12.dp)).border(1.dp, NeonPurple.copy(0.4f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.Psychology, null, tint = NeonPurple, modifier = Modifier.size(28.dp))
-                                }
+                                ThreeDIconBox(icon = Icons.Default.Psychology, tint = NeonPurple, size = 48.dp, iconSize = 28.dp)
                                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text(m.name, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -286,7 +284,7 @@ fun DayWasteScreen(navController: NavController, vm: DayWasteViewModel = hiltVie
                         GlassCard(glowColor = NeonRed, modifier = Modifier.aspectRatio(0.9f)) {
                             Box(modifier = Modifier.fillMaxSize()) {
                                 Column(modifier = Modifier.fillMaxSize().padding(10.dp).padding(bottom = 36.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(Icons.Default.Dangerous, null, tint = NeonRed, modifier = Modifier.size(28.dp))
+                                    ThreeDIconBox(icon = Icons.Default.Dangerous, tint = NeonRed, size = 40.dp, iconSize = 22.dp)
                                     Spacer(Modifier.height(6.dp))
                                     Text(d.date, style = MaterialTheme.typography.headlineSmall, color = NeonRed, fontWeight = FontWeight.Bold)
                                     Text("${d.wastePercentage}% wasted", style = MaterialTheme.typography.bodySmall, color = NeonRed.copy(0.7f))

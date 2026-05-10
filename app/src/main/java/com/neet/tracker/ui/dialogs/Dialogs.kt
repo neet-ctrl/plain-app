@@ -522,3 +522,89 @@ fun MissingNotesDialog(missingNotes: String, onSave: (String) -> Unit, onDismiss
 fun InfoDialog(info: String, onSave: (String) -> Unit, onDismiss: () -> Unit, accentColor: Color = NeonCyan) {
     SpecificationDialog("Info / Details", info, onSave, onDismiss, accentColor)
 }
+
+// ─── Prefix Date Dialog ───────────────────────────────────────────────────────
+
+@Composable
+fun PrefixDateDialog(currentDate: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var date by remember { mutableStateOf(currentDate) }
+    NEETDialog(title = "Set Date / Schedule", icon = Icons.Default.Schedule, accentColor = NeonGold, onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            DialogTextField(value = date, onValueChange = { date = it }, label = "Date (DD/MM/YYYY)", icon = Icons.Default.CalendarToday, accentColor = NeonGold)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
+                Button(onClick = { onSave(date); onDismiss() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonGold.copy(0.2f)), border = BorderStroke(1.dp, NeonGold.copy(0.6f))) {
+                    Text("Set Date", color = NeonGold, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+// ─── Topics Asked Dialog ──────────────────────────────────────────────────────
+
+@Composable
+fun TopicsDialog(currentTopics: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var topics by remember { mutableStateOf(currentTopics) }
+    NEETDialog(title = "Topics Asked", icon = Icons.Default.Topic, accentColor = NeonCyan, onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text("List the topics that appeared in this test/paper", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.5f))
+            Box(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp, max = 200.dp)
+                    .background(NeonCyan.copy(0.04f), RoundedCornerShape(14.dp))
+                    .border(1.dp, NeonCyan.copy(0.3f), RoundedCornerShape(14.dp)).padding(12.dp)
+            ) {
+                androidx.compose.foundation.text.BasicTextField(
+                    value = topics, onValueChange = { topics = it }, modifier = Modifier.fillMaxWidth(),
+                    textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp, fontFamily = com.neet.tracker.ui.theme.ExoFont),
+                    decorationBox = { inner ->
+                        if (topics.isEmpty()) Text("e.g. Genetics, Cell Division, Photosynthesis...", color = Color.White.copy(0.3f), fontSize = 14.sp)
+                        inner()
+                    }
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
+                Button(onClick = { onSave(topics); onDismiss() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonCyan.copy(0.2f)), border = BorderStroke(1.dp, NeonCyan.copy(0.6f))) {
+                    Text("Save", color = NeonCyan, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+// ─── Marks Obtained Dialog ────────────────────────────────────────────────────
+
+@Composable
+fun MarksDialog(currentMarks: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var marks by remember { mutableStateOf(currentMarks) }
+    NEETDialog(title = "Marks Obtained", icon = Icons.Default.Star, accentColor = NeonGold, onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            DialogTextField(value = marks, onValueChange = { marks = it }, label = "Marks / Score (e.g. 680/720)", icon = Icons.Default.Star, accentColor = NeonGold)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
+                Button(onClick = { onSave(marks); onDismiss() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonGold.copy(0.2f)), border = BorderStroke(1.dp, NeonGold.copy(0.6f))) {
+                    Text("Save Marks", color = NeonGold, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+// ─── URL / Link Dialog ────────────────────────────────────────────────────────
+
+@Composable
+fun URLDialog(currentUrl: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var url by remember { mutableStateOf(currentUrl) }
+    NEETDialog(title = "Video / Link", icon = Icons.Default.Link, accentColor = NeonCyan, onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            DialogTextField(value = url, onValueChange = { url = it }, label = "YouTube or PDF URL", icon = Icons.Default.Link, accentColor = NeonCyan)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
+                Button(onClick = { onSave(url); onDismiss() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonCyan.copy(0.2f)), border = BorderStroke(1.dp, NeonCyan.copy(0.6f))) {
+                    Text("Save Link", color = NeonCyan, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}

@@ -22,13 +22,14 @@ import com.neet.tracker.ui.viewmodels.SubjectNoteViewModel
 
 @Composable
 fun AssetsScreen(navController: NavController) {
+    // Thematic icons: each card's icon perfectly represents its content
     val assetCards = listOf(
-        Triple("Notebook Vault", Icons.Default.Book, Routes.NOTEBOOKS) to NeonCyan,
-        Triple("Book Library", Icons.Default.LibraryBooks, Routes.BOOKS) to NeonPurple,
-        Triple("PYQ Archive", Icons.Default.Archive, Routes.PYQ) to NeonGold,
-        Triple("Test Papers", Icons.Default.Assignment, Routes.TEST_PAPERS) to NeonGreen,
-        Triple("Sample Papers", Icons.Default.FileCopy, Routes.SAMPLE_PAPERS) to NeonOrange,
-        Triple("PW Batches", Icons.Default.Groups, Routes.PW_BATCHES) to NeonCyan,
+        Triple("Notebook Vault",  Icons.Default.Book,            Routes.NOTEBOOKS)     to NeonCyan,
+        Triple("Book Library",   Icons.Default.LibraryBooks,     Routes.BOOKS)         to NeonPurple,
+        Triple("PYQ Archive",    Icons.Default.History,          Routes.PYQ)           to NeonGold,
+        Triple("Test Papers",    Icons.Default.Assignment,       Routes.TEST_PAPERS)   to NeonGreen,
+        Triple("Sample Papers",  Icons.Default.ContentCopy,      Routes.SAMPLE_PAPERS) to NeonOrange,
+        Triple("PW Batches",     Icons.Default.Groups,           Routes.PW_BATCHES)    to NeonCyan,
     )
 
     SpaceBackground {
@@ -54,7 +55,7 @@ fun AssetsScreen(navController: NavController) {
                     }
                     AnimatedVisibility(
                         visible = visible.value,
-                        enter = fadeIn(tween(400)) + scaleIn(tween(400, easing = EaseOutBack), 0.75f)
+                        enter = fadeIn(tween(420)) + scaleIn(tween(440, easing = EaseOutBack), 0.70f)
                     ) {
                         NEETCard(
                             title = info.first,
@@ -72,8 +73,8 @@ fun AssetsScreen(navController: NavController) {
 @Composable
 fun PYQScreen(navController: NavController) {
     val cards = listOf(
-        Triple("Chapter-wise PYQs", Icons.Default.MenuBook, Routes.PYQ_CHAPTERWISE) to NeonCyan,
-        Triple("Year-wise PYQs", Icons.Default.CalendarViewMonth, Routes.PYQ_YEARWISE) to NeonPurple,
+        Triple("Chapter-wise PYQs", Icons.Default.MenuBook,        Routes.PYQ_CHAPTERWISE) to NeonCyan,
+        Triple("Year-wise PYQs",    Icons.Default.CalendarViewMonth, Routes.PYQ_YEARWISE) to NeonPurple,
     )
 
     SpaceBackground {
@@ -98,7 +99,7 @@ fun PYQScreen(navController: NavController) {
 @Composable
 fun TestPapersScreen(navController: NavController) {
     val cards = listOf(
-        Triple("Online Tests", Icons.Default.Computer, Routes.ONLINE_TESTS) to NeonGreen,
+        Triple("Online Tests",  Icons.Default.Computer,   Routes.ONLINE_TESTS)  to NeonGreen,
         Triple("Offline Tests", Icons.Default.OfflineBolt, Routes.OFFLINE_TESTS) to NeonOrange,
     )
 
@@ -123,8 +124,8 @@ fun TestPapersScreen(navController: NavController) {
 @Composable
 fun DictionaryScreen(navController: NavController) {
     val cards = listOf(
-        Triple("NEET Lexicon", Icons.Default.Science, Routes.DICTIONARY_NEET) to NeonCyan,
-        Triple("Word Bank", Icons.Default.Translate, Routes.DICTIONARY_NON_NEET) to NeonPurple,
+        Triple("NEET Lexicon", Icons.Default.Science,   Routes.DICTIONARY_NEET)     to NeonCyan,
+        Triple("Word Bank",    Icons.Default.Translate, Routes.DICTIONARY_NON_NEET) to NeonPurple,
     )
 
     SpaceBackground {
@@ -147,8 +148,9 @@ fun DictionaryScreen(navController: NavController) {
 
 @Composable
 fun DiagramsScreen(navController: NavController) {
+    // Thematic: Park = Botany (plant/tree), Pets = Zoology (animals)
     val subjects = listOf(
-        Triple("Botany Diagrams", Icons.Default.Park, "BOTANY") to NeonGreen,
+        Triple("Botany Diagrams",  Icons.Default.Park, "BOTANY")  to NeonGreen,
         Triple("Zoology Diagrams", Icons.Default.Pets, "ZOOLOGY") to NeonOrange,
     )
 
@@ -163,8 +165,12 @@ fun DiagramsScreen(navController: NavController) {
                 contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp)
             ) {
                 items(subjects) { (info, color) ->
-                    NEETCard(title = info.first, icon = info.second, glowColor = color,
-                        onClick = { navController.navigate(com.neet.tracker.navigation.diagramsSubjectRoute(info.third)) })
+                    NEETCard(
+                        title = info.first,
+                        icon = info.second,
+                        glowColor = color,
+                        onClick = { navController.navigate(com.neet.tracker.navigation.diagramsSubjectRoute(info.third)) }
+                    )
                 }
             }
         }
@@ -173,11 +179,12 @@ fun DiagramsScreen(navController: NavController) {
 
 @Composable
 fun ChapterShortNotesScreen(navController: NavController) {
+    // Thematic icons: ElectricBolt=Physics, Science=Chemistry, Park=Botany, Pets=Zoology
     val subjects = listOf(
-        Triple("Physics Notes", Icons.Default.ElectricBolt, "PHYSICS") to NeonCyan,
-        Triple("Chemistry Notes", Icons.Default.Science, "CHEMISTRY") to NeonPurple,
-        Triple("Botany Notes", Icons.Default.Park, "BOTANY") to NeonGreen,
-        Triple("Zoology Notes", Icons.Default.Pets, "ZOOLOGY") to NeonOrange,
+        Triple("Physics Notes",   Icons.Default.ElectricBolt, "PHYSICS")   to NeonCyan,
+        Triple("Chemistry Notes", Icons.Default.Science,      "CHEMISTRY") to NeonPurple,
+        Triple("Botany Notes",    Icons.Default.Park,         "BOTANY")    to NeonGreen,
+        Triple("Zoology Notes",   Icons.Default.Pets,         "ZOOLOGY")   to NeonOrange,
     )
 
     SpaceBackground {
@@ -191,8 +198,12 @@ fun ChapterShortNotesScreen(navController: NavController) {
                 contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp)
             ) {
                 items(subjects) { (info, color) ->
-                    NEETCard(title = info.first, icon = info.second, glowColor = color,
-                        onClick = { navController.navigate(com.neet.tracker.navigation.chapterShortNotesSubjectRoute(info.third)) })
+                    NEETCard(
+                        title = info.first,
+                        icon = info.second,
+                        glowColor = color,
+                        onClick = { navController.navigate(com.neet.tracker.navigation.chapterShortNotesSubjectRoute(info.third)) }
+                    )
                 }
             }
         }
@@ -201,11 +212,12 @@ fun ChapterShortNotesScreen(navController: NavController) {
 
 @Composable
 fun SubjectShortNotesScreen(navController: NavController) {
+    // Thematic icons for each subject
     val subjects = listOf(
-        Triple("Physics", Icons.Default.ElectricBolt, "PHYSICS") to NeonCyan,
-        Triple("Chemistry", Icons.Default.Science, "CHEMISTRY") to NeonPurple,
-        Triple("Botany", Icons.Default.Park, "BOTANY") to NeonGreen,
-        Triple("Zoology", Icons.Default.Pets, "ZOOLOGY") to NeonOrange,
+        Triple("Physics",   Icons.Default.ElectricBolt, "PHYSICS")   to NeonCyan,
+        Triple("Chemistry", Icons.Default.Science,      "CHEMISTRY") to NeonPurple,
+        Triple("Botany",    Icons.Default.Park,         "BOTANY")    to NeonGreen,
+        Triple("Zoology",   Icons.Default.Pets,         "ZOOLOGY")   to NeonOrange,
     )
 
     val vm: SubjectNoteViewModel = hiltViewModel()
@@ -236,7 +248,7 @@ fun SubjectShortNotesScreen(navController: NavController) {
                     NEETCard(
                         title = info.first,
                         subtitle = if (hasPdf) "Tap to view PDF" else "Tap to upload PDF",
-                        icon = if (hasPdf) Icons.Default.PictureAsPdf else Icons.Default.UploadFile,
+                        icon = if (hasPdf) Icons.Default.PictureAsPdf else info.second,
                         glowColor = color,
                         onClick = {
                             if (hasPdf) {

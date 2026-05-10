@@ -65,14 +65,7 @@ fun UniversalCalendarScreen(navController: NavController) {
                     GlassCard(glowColor = NeonCyan, modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Box(
-                                    modifier = Modifier.size(46.dp)
-                                        .background(NeonCyan.copy(0.15f), RoundedCornerShape(14.dp))
-                                        .border(1.dp, NeonCyan.copy(0.4f), RoundedCornerShape(14.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.CalendarToday, null, tint = NeonCyan, modifier = Modifier.size(24.dp))
-                                }
+                                ThreeDIconBox(icon = Icons.Default.CalendarToday, tint = NeonCyan, size = 46.dp, iconSize = 24.dp)
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(date, style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.ExtraBold)
                                 }

@@ -42,7 +42,7 @@ fun NotebooksScreen(navController: NavController, vm: NotebookViewModel = hiltVi
             NEETTopBar(title = "Notebook Vault", breadcrumb = "Home / Assets", onBack = { navController.popBackStack() })
 
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-                NeetSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search notebooks...")
+                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search notebooks...")
                 Spacer(Modifier.height(12.dp))
 
                 if (filtered.isEmpty()) {
@@ -95,13 +95,7 @@ fun NotebookCard(notebook: Notebook, onClick: () -> Unit, onEdit: () -> Unit, on
                         modifier = Modifier.size(60.dp).clip(RoundedCornerShape(12.dp))
                     )
                 } else {
-                    Box(
-                        modifier = Modifier.size(60.dp).background(NeonCyan.copy(0.12f), RoundedCornerShape(12.dp))
-                            .border(1.dp, NeonCyan.copy(0.3f), RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Book, null, tint = NeonCyan, modifier = Modifier.size(32.dp))
-                    }
+                    ThreeDIconBox(icon = Icons.Default.Book, tint = NeonCyan, size = 60.dp, iconSize = 32.dp)
                 }
                 Spacer(Modifier.height(10.dp))
                 Text("NB ${notebook.notebookNo}", style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.Bold)
@@ -164,7 +158,7 @@ fun NotebookChaptersScreen(navController: NavController, notebookId: String, not
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "NB $notebookNo", breadcrumb = "Home / Assets / Notebooks", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search chapters...")
+                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search chapters in NB $notebookNo...")
                 Spacer(Modifier.height(12.dp))
                 if (filtered.isEmpty()) {
                     EmptyState("No chapters yet. Tap + to add.", Icons.Default.MenuBook)

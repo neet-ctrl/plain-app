@@ -100,8 +100,8 @@ fun DailyDiaryScreen(navController: NavController, vm: DiaryViewModel = hiltView
 fun DiaryCard(diary: DailyDiary, onClick: () -> Unit, onDelete: () -> Unit) {
     GlassCard(onClick = onClick, glowColor = NeonGold, modifier = Modifier.aspectRatio(1f)) {
         Box(modifier = Modifier.fillMaxSize()) {
-            Column(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.MenuBook, null, tint = NeonGold, modifier = Modifier.size(32.dp))
+            Column(modifier = Modifier.fillMaxSize().padding(12.dp).padding(bottom = 36.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                ThreeDIconBox(icon = Icons.Default.AutoStories, tint = NeonGold, size = 44.dp, iconSize = 24.dp)
                 Spacer(Modifier.height(8.dp))
                 Text(diary.date, style = MaterialTheme.typography.headlineSmall, color = NeonGold, fontWeight = FontWeight.Bold)
                 if (diary.nickName.isNotBlank()) {
