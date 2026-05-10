@@ -37,7 +37,7 @@ fun NotebooksScreen(navController: NavController, vm: NotebookViewModel = hiltVi
 
     val filtered = notebooks.filter { searchQuery.isBlank() || it.notebookNo.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAddDialog = true }) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Notebook Vault", breadcrumb = "Home / Assets", onBack = { navController.popBackStack() })
 
@@ -65,10 +65,6 @@ fun NotebooksScreen(navController: NavController, vm: NotebookViewModel = hiltVi
                     }
                 }
             }
-        }
-
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) {
-            NeonFAB(onClick = { showAddDialog = true })
         }
     }
 
@@ -154,7 +150,7 @@ fun NotebookChaptersScreen(navController: NavController, notebookId: String, not
 
     val filtered = chapters.filter { searchQuery.isBlank() || it.name.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "NB $notebookNo", breadcrumb = "Home / Assets / Notebooks", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -182,9 +178,6 @@ fun NotebookChaptersScreen(navController: NavController, notebookId: String, not
                     }
                 }
             }
-        }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) {
-            NeonFAB(onClick = { showAdd = true })
         }
     }
 

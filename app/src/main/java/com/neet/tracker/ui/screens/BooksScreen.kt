@@ -42,7 +42,7 @@ fun BooksScreen(navController: NavController, vm: BookViewModel = hiltViewModel(
         (selectedTag == null || book.tags.contains(selectedTag))
     }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Book Library", breadcrumb = "Home / Assets", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -92,9 +92,6 @@ fun BooksScreen(navController: NavController, vm: BookViewModel = hiltViewModel(
                     }
                 }
             }
-        }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) {
-            NeonFAB(onClick = { showAdd = true })
         }
     }
 

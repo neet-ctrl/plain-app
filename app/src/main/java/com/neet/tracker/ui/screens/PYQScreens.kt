@@ -30,7 +30,7 @@ fun PYQChapterwiseScreen(navController: NavController, vm: PYQViewModel = hiltVi
     var showAdd by remember { mutableStateOf(false) }
     val filtered = sources.filter { searchQuery.isBlank() || it.name.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Chapter-wise PYQs", breadcrumb = "Home / Assets / PYQ", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -54,9 +54,6 @@ fun PYQChapterwiseScreen(navController: NavController, vm: PYQViewModel = hiltVi
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) {
-            NeonFAB(onClick = { showAdd = true })
-        }
     }
 
     if (showAdd) {
@@ -77,7 +74,7 @@ fun PYQChapterwiseDetailScreen(navController: NavController, sourceId: String, s
     var showRemark by remember { mutableStateOf<PYQChapter?>(null) }
     val filtered = chapters.filter { searchQuery.isBlank() || it.name.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = sourceName, breadcrumb = "Home / Assets / PYQ / Chapterwise", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -107,9 +104,6 @@ fun PYQChapterwiseDetailScreen(navController: NavController, sourceId: String, s
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) {
-            NeonFAB(onClick = { showAdd = true })
-        }
     }
 
     if (showAdd) SimpleAddDialog("Add Chapter", "Chapter Name", NeonCyan, Icons.Default.MenuBook,
@@ -128,7 +122,7 @@ fun PYQYearwiseScreen(navController: NavController, vm: PYQViewModel = hiltViewM
     var showAdd by remember { mutableStateOf(false) }
     val filtered = sources.filter { searchQuery.isBlank() || it.name.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Year-wise PYQs", breadcrumb = "Home / Assets / PYQ", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -150,9 +144,6 @@ fun PYQYearwiseScreen(navController: NavController, vm: PYQViewModel = hiltViewM
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) {
-            NeonFAB(onClick = { showAdd = true })
-        }
     }
     if (showAdd) SimpleAddDialog("Add Book", "Book Name", NeonPurple, Icons.Default.LibraryBooks,
         onSave = { vm.saveSource(PYQSource(name = it, type = "YEARWISE")); showAdd = false },
@@ -170,7 +161,7 @@ fun PYQYearwiseDetailScreen(navController: NavController, bookId: String, bookNa
     var showRemark by remember { mutableStateOf<PYQYear?>(null) }
     val filtered = years.filter { searchQuery.isBlank() || it.year.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = bookName, breadcrumb = "Home / Assets / PYQ / Yearwise", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -197,9 +188,6 @@ fun PYQYearwiseDetailScreen(navController: NavController, bookId: String, bookNa
                     }
                 }
             }
-        }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) {
-            NeonFAB(onClick = { showAdd = true })
         }
     }
     if (showAdd) SimpleAddDialog("Add Year", "Year (e.g. 2023)", NeonPurple, Icons.Default.CalendarToday,

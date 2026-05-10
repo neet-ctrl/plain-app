@@ -51,7 +51,7 @@ fun DailyDiaryScreen(navController: NavController, vm: DiaryViewModel = hiltView
         (selectedTag == null || it.tags.contains(selectedTag))
     }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, icon = Icons.Default.Create, color = NeonGold) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Daily Diary", breadcrumb = "Home", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -80,7 +80,6 @@ fun DailyDiaryScreen(navController: NavController, vm: DiaryViewModel = hiltView
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }, icon = Icons.Default.Create, color = NeonGold) }
     }
     if (showAdd) {
         NEETDialog(title = "New Diary Entry", icon = Icons.Default.MenuBook, accentColor = NeonGold, onDismiss = { showAdd = false }) {
@@ -220,7 +219,7 @@ fun DateEventsScreen(navController: NavController, vm: DateEventViewModel = hilt
 
     val dates = events.map { it.date }.distinct().filter { searchQuery.isBlank() || it.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = NeonGreen) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Event Log", breadcrumb = "Home", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -242,7 +241,6 @@ fun DateEventsScreen(navController: NavController, vm: DateEventViewModel = hilt
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }, color = NeonGreen) }
     }
     if (showAdd) {
         NEETDialog(title = "New Date", icon = Icons.Default.EventNote, accentColor = NeonGreen, onDismiss = { showAdd = false }) {
@@ -262,7 +260,7 @@ fun DateEventDetailScreen(navController: NavController, date: String, vm: DateEv
     val events by vm.eventsForDate(date).collectAsState()
     var showAdd by remember { mutableStateOf(false) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = NeonGreen) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = date, breadcrumb = "Home / Events", onBack = { navController.popBackStack() })
             LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
@@ -288,7 +286,6 @@ fun DateEventDetailScreen(navController: NavController, date: String, vm: DateEv
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }, color = NeonGreen) }
     }
     if (showAdd) {
         AddDateEventDialog(date = date, onSave = { vm.save(it); showAdd = false }, onDismiss = { showAdd = false })

@@ -67,7 +67,7 @@ fun DayPlannerScreen(navController: NavController, vm: PlannerViewModel = hiltVi
 
     val filtered = entries.filter { searchQuery.isBlank() || it.date.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Day Planner", breadcrumb = "Home / Planner", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -92,7 +92,6 @@ fun DayPlannerScreen(navController: NavController, vm: PlannerViewModel = hiltVi
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }) }
     }
     if (showAdd) {
         NEETDialog(title = "New Day Entry", icon = Icons.Default.Today, accentColor = NeonCyan, onDismiss = { showAdd = false }) {
@@ -279,7 +278,7 @@ fun WeekPlannerScreen(navController: NavController, vm: PlannerViewModel = hiltV
     var newRange by remember { mutableStateOf("") }
     val filtered = entries.filter { searchQuery.isBlank() || it.weekLabel.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Week Planner", breadcrumb = "Home / Planner", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -293,7 +292,6 @@ fun WeekPlannerScreen(navController: NavController, vm: PlannerViewModel = hiltV
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }) }
     }
     if (showAdd) {
         NEETDialog(title = "New Week Entry", icon = Icons.Default.ViewWeek, accentColor = NeonPurple, onDismiss = { showAdd = false }) {
@@ -344,7 +342,7 @@ fun MonthPlannerScreen(navController: NavController, vm: PlannerViewModel = hilt
     var newMonth by remember { mutableStateOf("") }
     val filtered = entries.filter { searchQuery.isBlank() || it.month.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Month Planner", breadcrumb = "Home / Planner", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -356,7 +354,6 @@ fun MonthPlannerScreen(navController: NavController, vm: PlannerViewModel = hilt
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }) }
     }
     if (showAdd) SimpleAddDialog("New Month Entry", "Month (e.g. May 2026)", NeonGold, Icons.Default.CalendarViewMonth, onSave = { vm.saveMonth(MonthPlannerEntry(month = it)); showAdd = false }, onDismiss = { showAdd = false })
 }
@@ -391,7 +388,7 @@ fun YearPlannerScreen(navController: NavController, vm: PlannerViewModel = hiltV
     var showAdd by remember { mutableStateOf(false) }
     val filtered = entries.filter { searchQuery.isBlank() || it.yearSession.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Year Planner", breadcrumb = "Home / Planner", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -403,7 +400,6 @@ fun YearPlannerScreen(navController: NavController, vm: PlannerViewModel = hiltV
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }) }
     }
     if (showAdd) SimpleAddDialog("New Year Session", "Session (e.g. 2026-2027)", NeonGreen, Icons.Default.CalendarToday, onSave = { vm.saveYear(YearPlannerEntry(yearSession = it)); showAdd = false }, onDismiss = { showAdd = false })
 }

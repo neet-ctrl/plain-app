@@ -33,7 +33,7 @@ fun PWBatchesScreen(navController: NavController, vm: PWBatchViewModel = hiltVie
     var showRemark by remember { mutableStateOf<PWBatch?>(null) }
     val filtered = batches.filter { searchQuery.isBlank() || it.name.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "PW Batches", breadcrumb = "Home / Assets", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -61,7 +61,6 @@ fun PWBatchesScreen(navController: NavController, vm: PWBatchViewModel = hiltVie
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }) }
     }
     if (showAdd) SimpleAddDialog("Add PW Batch", "Batch Name", NeonCyan, Icons.Default.Groups, onSave = { vm.saveBatch(PWBatch(name = it)); showAdd = false }, onDismiss = { showAdd = false })
     showStatus?.let { b -> StatusSelectorDialog(b.status, onSelect = { vm.saveBatch(b.copy(status = it)); showStatus = null }, onDismiss = { showStatus = null }) }
@@ -90,7 +89,7 @@ fun PWBatchTestsScreen(navController: NavController, batchId: String, batchName:
         (selectedTag == null || it.tags.contains(selectedTag))
     }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = batchName, breadcrumb = "Home / Assets / PW Batches", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -150,7 +149,6 @@ fun PWBatchTestsScreen(navController: NavController, batchId: String, batchName:
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }) }
     }
     if (showAdd) PWTestAddDialog(batchId = batchId, onSave = { vm.saveTest(it); showAdd = false }, onDismiss = { showAdd = false })
     showStatus?.let { t -> StatusSelectorDialog(t.status, onSelect = { vm.saveTest(t.copy(status = it)); showStatus = null }, onDismiss = { showStatus = null }) }

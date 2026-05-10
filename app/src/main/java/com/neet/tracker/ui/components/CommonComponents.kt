@@ -35,7 +35,11 @@ import kotlin.random.Random
 private data class Star(val x: Float, val y: Float, val radius: Float, val alpha: Float, val speed: Float)
 
 @Composable
-fun SpaceBackground(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+fun SpaceBackground(
+    modifier: Modifier = Modifier,
+    floatingActionButton: (@Composable () -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
     val stars = remember {
         List(110) {
             Star(
@@ -165,6 +169,16 @@ fun SpaceBackground(modifier: Modifier = Modifier, content: @Composable () -> Un
             }
         }
         content()
+        if (floatingActionButton != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(24.dp)
+            ) {
+                floatingActionButton()
+            }
+        }
     }
 }
 
@@ -748,7 +762,7 @@ fun NeonFAB(onClick: () -> Unit, icon: ImageVector = Icons.Default.Add, color: C
         label = "fab_pulse_alpha"
     )
     val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f, targetValue = 2.0f,
+        initialValue = 1f, targetValue = 1.5f,
         animationSpec = infiniteRepeatable(tween(1600, easing = EaseOut), RepeatMode.Restart),
         label = "fab_pulse_scale"
     )

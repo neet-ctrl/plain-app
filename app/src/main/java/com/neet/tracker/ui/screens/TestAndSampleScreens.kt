@@ -58,7 +58,7 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
         (selectedTag == null || it.tags.contains(selectedTag))
     }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = title, breadcrumb = breadcrumb, onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -124,9 +124,6 @@ fun TestListScreen(navController: NavController, title: String, breadcrumb: Stri
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) {
-            NeonFAB(onClick = { showAdd = true })
-        }
     }
 
     if (showAdd) SimpleAddDialog("Add ${if (type == "ONLINE") "Online" else "Offline"} Test", "Test Name", color, Icons.Default.Assignment,
@@ -160,7 +157,7 @@ fun SamplePapersScreen(navController: NavController, vm: SamplePaperViewModel = 
         (selectedTag == null || it.tags.contains(selectedTag))
     }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Sample Papers", breadcrumb = "Home / Assets", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -197,7 +194,6 @@ fun SamplePapersScreen(navController: NavController, vm: SamplePaperViewModel = 
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }) }
     }
     if (showAdd) SimpleAddDialog("Add Sample Paper", "Paper Name", NeonOrange, Icons.Default.FileCopy, onSave = { vm.save(SamplePaper(name = it)); showAdd = false }, onDismiss = { showAdd = false })
     showStatus?.let { p -> StatusSelectorDialog(p.status, onSelect = { vm.save(p.copy(status = it)); showStatus = null }, onDismiss = { showStatus = null }) }

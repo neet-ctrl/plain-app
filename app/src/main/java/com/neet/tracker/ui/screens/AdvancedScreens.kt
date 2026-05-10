@@ -132,7 +132,7 @@ fun NeetSequenceScreen(navController: NavController, vm: NeetSequenceViewModel =
     val completedCount = filtered.count { it.status == Status.COMPLETED }
     val expectedCount  = filtered.count { it.status == Status.EXPECTED }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = NeonPurple) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "NEET Sequence", breadcrumb = "Home", onBack = { navController.popBackStack() })
 
@@ -171,9 +171,6 @@ fun NeetSequenceScreen(navController: NavController, vm: NeetSequenceViewModel =
             }
         }
 
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) {
-            NeonFAB(onClick = { showAdd = true }, color = NeonPurple)
-        }
     }
 
     if (showAdd) AddSequenceDialog(
@@ -447,7 +444,7 @@ fun DiagramsSubjectScreen(navController: NavController, subject: String, vm: Dia
     val color = if (subject == "BOTANY") NeonGreen else NeonOrange
     val filtered = diagrams.filter { searchQuery.isBlank() || it.chapter.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = color) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "$subject Diagrams", breadcrumb = "Home / Diagrams Atlas", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -472,7 +469,6 @@ fun DiagramsSubjectScreen(navController: NavController, subject: String, vm: Dia
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }, color = color) }
     }
     if (showAdd) AddDiagramDialog(subject = subject, color = color, onSave = { vm.save(it); showAdd = false }, onDismiss = { showAdd = false })
 }
@@ -507,7 +503,7 @@ fun ChapterShortNotesSubjectScreen(navController: NavController, subject: String
     val color = when (subject) { "PHYSICS" -> NeonCyan; "CHEMISTRY" -> NeonPurple; "BOTANY" -> NeonGreen; else -> NeonOrange }
     val filtered = notes.filter { searchQuery.isBlank() || it.chapter.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = color) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "$subject Notes", breadcrumb = "Home / Chapter Notes", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -532,7 +528,6 @@ fun ChapterShortNotesSubjectScreen(navController: NavController, subject: String
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }, color = color) }
     }
     if (showAdd) AddChapterNoteDialog(subject = subject, color = color, onSave = { vm.save(it); showAdd = false }, onDismiss = { showAdd = false })
 }

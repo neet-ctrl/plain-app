@@ -77,7 +77,7 @@ fun DictionaryNeetScreen(navController: NavController, vm: DictionaryViewModel =
         (selectedSubject == null || it.subject == selectedSubject)
     }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = NeonCyan) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "NEET Lexicon", breadcrumb = "Home / Dictionary", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -96,7 +96,6 @@ fun DictionaryNeetScreen(navController: NavController, vm: DictionaryViewModel =
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }, color = NeonCyan) }
     }
     if (showAdd) AddNeetTermDialog(serialNo = terms.size + 1, onSave = { vm.saveNeet(it); showAdd = false }, onDismiss = { showAdd = false })
 }
@@ -155,7 +154,7 @@ fun DictionaryNonNeetScreen(navController: NavController, vm: DictionaryViewMode
     var showAdd by remember { mutableStateOf(false) }
     val filtered = words.filter { searchQuery.isBlank() || it.word.contains(searchQuery, true) || it.meaning.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = NeonPurple) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Word Bank", breadcrumb = "Home / Dictionary", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -178,7 +177,6 @@ fun DictionaryNonNeetScreen(navController: NavController, vm: DictionaryViewMode
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }, color = NeonPurple) }
     }
     if (showAdd) {
         var word by remember { mutableStateOf("") }
@@ -207,7 +205,7 @@ fun MnemonicsScreen(navController: NavController, vm: MnemonicViewModel = hiltVi
     var showAdd by remember { mutableStateOf(false) }
     val filtered = mnemonics.filter { searchQuery.isBlank() || it.name.contains(searchQuery, true) || it.chapter.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = NeonPurple) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Mnemonic Lab", breadcrumb = "Home", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -235,7 +233,6 @@ fun MnemonicsScreen(navController: NavController, vm: MnemonicViewModel = hiltVi
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }, color = NeonPurple) }
     }
     if (showAdd) AddMnemonicDialog(onSave = { vm.save(it); showAdd = false }, onDismiss = { showAdd = false })
 }
@@ -272,7 +269,7 @@ fun DayWasteScreen(navController: NavController, vm: DayWasteViewModel = hiltVie
     var showTip by remember { mutableStateOf<DayWaste?>(null) }
     val filtered = entries.filter { searchQuery.isBlank() || it.date.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = NeonRed) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Wasted Days", breadcrumb = "Home", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -304,7 +301,6 @@ fun DayWasteScreen(navController: NavController, vm: DayWasteViewModel = hiltVie
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }, color = NeonRed) }
     }
     if (showAdd) AddDayWasteDialog(onSave = { vm.save(it); showAdd = false }, onDismiss = { showAdd = false })
     showWastePercent?.let { d ->
@@ -350,7 +346,7 @@ fun LackPointsScreen(navController: NavController, vm: LackPointViewModel = hilt
     var showStatus by remember { mutableStateOf<LackPoint?>(null) }
     val filtered = points.filter { searchQuery.isBlank() || it.point.contains(searchQuery, true) }
 
-    SpaceBackground {
+    SpaceBackground(floatingActionButton = { NeonFAB(onClick = { showAdd = true }, color = NeonRed) }) {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Lack Points", breadcrumb = "Home", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -382,7 +378,6 @@ fun LackPointsScreen(navController: NavController, vm: LackPointViewModel = hilt
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }, color = NeonRed) }
     }
     if (showAdd) AddLackPointDialog(onSave = { vm.save(it); showAdd = false }, onDismiss = { showAdd = false })
     showStatus?.let { p -> StatusSelectorDialog(p.status, onSelect = { vm.save(p.copy(status = it)); showStatus = null }, onDismiss = { showStatus = null }) }
