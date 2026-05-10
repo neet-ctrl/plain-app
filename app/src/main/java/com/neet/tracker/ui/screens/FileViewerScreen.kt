@@ -111,10 +111,11 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
 
     // ── PDF state ──────────────────────────────────────────────────────────────
     val pdfPages  = remember { mutableStateListOf<Bitmap>() }
-    var pdfLoading  by remember { mutableStateOf(false) }
-    var totalPages  by remember { mutableStateOf(0) }
-    var currentPage by remember { mutableStateOf(0) }
-    var pdfError    by remember { mutableStateOf(false) }
+    var pdfLoading      by remember { mutableStateOf(false) }
+    var totalPages      by remember { mutableStateOf(0) }
+    var currentPage     by remember { mutableStateOf(0) }
+    var pdfError        by remember { mutableStateOf(false) }
+    var pdfErrorMessage by remember { mutableStateOf("") }
     var maxVisited  by remember { mutableStateOf(0) }
     var scale       by remember(currentPage) { mutableStateOf(1f) }
     var panOffset   by remember(currentPage) { mutableStateOf(Offset.Zero) }
@@ -159,7 +160,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     // ── PDF loading ────────────────────────────────────────────────────────────
     LaunchedEffect(fileUri) {
         if (tryAsPdf && uri != null) {
-            pdfLoading = true; pdfError = false
+            pdfLoading = true; pdfError = false; pdfErrorMessage = ""
             withContext(Dispatchers.IO) {
                 try {
                     val pfd: ParcelFileDescriptor? = context.contentResolver.openFileDescriptor(uri, "r")
@@ -176,8 +177,15 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                             page.close(); pdfPages.add(bmp)
                         }
                         renderer.close(); pfd.close()
-                    } else pdfError = true
-                } catch (e: Exception) { pdfError = true }
+                    } else {
+                        pdfError = true
+                        pdfErrorMessage = "Content resolver returned null file descriptor.\n" +
+                            "The app may not have permission to read this URI, or the file was deleted/moved."
+                    }
+                } catch (e: Exception) {
+                    pdfError = true
+                    pdfErrorMessage = "${e.javaClass.simpleName}: ${e.message ?: "No message"}"
+                }
             }
             pdfLoading = false
         }
@@ -361,11 +369,21 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                                     panOffset = Offset(panOffset.x + p.x, panOffset.y + p.y)
                                 }
                             )
-                            pdfError -> GenericFileView(uri = uri, title = title, extension = extension, context = context)
+                            pdfError -> FileFailureLog(
+                                uri = uri, title = title,
+                                detectedMime = mimeType, detectedExt = extension,
+                                resolvedName = resolvedDisplayName, rawUri = fileUri,
+                                errorMessage = pdfErrorMessage, context = context
+                            )
                             else -> UvLoadingView()
                         }
                     }
-                    else -> GenericFileView(uri = uri, title = title, extension = extension, context = context)
+                    else -> FileFailureLog(
+                        uri = uri, title = title,
+                        detectedMime = mimeType, detectedExt = extension,
+                        resolvedName = resolvedDisplayName, rawUri = fileUri,
+                        errorMessage = "URI scheme not supported for in-app viewing.", context = context
+                    )
                 }
 
                 // Bookmark ribbon
@@ -927,43 +945,206 @@ private fun ImageViewer(uri: Uri, title: String) {
     }
 }
 
-// ─── Generic File View ────────────────────────────────────────────────────────
+// ─── File Failure Log ─────────────────────────────────────────────────────────
+// Shown when PDF rendering fails. Displays full diagnostics so the user knows
+// exactly what format was detected and why in-app rendering could not proceed.
 
 @Composable
-private fun GenericFileView(uri: Uri, title: String, extension: String, context: Context) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(modifier = Modifier.padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+private fun FileFailureLog(
+    uri: Uri,
+    title: String,
+    detectedMime: String,
+    detectedExt: String,
+    resolvedName: String,
+    rawUri: String,
+    errorMessage: String,
+    context: Context
+) {
+    var showRawUri by remember { mutableStateOf(false) }
+
+    val uriScheme    = uri.scheme ?: "unknown"
+    val uriAuthority = uri.authority ?: "—"
+    val mimeDisplay  = detectedMime.ifBlank { "Could not detect (content resolver returned null)" }
+    val extDisplay   = detectedExt.ifBlank { "No extension found" }
+    val nameDisplay  = resolvedName.ifBlank { "Not available (non-content:// URI or no DISPLAY_NAME column)" }
+
+    // Friendly conclusion
+    val conclusion = when {
+        errorMessage.contains("PdfRenderer", ignoreCase = true) ||
+        errorMessage.contains("IllegalArgument", ignoreCase = true) ||
+        errorMessage.contains("parsererror", ignoreCase = true) ->
+            "The file was opened but the PDF parser rejected it. " +
+            "It is likely NOT a PDF — it may be a Word doc, image, or other format."
+        errorMessage.contains("null file descriptor", ignoreCase = true) ||
+        errorMessage.contains("Permission", ignoreCase = true) ->
+            "The app could not get read access to this file. " +
+            "This usually happens when the URI permission expired after an app restart. " +
+            "Re-upload the file to fix it."
+        errorMessage.contains("FileNotFoundException", ignoreCase = true) ||
+        errorMessage.contains("No such file", ignoreCase = true) ->
+            "The file no longer exists at the stored location. It may have been deleted or moved."
+        uriScheme == "file" ->
+            "Direct file:// URIs are blocked on Android 7+. Re-import the file through the picker."
+        else -> "PDF rendering failed. The file may be a non-PDF format, corrupted, password-protected, or inaccessible."
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(vertical = 16.dp)
+    ) {
+        // Header
+        item {
+            GlassCard(glowColor = NeonOrange) {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        ThreeDIconBox(icon = Icons.Default.BrokenImage, tint = NeonOrange, size = 52.dp, iconSize = 28.dp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Cannot Render In-App", style = MaterialTheme.typography.titleMedium,
+                                color = NeonOrange, fontWeight = FontWeight.ExtraBold)
+                            Text(title, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.6f))
+                        }
+                    }
+                    NeonDivider(NeonOrange.copy(0.3f))
+                    Text(conclusion, style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(0.8f), lineHeight = 20.sp)
+                }
+            }
+        }
+
+        // Diagnostic Log
+        item {
             GlassCard(glowColor = NeonCyan) {
-                Column(modifier = Modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    ThreeDIconBox(icon = Icons.Default.AttachFile, tint = NeonCyan, size = 80.dp, iconSize = 44.dp)
-                    Text(title, style = MaterialTheme.typography.headlineMedium, color = Color.White,
-                        fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                    Text(".${extension.uppercase().ifBlank { "FILE" }}",
-                        style = MaterialTheme.typography.labelMedium, color = NeonCyan.copy(0.65f),
-                        modifier = Modifier.background(NeonCyan.copy(0.1f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp, vertical = 4.dp))
-                    Text("Open this file in its native app for full viewing.",
-                        style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.45f), textAlign = TextAlign.Center)
-                    Button(
-                        onClick = {
-                            val mime = context.contentResolver.getType(uri) ?: "*/*"
-                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(uri, mime)
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
-                            }
-                            try { context.startActivity(Intent.createChooser(intent, "Open with")) } catch (_: Exception) {}
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors   = ButtonDefaults.buttonColors(containerColor = NeonCyan.copy(0.18f)),
-                        border   = BorderStroke(1.dp, NeonCyan.copy(0.65f))
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.BugReport, null, tint = NeonCyan, modifier = Modifier.size(16.dp))
+                        Text("Diagnostic Log", style = MaterialTheme.typography.labelLarge,
+                            color = NeonCyan, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(12.dp))
+
+                    DiagRow("File Title",        title)
+                    DiagRow("Resolved Filename", nameDisplay)
+                    DiagRow("Detected MIME",     mimeDisplay)
+                    DiagRow("Detected Extension",extDisplay)
+                    DiagRow("URI Scheme",        uriScheme)
+                    DiagRow("URI Authority",     uriAuthority)
+
+                    Spacer(Modifier.height(8.dp))
+                    NeonDivider(NeonCyan.copy(0.2f))
+                    Spacer(Modifier.height(8.dp))
+
+                    // Error block
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.Error, null, tint = NeonRed, modifier = Modifier.size(14.dp))
+                        Text("PDF Renderer Error", style = MaterialTheme.typography.labelMedium,
+                            color = NeonRed, fontWeight = FontWeight.SemiBold)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Box(
+                        modifier = Modifier.fillMaxWidth()
+                            .background(Color.Black.copy(0.45f), RoundedCornerShape(10.dp))
+                            .border(0.5.dp, NeonRed.copy(0.4f), RoundedCornerShape(10.dp))
+                            .padding(12.dp)
                     ) {
-                        Icon(Icons.Default.OpenInNew, null, tint = NeonCyan)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Open File", color = NeonCyan, fontWeight = FontWeight.Bold)
+                        Text(
+                            errorMessage.ifBlank { "No error message captured." },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = NeonRed.copy(0.9f),
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            lineHeight = 18.sp
+                        )
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+                    // Raw URI toggle
+                    Row(
+                        modifier = Modifier.clickable { showRawUri = !showRawUri }
+                            .fillMaxWidth()
+                            .background(Color.White.copy(0.04f), RoundedCornerShape(8.dp))
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            if (showRawUri) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            null, tint = NeonCyan.copy(0.6f), modifier = Modifier.size(16.dp)
+                        )
+                        Text("${if (showRawUri) "Hide" else "Show"} Raw URI",
+                            style = MaterialTheme.typography.labelSmall, color = NeonCyan.copy(0.7f))
+                    }
+                    AnimatedVisibility(visible = showRawUri) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth()
+                                .background(Color.Black.copy(0.4f), RoundedCornerShape(10.dp))
+                                .border(0.5.dp, NeonCyan.copy(0.2f), RoundedCornerShape(10.dp))
+                                .padding(10.dp)
+                        ) {
+                            Text(rawUri, style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(0.5f),
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                lineHeight = 16.sp)
+                        }
                     }
                 }
             }
         }
+
+        // Actions
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = {
+                        val mime = context.contentResolver.getType(uri)
+                            ?: if (detectedMime.isNotBlank()) detectedMime else "*/*"
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, mime)
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        }
+                        try { context.startActivity(Intent.createChooser(intent, "Open with")) } catch (_: Exception) {}
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan.copy(0.18f)),
+                    border = BorderStroke(1.dp, NeonCyan.copy(0.65f))
+                ) {
+                    Icon(Icons.Default.OpenInNew, null, tint = NeonCyan)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Open in External App", color = NeonCyan, fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick = {
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = if (detectedMime.isNotBlank()) detectedMime else "*/*"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        }
+                        try { context.startActivity(Intent.createChooser(shareIntent, "Share $title")) } catch (_: Exception) {}
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    border = BorderStroke(1.dp, Color.White.copy(0.2f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White.copy(0.7f))
+                ) {
+                    Icon(Icons.Default.Share, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Share File")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiagRow(label: String, value: String) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall,
+            color = NeonCyan.copy(0.55f), fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(2.dp))
+        Text(value, style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(0.85f),
+            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+            lineHeight = 18.sp)
+        Spacer(Modifier.height(4.dp))
+        NeonDivider(Color.White.copy(0.07f))
     }
 }
 
