@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "RkVu_SJftIW46g_MrHzPG"
+uri = "file://NEET_Tracker_Pro_Android.tar.gz"
+type = "unspecified"
+title = "NEET Tracker Pro - Complete Android Project"

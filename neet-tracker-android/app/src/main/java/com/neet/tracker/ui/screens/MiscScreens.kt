@@ -1,0 +1,407 @@
+package com.neet.tracker.ui.screens
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.*
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.*
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.*
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
+import com.neet.tracker.data.models.*
+import com.neet.tracker.navigation.fileViewerRoute
+import com.neet.tracker.ui.components.*
+import com.neet.tracker.ui.dialogs.*
+import com.neet.tracker.ui.theme.*
+import com.neet.tracker.ui.viewmodels.*
+
+// ─── NEET Syllabus ────────────────────────────────────────────────────────────
+
+@Composable
+fun NEETSyllabusScreen(navController: NavController, vm: SyllabusViewModel = hiltViewModel()) {
+    val syllabus by vm.syllabus.collectAsState()
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { vm.save(NEETSyllabus(fileUri = it.toString())) }
+    }
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "NEET Syllabus", breadcrumb = "Home", onBack = { navController.popBackStack() })
+            Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                GlassCard(glowColor = NeonOrange) {
+                    Column(modifier = Modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                        Icon(Icons.Default.School, null, tint = NeonOrange, modifier = Modifier.size(72.dp))
+                        Text("NEET Syllabus", style = MaterialTheme.typography.displaySmall, color = NeonOrange, fontWeight = FontWeight.ExtraBold)
+                        if (syllabus?.fileUri?.isNotBlank() == true) {
+                            Button(onClick = { navController.navigate(fileViewerRoute(syllabus!!.fileUri, "NEET Syllabus")) }, colors = ButtonDefaults.buttonColors(containerColor = NeonGreen.copy(0.2f)), border = BorderStroke(1.dp, NeonGreen.copy(0.6f)), modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Default.FileOpen, null, tint = NeonGreen); Spacer(Modifier.width(8.dp)); Text("View Syllabus PDF", color = NeonGreen, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Text("No syllabus uploaded yet", color = Color.White.copy(0.4f))
+                        }
+                        Button(onClick = { launcher.launch("application/pdf") }, colors = ButtonDefaults.buttonColors(containerColor = NeonOrange.copy(0.2f)), border = BorderStroke(1.dp, NeonOrange.copy(0.6f)), modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.UploadFile, null, tint = NeonOrange); Spacer(Modifier.width(8.dp)); Text(if (syllabus?.fileUri?.isNotBlank() == true) "Replace PDF" else "Upload Syllabus PDF", color = NeonOrange, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── Dictionary - NEET ───────────────────────────────────────────────────────
+
+@Composable
+fun DictionaryNeetScreen(navController: NavController, vm: DictionaryViewModel = hiltViewModel()) {
+    val terms by vm.neetTerms.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedTag by remember { mutableStateOf<String?>(null) }
+    var selectedSubject by remember { mutableStateOf<Subject?>(null) }
+    var showAdd by remember { mutableStateOf(false) }
+
+    val allTags = terms.flatMap { it.tags }.distinct()
+    val filtered = terms.filter {
+        (searchQuery.isBlank() || it.term.contains(searchQuery, true) || it.definition.contains(searchQuery, true)) &&
+        (selectedTag == null || it.tags.contains(selectedTag)) &&
+        (selectedSubject == null || it.subject == selectedSubject)
+    }
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "NEET Lexicon", breadcrumb = "Home / Dictionary", onBack = { navController.popBackStack() })
+            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search terms...")
+                Spacer(Modifier.height(8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { FilterChip(selected = selectedSubject == null, onClick = { selectedSubject = null }, label = { Text("All Subjects") }) }
+                    items(Subject.values().toList()) { s -> FilterChip(selected = selectedSubject == s, onClick = { selectedSubject = if (selectedSubject == s) null else s }, label = { Text(s.name) }) }
+                }
+                Spacer(Modifier.height(10.dp))
+                if (filtered.isEmpty()) EmptyState("No terms yet. Tap + to add.", Icons.Default.AutoStories)
+                else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
+                    itemsIndexed(filtered) { _, term ->
+                        DictionaryTermCard(term = term, onDelete = { vm.deleteNeet(term) })
+                    }
+                }
+            }
+        }
+        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }, color = NeonCyan) }
+    }
+    if (showAdd) AddNeetTermDialog(serialNo = terms.size + 1, onSave = { vm.saveNeet(it); showAdd = false }, onDismiss = { showAdd = false })
+}
+
+@Composable
+fun DictionaryTermCard(term: DictionaryNeet, onDelete: () -> Unit) {
+    GlassCard(glowColor = NeonCyan, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${term.serialNo}.", style = MaterialTheme.typography.labelLarge, color = NeonCyan, fontWeight = FontWeight.ExtraBold)
+                Spacer(Modifier.width(8.dp))
+                Text(term.term, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Delete, null, tint = NeonRed.copy(0.6f), modifier = Modifier.size(16.dp)) }
+            }
+            Text(term.definition, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.7f))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (term.chapter.isNotBlank()) Text("Ch: ${term.chapter}", style = MaterialTheme.typography.labelSmall, color = NeonPurple)
+                Text(term.subject.name, style = MaterialTheme.typography.labelSmall, color = NeonGold)
+            }
+            if (term.tags.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) { items(term.tags) { t -> TagChip(t) } }
+        }
+    }
+}
+
+@Composable
+fun AddNeetTermDialog(serialNo: Int, onSave: (DictionaryNeet) -> Unit, onDismiss: () -> Unit) {
+    var term by remember { mutableStateOf("") }
+    var definition by remember { mutableStateOf("") }
+    var chapter by remember { mutableStateOf("") }
+    var subject by remember { mutableStateOf(Subject.GENERAL) }
+
+    NEETDialog(title = "Add NEET Term", icon = Icons.Default.Science, accentColor = NeonCyan, onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            DialogTextField(value = term, onValueChange = { term = it }, label = "Term / Word", icon = Icons.Default.Abc, accentColor = NeonCyan)
+            DialogTextField(value = definition, onValueChange = { definition = it }, label = "Definition", icon = Icons.Default.Info, accentColor = NeonCyan, multiline = true)
+            DialogTextField(value = chapter, onValueChange = { chapter = it }, label = "Chapter", icon = Icons.Default.MenuBook, accentColor = NeonCyan)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Subject.values().forEach { s ->
+                    FilterChip(selected = subject == s, onClick = { subject = s }, label = { Text(s.name, fontSize = 10.sp) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = NeonCyan.copy(0.2f), selectedLabelColor = NeonCyan))
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
+                Button(onClick = { if (term.isNotBlank()) onSave(DictionaryNeet(term = term, definition = definition, chapter = chapter, subject = subject, serialNo = serialNo)) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonCyan.copy(0.2f)), border = BorderStroke(1.dp, NeonCyan.copy(0.6f))) { Text("Add", color = NeonCyan, fontWeight = FontWeight.Bold) }
+            }
+        }
+    }
+}
+
+// ─── Dictionary - Non-NEET ────────────────────────────────────────────────────
+
+@Composable
+fun DictionaryNonNeetScreen(navController: NavController, vm: DictionaryViewModel = hiltViewModel()) {
+    val words by vm.nonNeetTerms.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+    var showAdd by remember { mutableStateOf(false) }
+    val filtered = words.filter { searchQuery.isBlank() || it.word.contains(searchQuery, true) || it.meaning.contains(searchQuery, true) }
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "Word Bank", breadcrumb = "Home / Dictionary", onBack = { navController.popBackStack() })
+            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search words...")
+                Spacer(Modifier.height(12.dp))
+                if (filtered.isEmpty()) EmptyState("No words yet. Tap + to add.", Icons.Default.Translate)
+                else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
+                    itemsIndexed(filtered) { _, w ->
+                        GlassCard(glowColor = NeonPurple, modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(w.word, style = MaterialTheme.typography.headlineSmall, color = NeonPurple, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+                                    IconButton(onClick = { vm.deleteNonNeet(w) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Delete, null, tint = NeonRed.copy(0.6f), modifier = Modifier.size(16.dp)) }
+                                }
+                                Text(w.meaning, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.7f))
+                                if (w.example.isNotBlank()) Text("\"${w.example}\"", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.4f))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }, color = NeonPurple) }
+    }
+    if (showAdd) {
+        var word by remember { mutableStateOf("") }
+        var meaning by remember { mutableStateOf("") }
+        var example by remember { mutableStateOf("") }
+        NEETDialog(title = "Add Word", icon = Icons.Default.Translate, accentColor = NeonPurple, onDismiss = { showAdd = false }) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DialogTextField(value = word, onValueChange = { word = it }, label = "Word", icon = Icons.Default.Abc, accentColor = NeonPurple)
+                DialogTextField(value = meaning, onValueChange = { meaning = it }, label = "Meaning", icon = Icons.Default.Info, accentColor = NeonPurple, multiline = true)
+                DialogTextField(value = example, onValueChange = { example = it }, label = "Example Sentence", icon = Icons.Default.FormatQuote, accentColor = NeonPurple)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(onClick = { showAdd = false }, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
+                    Button(onClick = { if (word.isNotBlank()) { vm.saveNonNeet(DictionaryNonNeet(word = word, meaning = meaning, example = example)); showAdd = false } }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonPurple.copy(0.2f)), border = BorderStroke(1.dp, NeonPurple.copy(0.6f))) { Text("Add", color = NeonPurple, fontWeight = FontWeight.Bold) }
+                }
+            }
+        }
+    }
+}
+
+// ─── Mnemonics ────────────────────────────────────────────────────────────────
+
+@Composable
+fun MnemonicsScreen(navController: NavController, vm: MnemonicViewModel = hiltViewModel()) {
+    val mnemonics by vm.mnemonics.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+    var showAdd by remember { mutableStateOf(false) }
+    val filtered = mnemonics.filter { searchQuery.isBlank() || it.name.contains(searchQuery, true) || it.chapter.contains(searchQuery, true) }
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "Mnemonic Lab", breadcrumb = "Home", onBack = { navController.popBackStack() })
+            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search mnemonics...")
+                Spacer(Modifier.height(12.dp))
+                if (filtered.isEmpty()) EmptyState("No mnemonics yet. Tap + to add.", Icons.Default.Psychology)
+                else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
+                    items(filtered) { m ->
+                        GlassCard(glowColor = NeonPurple, modifier = Modifier.fillMaxWidth()) {
+                            Row(modifier = Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.size(48.dp).background(NeonPurple.copy(0.15f), RoundedCornerShape(12.dp)).border(1.dp, NeonPurple.copy(0.4f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Psychology, null, tint = NeonPurple, modifier = Modifier.size(28.dp))
+                                }
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(m.name, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text(m.chapter, style = MaterialTheme.typography.labelSmall, color = NeonCyan)
+                                        Text(m.subject.name, style = MaterialTheme.typography.labelSmall, color = NeonGold)
+                                    }
+                                    if (m.description.isNotBlank()) Text(m.description, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.5f), maxLines = 2)
+                                    if (m.tags.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) { items(m.tags) { t -> TagChip(t) } }
+                                }
+                                IconButton(onClick = { vm.delete(m) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Delete, null, tint = NeonRed.copy(0.6f), modifier = Modifier.size(16.dp)) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }, color = NeonPurple) }
+    }
+    if (showAdd) AddMnemonicDialog(onSave = { vm.save(it); showAdd = false }, onDismiss = { showAdd = false })
+}
+
+@Composable
+fun AddMnemonicDialog(onSave: (Mnemonic) -> Unit, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var chapter by remember { mutableStateOf("") }
+    var subject by remember { mutableStateOf(Subject.GENERAL) }
+    var description by remember { mutableStateOf("") }
+    NEETDialog(title = "Add Mnemonic", icon = Icons.Default.Psychology, accentColor = NeonPurple, onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            DialogTextField(value = name, onValueChange = { name = it }, label = "Mnemonic Name", icon = Icons.Default.Label, accentColor = NeonPurple)
+            DialogTextField(value = chapter, onValueChange = { chapter = it }, label = "Chapter", icon = Icons.Default.MenuBook, accentColor = NeonPurple)
+            DialogTextField(value = description, onValueChange = { description = it }, label = "Description / Technique", icon = Icons.Default.Notes, accentColor = NeonPurple, multiline = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Subject.values().forEach { s -> FilterChip(selected = subject == s, onClick = { subject = s }, label = { Text(s.name, fontSize = 10.sp) }) } }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
+                Button(onClick = { if (name.isNotBlank()) onSave(Mnemonic(name = name, chapter = chapter, subject = subject, description = description)) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonPurple.copy(0.2f)), border = BorderStroke(1.dp, NeonPurple.copy(0.6f))) { Text("Add", color = NeonPurple, fontWeight = FontWeight.Bold) }
+            }
+        }
+    }
+}
+
+// ─── Day Waste ────────────────────────────────────────────────────────────────
+
+@Composable
+fun DayWasteScreen(navController: NavController, vm: DayWasteViewModel = hiltViewModel()) {
+    val entries by vm.entries.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+    var showAdd by remember { mutableStateOf(false) }
+    var showWastePercent by remember { mutableStateOf<DayWaste?>(null) }
+    var showReason by remember { mutableStateOf<DayWaste?>(null) }
+    var showTip by remember { mutableStateOf<DayWaste?>(null) }
+    val filtered = entries.filter { searchQuery.isBlank() || it.date.contains(searchQuery, true) }
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "Wasted Days", breadcrumb = "Home", onBack = { navController.popBackStack() })
+            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search wasted days...")
+                Spacer(Modifier.height(12.dp))
+                if (filtered.isEmpty()) EmptyState("No wasted days logged. Keep it that way! 💪", Icons.Default.EmojiEvents)
+                else LazyVerticalGrid(columns = GridCells.Fixed(2), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
+                    items(filtered) { d ->
+                        GlassCard(glowColor = NeonRed, modifier = Modifier.aspectRatio(0.9f)) {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                Column(modifier = Modifier.fillMaxSize().padding(10.dp).padding(bottom = 36.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.Dangerous, null, tint = NeonRed, modifier = Modifier.size(28.dp))
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(d.date, style = MaterialTheme.typography.headlineSmall, color = NeonRed, fontWeight = FontWeight.Bold)
+                                    Text("${d.wastePercentage}% wasted", style = MaterialTheme.typography.bodySmall, color = NeonRed.copy(0.7f))
+                                }
+                                Column(modifier = Modifier.align(Alignment.BottomCenter)) {
+                                    HorizontalDivider(color = Color.White.copy(0.08f), thickness = 0.5.dp)
+                                    Row(modifier = Modifier.fillMaxWidth().padding(2.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                                        CardIconButton(Icons.Default.Percent, NeonRed.copy(0.7f)) { showWastePercent = d }
+                                        CardIconButton(Icons.Default.Warning, NeonOrange.copy(0.7f)) { showReason = d }
+                                        CardIconButton(Icons.Default.Lightbulb, NeonGold.copy(0.7f)) { showTip = d }
+                                        CardIconButton(Icons.Default.Delete, NeonRed.copy(0.4f)) { vm.delete(d) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }, color = NeonRed) }
+    }
+    if (showAdd) AddDayWasteDialog(onSave = { vm.save(it); showAdd = false }, onDismiss = { showAdd = false })
+    showWastePercent?.let { d ->
+        NEETDialog(title = "Waste Percentage", icon = Icons.Default.Percent, accentColor = NeonRed, onDismiss = { showWastePercent = null }) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                var pct by remember { mutableStateOf(d.wastePercentage.toString()) }
+                DialogTextField(value = pct, onValueChange = { pct = it }, label = "Waste % (0-100)", icon = Icons.Default.Percent, accentColor = NeonRed)
+                Button(onClick = { vm.save(d.copy(wastePercentage = pct.toIntOrNull() ?: 0)); showWastePercent = null }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = NeonRed.copy(0.2f)), border = BorderStroke(1.dp, NeonRed.copy(0.6f))) { Text("Save", color = NeonRed, fontWeight = FontWeight.Bold) }
+            }
+        }
+    }
+    showReason?.let { d -> RemarkDialog(d.reason, onSave = { vm.save(d.copy(reason = it)); showReason = null }, onDismiss = { showReason = null }) }
+    showTip?.let { d -> SpecificationDialog("Recovery Tip", d.recoverTip, onSave = { vm.save(d.copy(recoverTip = it)); showTip = null }, onDismiss = { showTip = null }, accentColor = NeonGold) }
+}
+
+@Composable
+fun AddDayWasteDialog(onSave: (DayWaste) -> Unit, onDismiss: () -> Unit) {
+    var date by remember { mutableStateOf("") }
+    var pct by remember { mutableStateOf("") }
+    var reason by remember { mutableStateOf("") }
+    var tip by remember { mutableStateOf("") }
+    NEETDialog(title = "Log Wasted Day", icon = Icons.Default.Dangerous, accentColor = NeonRed, onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            DialogTextField(value = date, onValueChange = { date = it }, label = "Date (DD/MM/YYYY)", icon = Icons.Default.CalendarToday, accentColor = NeonRed)
+            DialogTextField(value = pct, onValueChange = { pct = it }, label = "Waste % (0-100)", icon = Icons.Default.Percent, accentColor = NeonRed)
+            DialogTextField(value = reason, onValueChange = { reason = it }, label = "Reason of Waste", icon = Icons.Default.Warning, accentColor = NeonRed, multiline = true)
+            DialogTextField(value = tip, onValueChange = { tip = it }, label = "Recovery Tip", icon = Icons.Default.Lightbulb, accentColor = NeonGold, multiline = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
+                Button(onClick = { if (date.isNotBlank()) onSave(DayWaste(date = date, wastePercentage = pct.toIntOrNull() ?: 0, reason = reason, recoverTip = tip)) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonRed.copy(0.2f)), border = BorderStroke(1.dp, NeonRed.copy(0.6f))) { Text("Log", color = NeonRed, fontWeight = FontWeight.Bold) }
+            }
+        }
+    }
+}
+
+// ─── Lack Points ─────────────────────────────────────────────────────────────
+
+@Composable
+fun LackPointsScreen(navController: NavController, vm: LackPointViewModel = hiltViewModel()) {
+    val points by vm.points.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+    var showAdd by remember { mutableStateOf(false) }
+    var showStatus by remember { mutableStateOf<LackPoint?>(null) }
+    val filtered = points.filter { searchQuery.isBlank() || it.point.contains(searchQuery, true) }
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "Lack Points", breadcrumb = "Home", onBack = { navController.popBackStack() })
+            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search lack points...")
+                Spacer(Modifier.height(12.dp))
+                if (filtered.isEmpty()) EmptyState("No lack points yet. Add them to grow.", Icons.Default.TrendingDown)
+                else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
+                    items(filtered) { p ->
+                        val sg = when (p.status) { Status.COMPLETED -> StatusCompleted; Status.EXPECTED -> StatusExpected; Status.CROSSED -> StatusCross; else -> StatusRevision }
+                        GlassCard(glowColor = sg, modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    StatusBadge(p.status, modifier = Modifier)
+                                    Spacer(Modifier.weight(1f))
+                                    CardIconButton(Icons.Default.ToggleOn, sg) { showStatus = p }
+                                    CardIconButton(Icons.Default.Delete, NeonRed.copy(0.6f)) { vm.delete(p) }
+                                }
+                                Text(p.point, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
+                                if (p.solution.isNotBlank()) {
+                                    NeonDivider(sg)
+                                    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Icon(Icons.Default.Lightbulb, null, tint = NeonGold, modifier = Modifier.size(14.dp))
+                                        Text("Solution: ${p.solution}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.6f))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }, color = NeonRed) }
+    }
+    if (showAdd) AddLackPointDialog(onSave = { vm.save(it); showAdd = false }, onDismiss = { showAdd = false })
+    showStatus?.let { p -> StatusSelectorDialog(p.status, onSelect = { vm.save(p.copy(status = it)); showStatus = null }, onDismiss = { showStatus = null }) }
+}
+
+@Composable
+fun AddLackPointDialog(onSave: (LackPoint) -> Unit, onDismiss: () -> Unit) {
+    var point by remember { mutableStateOf("") }
+    var solution by remember { mutableStateOf("") }
+    NEETDialog(title = "Add Lack Point", icon = Icons.Default.TrendingDown, accentColor = NeonRed, onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            DialogTextField(value = point, onValueChange = { point = it }, label = "Identify the Lack / Weakness", icon = Icons.Default.TrendingDown, accentColor = NeonRed, multiline = true)
+            DialogTextField(value = solution, onValueChange = { solution = it }, label = "How will you solve it?", icon = Icons.Default.Lightbulb, accentColor = NeonGold, multiline = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
+                Button(onClick = { if (point.isNotBlank()) onSave(LackPoint(point = point, solution = solution)) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonRed.copy(0.2f)), border = BorderStroke(1.dp, NeonRed.copy(0.6f))) { Text("Add", color = NeonRed, fontWeight = FontWeight.Bold) }
+            }
+        }
+    }
+}

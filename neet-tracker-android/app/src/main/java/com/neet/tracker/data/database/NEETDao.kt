@@ -1,0 +1,199 @@
+package com.neet.tracker.data.database
+
+import androidx.room.*
+import com.neet.tracker.data.models.*
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface NEETDao {
+
+    // ── Profile ───────────────────────────────────────────────────────────────
+    @Query("SELECT * FROM student_profile WHERE id='profile' LIMIT 1")
+    fun getProfile(): Flow<StudentProfile?>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveProfile(p: StudentProfile)
+
+    // ── Notebooks ─────────────────────────────────────────────────────────────
+    @Query("SELECT * FROM notebooks ORDER BY createdAt ASC")
+    fun getNotebooks(): Flow<List<Notebook>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveNotebook(n: Notebook)
+    @Delete suspend fun deleteNotebook(n: Notebook)
+
+    @Query("SELECT * FROM notebook_chapters WHERE notebookId=:nbId ORDER BY rowid ASC")
+    fun getNotebookChapters(nbId: String): Flow<List<NotebookChapter>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveNotebookChapter(c: NotebookChapter)
+    @Delete suspend fun deleteNotebookChapter(c: NotebookChapter)
+
+    // ── Books ─────────────────────────────────────────────────────────────────
+    @Query("SELECT * FROM books ORDER BY createdAt ASC")
+    fun getBooks(): Flow<List<Book>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveBook(b: Book)
+    @Delete suspend fun deleteBook(b: Book)
+
+    // ── PYQ ───────────────────────────────────────────────────────────────────
+    @Query("SELECT * FROM pyq_sources WHERE type='CHAPTERWISE' ORDER BY createdAt ASC")
+    fun getPYQChapterwiseSources(): Flow<List<PYQSource>>
+    @Query("SELECT * FROM pyq_sources WHERE type='YEARWISE' ORDER BY createdAt ASC")
+    fun getPYQYearwiseSources(): Flow<List<PYQSource>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun savePYQSource(s: PYQSource)
+    @Delete suspend fun deletePYQSource(s: PYQSource)
+
+    @Query("SELECT * FROM pyq_chapters WHERE sourceId=:srcId ORDER BY rowid ASC")
+    fun getPYQChapters(srcId: String): Flow<List<PYQChapter>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun savePYQChapter(c: PYQChapter)
+    @Delete suspend fun deletePYQChapter(c: PYQChapter)
+
+    @Query("SELECT * FROM pyq_years WHERE bookId=:bookId ORDER BY year ASC")
+    fun getPYQYears(bookId: String): Flow<List<PYQYear>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun savePYQYear(y: PYQYear)
+    @Delete suspend fun deletePYQYear(y: PYQYear)
+
+    // ── Test Papers ───────────────────────────────────────────────────────────
+    @Query("SELECT * FROM test_papers WHERE type='ONLINE' ORDER BY createdAt ASC")
+    fun getOnlineTests(): Flow<List<TestPaper>>
+    @Query("SELECT * FROM test_papers WHERE type='OFFLINE' ORDER BY createdAt ASC")
+    fun getOfflineTests(): Flow<List<TestPaper>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveTestPaper(t: TestPaper)
+    @Delete suspend fun deleteTestPaper(t: TestPaper)
+
+    // ── Sample Papers ─────────────────────────────────────────────────────────
+    @Query("SELECT * FROM sample_papers ORDER BY createdAt ASC")
+    fun getSamplePapers(): Flow<List<SamplePaper>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveSamplePaper(s: SamplePaper)
+    @Delete suspend fun deleteSamplePaper(s: SamplePaper)
+
+    // ── PW Batches ────────────────────────────────────────────────────────────
+    @Query("SELECT * FROM pw_batches ORDER BY createdAt ASC")
+    fun getPWBatches(): Flow<List<PWBatch>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun savePWBatch(b: PWBatch)
+    @Delete suspend fun deletePWBatch(b: PWBatch)
+
+    @Query("SELECT * FROM pw_tests WHERE batchId=:batchId ORDER BY createdAt ASC")
+    fun getPWTests(batchId: String): Flow<List<PWTest>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun savePWTest(t: PWTest)
+    @Delete suspend fun deletePWTest(t: PWTest)
+
+    // ── Planner ───────────────────────────────────────────────────────────────
+    @Query("SELECT * FROM day_planner ORDER BY date ASC")
+    fun getDayPlannerEntries(): Flow<List<DayPlannerEntry>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveDayPlannerEntry(e: DayPlannerEntry)
+
+    @Query("SELECT * FROM week_planner ORDER BY rowid ASC")
+    fun getWeekPlannerEntries(): Flow<List<WeekPlannerEntry>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveWeekPlannerEntry(e: WeekPlannerEntry)
+
+    @Query("SELECT * FROM month_planner ORDER BY month ASC")
+    fun getMonthPlannerEntries(): Flow<List<MonthPlannerEntry>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveMonthPlannerEntry(e: MonthPlannerEntry)
+
+    @Query("SELECT * FROM year_planner ORDER BY yearSession ASC")
+    fun getYearPlannerEntries(): Flow<List<YearPlannerEntry>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveYearPlannerEntry(e: YearPlannerEntry)
+
+    // ── Diary ─────────────────────────────────────────────────────────────────
+    @Query("SELECT * FROM diary_entries ORDER BY date DESC")
+    fun getDiaryEntries(): Flow<List<DailyDiary>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveDiaryEntry(e: DailyDiary)
+    @Delete suspend fun deleteDiaryEntry(e: DailyDiary)
+
+    // ── Date Events ───────────────────────────────────────────────────────────
+    @Query("SELECT * FROM date_events ORDER BY date ASC")
+    fun getDateEvents(): Flow<List<DateEvent>>
+    @Query("SELECT * FROM date_events WHERE date=:date ORDER BY createdAt ASC")
+    fun getDateEventsForDate(date: String): Flow<List<DateEvent>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveDateEvent(e: DateEvent)
+    @Delete suspend fun deleteDateEvent(e: DateEvent)
+
+    // ── Dictionary ────────────────────────────────────────────────────────────
+    @Query("SELECT * FROM dictionary_neet ORDER BY serialNo ASC")
+    fun getNeetDictionary(): Flow<List<DictionaryNeet>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveNeetDictionary(d: DictionaryNeet)
+    @Delete suspend fun deleteNeetDictionary(d: DictionaryNeet)
+
+    @Query("SELECT * FROM dictionary_non_neet ORDER BY createdAt ASC")
+    fun getNonNeetDictionary(): Flow<List<DictionaryNonNeet>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveNonNeetDictionary(d: DictionaryNonNeet)
+    @Delete suspend fun deleteNonNeetDictionary(d: DictionaryNonNeet)
+
+    // ── Mnemonics ─────────────────────────────────────────────────────────────
+    @Query("SELECT * FROM mnemonics ORDER BY createdAt ASC")
+    fun getMnemonics(): Flow<List<Mnemonic>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveMnemonic(m: Mnemonic)
+    @Delete suspend fun deleteMnemonic(m: Mnemonic)
+
+    // ── Diagrams ──────────────────────────────────────────────────────────────
+    @Query("SELECT * FROM diagrams WHERE subject=:subject ORDER BY chapter ASC")
+    fun getDiagrams(subject: String): Flow<List<Diagram>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveDiagram(d: Diagram)
+    @Delete suspend fun deleteDiagram(d: Diagram)
+
+    // ── Chapter Short Notes ───────────────────────────────────────────────────
+    @Query("SELECT * FROM chapter_short_notes WHERE subject=:subject ORDER BY chapter ASC")
+    fun getChapterShortNotes(subject: String): Flow<List<ChapterShortNote>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveChapterShortNote(n: ChapterShortNote)
+    @Delete suspend fun deleteChapterShortNote(n: ChapterShortNote)
+
+    // ── Day Waste ─────────────────────────────────────────────────────────────
+    @Query("SELECT * FROM day_waste ORDER BY date DESC")
+    fun getDayWasteEntries(): Flow<List<DayWaste>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveDayWaste(d: DayWaste)
+    @Delete suspend fun deleteDayWaste(d: DayWaste)
+
+    // ── NEET Sequence ─────────────────────────────────────────────────────────
+    @Query("SELECT * FROM neet_sequence ORDER BY serialNo ASC")
+    fun getNeetSequence(): Flow<List<NeetSequence>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveNeetSequence(s: NeetSequence)
+    @Delete suspend fun deleteNeetSequence(s: NeetSequence)
+    @Query("UPDATE neet_sequence SET status=:status WHERE id=:id")
+    suspend fun updateNeetSequenceStatus(id: String, status: Status)
+
+    // ── Subject Short Notes ───────────────────────────────────────────────────
+    @Query("SELECT * FROM subject_short_notes WHERE subject=:subject LIMIT 1")
+    fun getSubjectShortNote(subject: String): Flow<SubjectShortNote?>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveSubjectShortNote(n: SubjectShortNote)
+
+    // ── Lack Points ───────────────────────────────────────────────────────────
+    @Query("SELECT * FROM lack_points ORDER BY createdAt ASC")
+    fun getLackPoints(): Flow<List<LackPoint>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveLackPoint(p: LackPoint)
+    @Delete suspend fun deleteLackPoint(p: LackPoint)
+
+    // ── Syllabus ──────────────────────────────────────────────────────────────
+    @Query("SELECT * FROM neet_syllabus LIMIT 1")
+    fun getSyllabus(): Flow<NEETSyllabus?>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveSyllabus(s: NEETSyllabus)
+
+    // ── Calendar aggregation ──────────────────────────────────────────────────
+    @Query("SELECT date FROM day_planner")
+    fun getAllDayPlannerDates(): Flow<List<String>>
+    @Query("SELECT date FROM date_events")
+    fun getAllDateEventDates(): Flow<List<String>>
+    @Query("SELECT date FROM diary_entries")
+    fun getAllDiaryDates(): Flow<List<String>>
+}

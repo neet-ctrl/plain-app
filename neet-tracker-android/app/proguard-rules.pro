@@ -1,0 +1,7 @@
+-keep class com.neet.tracker.** { *; }
+-keep class * extends androidx.room.RoomDatabase { *; }
+-keep @androidx.room.* class * { *; }
+-keepattributes Signature
+-keepattributes *Annotation*
+-dontwarn com.google.gson.**
+-keep class com.google.gson.** { *; }

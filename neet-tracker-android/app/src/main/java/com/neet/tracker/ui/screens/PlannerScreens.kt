@@ -1,0 +1,371 @@
+package com.neet.tracker.ui.screens
+
+import androidx.compose.animation.*
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.*
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.*
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
+import com.neet.tracker.data.models.*
+import com.neet.tracker.navigation.*
+import com.neet.tracker.ui.components.*
+import com.neet.tracker.ui.dialogs.*
+import com.neet.tracker.ui.theme.*
+import com.neet.tracker.ui.viewmodels.PlannerViewModel
+
+@Composable
+fun PlannerScreen(navController: NavController) {
+    val cards = listOf(
+        Triple("Day Planner", Icons.Default.Today, Routes.DAY_PLANNER) to NeonCyan,
+        Triple("Week Planner", Icons.Default.ViewWeek, Routes.WEEK_PLANNER) to NeonPurple,
+        Triple("Month Planner", Icons.Default.CalendarViewMonth, Routes.MONTH_PLANNER) to NeonGold,
+        Triple("Year Planner", Icons.Default.CalendarToday, Routes.YEAR_PLANNER) to NeonGreen,
+    )
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "Smart Planner", breadcrumb = "Home", onBack = { navController.popBackStack() })
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp)
+            ) {
+                items(cards) { (info, color) ->
+                    NEETCard(title = info.first, icon = info.second, glowColor = color, onClick = { navController.navigate(info.third) })
+                }
+            }
+        }
+    }
+}
+
+// ─── Day Planner ─────────────────────────────────────────────────────────────
+
+@Composable
+fun DayPlannerScreen(navController: NavController, vm: PlannerViewModel = hiltViewModel()) {
+    val entries by vm.dayEntries.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+    var showAdd by remember { mutableStateOf(false) }
+    var newDate by remember { mutableStateOf("") }
+
+    val filtered = entries.filter { searchQuery.isBlank() || it.date.contains(searchQuery, true) }
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "Day Planner", breadcrumb = "Home / Planner", onBack = { navController.popBackStack() })
+            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search dates...")
+                Spacer(Modifier.height(12.dp))
+                if (filtered.isEmpty()) EmptyState("No days planned yet. Tap + to add.", Icons.Default.Today)
+                else LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 80.dp)
+                ) {
+                    items(filtered) { entry ->
+                        NEETCard(
+                            title = entry.date,
+                            subtitle = "${entry.events.size} events",
+                            icon = Icons.Default.Today,
+                            glowColor = NeonCyan,
+                            onClick = { navController.navigate(dayPlannerDetailRoute(entry.id)) }
+                        )
+                    }
+                }
+            }
+        }
+        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }) }
+    }
+    if (showAdd) {
+        NEETDialog(title = "New Day Entry", icon = Icons.Default.Today, accentColor = NeonCyan, onDismiss = { showAdd = false }) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                DialogTextField(value = newDate, onValueChange = { newDate = it }, label = "Date (DD/MM/YYYY)", icon = Icons.Default.CalendarToday, accentColor = NeonCyan)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(onClick = { showAdd = false }, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
+                    Button(onClick = {
+                        if (newDate.isNotBlank()) { vm.saveDay(DayPlannerEntry(date = newDate)); showAdd = false; newDate = "" }
+                    }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonCyan.copy(0.2f)), border = BorderStroke(1.dp, NeonCyan.copy(0.6f))) { Text("Add", color = NeonCyan, fontWeight = FontWeight.Bold) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DayPlannerDetailScreen(navController: NavController, entryId: String, vm: PlannerViewModel = hiltViewModel()) {
+    val entries by vm.dayEntries.collectAsState()
+    val entry = entries.find { it.id == entryId }
+    var events by remember(entry) { mutableStateOf(entry?.events ?: emptyList()) }
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = entry?.date ?: "Day Plan", breadcrumb = "Home / Planner / Day", onBack = { navController.popBackStack() })
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 80.dp)
+            ) {
+                itemsIndexed(events) { i, event ->
+                    PlannerEventCard(
+                        event = event,
+                        index = i + 1,
+                        accentColor = NeonCyan,
+                        onUpdate = { updated ->
+                            val newList = events.toMutableList().also { it[i] = updated }
+                            events = newList
+                            entry?.let { vm.saveDay(it.copy(events = newList)) }
+                        },
+                        onDelete = {
+                            val newList = events.toMutableList().also { it.removeAt(i) }
+                            events = newList
+                            entry?.let { vm.saveDay(it.copy(events = newList)) }
+                        }
+                    )
+                }
+                item {
+                    Button(
+                        onClick = {
+                            val newList = events + PlannerEvent()
+                            events = newList
+                            entry?.let { vm.saveDay(it.copy(events = newList)) }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan.copy(0.12f)),
+                        border = BorderStroke(1.dp, NeonCyan.copy(0.4f))
+                    ) {
+                        Icon(Icons.Default.Add, null, tint = NeonCyan)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Add Event", color = NeonCyan, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PlannerEventCard(event: PlannerEvent, index: Int, accentColor: Color, onUpdate: (PlannerEvent) -> Unit, onDelete: () -> Unit) {
+    var name by remember(event) { mutableStateOf(event.name) }
+    var notes by remember(event) { mutableStateOf(event.notes) }
+    var sourceUri by remember(event) { mutableStateOf(event.sourceFileUri) }
+    var timing by remember(event) { mutableStateOf(event.timingRange) }
+    var remark by remember(event) { mutableStateOf(event.remark) }
+    var selectedStatus by remember(event) { mutableStateOf(event.status) }
+
+    GlassCard(glowColor = when (selectedStatus) { "COMPLETED" -> StatusCompleted; "CROSSED" -> StatusCross; else -> accentColor }, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(28.dp).background(accentColor.copy(0.2f), androidx.compose.foundation.shape.CircleShape).border(1.dp, accentColor.copy(0.5f), androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+                    Text("$index", style = MaterialTheme.typography.labelSmall, color = accentColor, fontWeight = FontWeight.ExtraBold)
+                }
+                Spacer(Modifier.width(8.dp))
+                Text("Event $index", style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Delete, null, tint = NeonRed.copy(0.7f), modifier = Modifier.size(16.dp)) }
+            }
+            NeonDivider(accentColor)
+            DialogTextField(value = name, onValueChange = { name = it; onUpdate(event.copy(name = name)) }, label = "Event Name", icon = Icons.Default.Event, accentColor = accentColor)
+            DialogTextField(value = notes, onValueChange = { notes = it; onUpdate(event.copy(notes = notes)) }, label = "Notes / Description", icon = Icons.Default.Notes, accentColor = accentColor, multiline = true)
+            DialogTextField(value = timing, onValueChange = { timing = it; onUpdate(event.copy(timingRange = timing)) }, label = "Timing Range (e.g. 9AM–11AM)", icon = Icons.Default.Schedule, accentColor = accentColor)
+            DialogTextField(value = remark, onValueChange = { remark = it; onUpdate(event.copy(remark = remark)) }, label = "Remark", icon = Icons.Default.StickyNote2, accentColor = accentColor)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                StatusTickCrossButton("✓ Done", selectedStatus == "COMPLETED", StatusCompleted) {
+                    selectedStatus = if (selectedStatus == "COMPLETED") "EXPECTED" else "COMPLETED"
+                    onUpdate(event.copy(status = selectedStatus))
+                }
+                StatusTickCrossButton("✗ Missed", selectedStatus == "CROSSED", StatusCross) {
+                    selectedStatus = if (selectedStatus == "CROSSED") "EXPECTED" else "CROSSED"
+                    onUpdate(event.copy(status = selectedStatus))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatusTickCrossButton(label: String, selected: Boolean, color: Color, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) color.copy(0.2f) else Color.White.copy(0.04f))
+            .border(1.dp, if (selected) color else Color.White.copy(0.1f), RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = if (selected) color else Color.White.copy(0.5f), fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Normal)
+    }
+}
+
+// ─── Week Planner ─────────────────────────────────────────────────────────────
+
+@Composable
+fun WeekPlannerScreen(navController: NavController, vm: PlannerViewModel = hiltViewModel()) {
+    val entries by vm.weekEntries.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+    var showAdd by remember { mutableStateOf(false) }
+    var newWeek by remember { mutableStateOf("") }
+    var newRange by remember { mutableStateOf("") }
+    val filtered = entries.filter { searchQuery.isBlank() || it.weekLabel.contains(searchQuery, true) }
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "Week Planner", breadcrumb = "Home / Planner", onBack = { navController.popBackStack() })
+            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search weeks...")
+                Spacer(Modifier.height(12.dp))
+                if (filtered.isEmpty()) EmptyState("No weeks planned yet. Tap + to add.", Icons.Default.ViewWeek)
+                else LazyVerticalGrid(columns = GridCells.Fixed(2), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
+                    items(filtered) { entry ->
+                        NEETCard(title = entry.weekLabel, subtitle = entry.dateRange, icon = Icons.Default.ViewWeek, glowColor = NeonPurple, onClick = { navController.navigate(weekPlannerDetailRoute(entry.id)) })
+                    }
+                }
+            }
+        }
+        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }) }
+    }
+    if (showAdd) {
+        NEETDialog(title = "New Week Entry", icon = Icons.Default.ViewWeek, accentColor = NeonPurple, onDismiss = { showAdd = false }) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DialogTextField(value = newWeek, onValueChange = { newWeek = it }, label = "Week Label (e.g. 3rd Week of May)", icon = Icons.Default.ViewWeek, accentColor = NeonPurple)
+                DialogTextField(value = newRange, onValueChange = { newRange = it }, label = "Date Range (e.g. 12-18 May)", icon = Icons.Default.DateRange, accentColor = NeonPurple)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(onClick = { showAdd = false }, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
+                    Button(onClick = { if (newWeek.isNotBlank()) { vm.saveWeek(WeekPlannerEntry(weekLabel = newWeek, dateRange = newRange)); showAdd = false } }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonPurple.copy(0.2f)), border = BorderStroke(1.dp, NeonPurple.copy(0.6f))) { Text("Add", color = NeonPurple, fontWeight = FontWeight.Bold) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun WeekPlannerDetailScreen(navController: NavController, weekId: String, vm: PlannerViewModel = hiltViewModel()) {
+    val entries by vm.weekEntries.collectAsState()
+    val entry = entries.find { it.id == weekId }
+    var events by remember(entry) { mutableStateOf(entry?.events ?: emptyList()) }
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = entry?.weekLabel ?: "Week Plan", breadcrumb = "Home / Planner / Week", onBack = { navController.popBackStack() })
+            LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
+                itemsIndexed(events) { i, event ->
+                    PlannerEventCard(event = event, index = i + 1, accentColor = NeonPurple,
+                        onUpdate = { updated -> val nl = events.toMutableList().also { it[i] = updated }; events = nl; entry?.let { vm.saveWeek(it.copy(events = nl)) } },
+                        onDelete = { val nl = events.toMutableList().also { it.removeAt(i) }; events = nl; entry?.let { vm.saveWeek(it.copy(events = nl)) } }
+                    )
+                }
+                item {
+                    Button(onClick = { val nl = events + PlannerEvent(); events = nl; entry?.let { vm.saveWeek(it.copy(events = nl)) } }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = NeonPurple.copy(0.12f)), border = BorderStroke(1.dp, NeonPurple.copy(0.4f))) {
+                        Icon(Icons.Default.Add, null, tint = NeonPurple); Spacer(Modifier.width(8.dp)); Text("Add Event", color = NeonPurple, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── Month Planner ────────────────────────────────────────────────────────────
+
+@Composable
+fun MonthPlannerScreen(navController: NavController, vm: PlannerViewModel = hiltViewModel()) {
+    val entries by vm.monthEntries.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+    var showAdd by remember { mutableStateOf(false) }
+    var newMonth by remember { mutableStateOf("") }
+    val filtered = entries.filter { searchQuery.isBlank() || it.month.contains(searchQuery, true) }
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "Month Planner", breadcrumb = "Home / Planner", onBack = { navController.popBackStack() })
+            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search months...")
+                Spacer(Modifier.height(12.dp))
+                if (filtered.isEmpty()) EmptyState("No months planned yet.", Icons.Default.CalendarViewMonth)
+                else LazyVerticalGrid(columns = GridCells.Fixed(2), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
+                    items(filtered) { e -> NEETCard(title = e.month, subtitle = "${e.events.size} events", icon = Icons.Default.CalendarViewMonth, glowColor = NeonGold, onClick = { navController.navigate(monthPlannerDetailRoute(e.id)) }) }
+                }
+            }
+        }
+        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }) }
+    }
+    if (showAdd) SimpleAddDialog("New Month Entry", "Month (e.g. May 2026)", NeonGold, Icons.Default.CalendarViewMonth, onSave = { vm.saveMonth(MonthPlannerEntry(month = it)); showAdd = false }, onDismiss = { showAdd = false })
+}
+
+@Composable
+fun MonthPlannerDetailScreen(navController: NavController, monthId: String, vm: PlannerViewModel = hiltViewModel()) {
+    val entries by vm.monthEntries.collectAsState()
+    val entry = entries.find { it.id == monthId }
+    var events by remember(entry) { mutableStateOf(entry?.events ?: emptyList()) }
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = entry?.month ?: "Month Plan", breadcrumb = "Home / Planner / Month", onBack = { navController.popBackStack() })
+            LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
+                itemsIndexed(events) { i, event ->
+                    PlannerEventCard(event = event, index = i + 1, accentColor = NeonGold,
+                        onUpdate = { updated -> val nl = events.toMutableList().also { it[i] = updated }; events = nl; entry?.let { vm.saveMonth(it.copy(events = nl)) } },
+                        onDelete = { val nl = events.toMutableList().also { it.removeAt(i) }; events = nl; entry?.let { vm.saveMonth(it.copy(events = nl)) } }
+                    )
+                }
+                item { Button(onClick = { val nl = events + PlannerEvent(); events = nl; entry?.let { vm.saveMonth(it.copy(events = nl)) } }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = NeonGold.copy(0.12f)), border = BorderStroke(1.dp, NeonGold.copy(0.4f))) { Icon(Icons.Default.Add, null, tint = NeonGold); Spacer(Modifier.width(8.dp)); Text("Add Event", color = NeonGold, fontWeight = FontWeight.Bold) } }
+            }
+        }
+    }
+}
+
+// ─── Year Planner ─────────────────────────────────────────────────────────────
+
+@Composable
+fun YearPlannerScreen(navController: NavController, vm: PlannerViewModel = hiltViewModel()) {
+    val entries by vm.yearEntries.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+    var showAdd by remember { mutableStateOf(false) }
+    val filtered = entries.filter { searchQuery.isBlank() || it.yearSession.contains(searchQuery, true) }
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "Year Planner", breadcrumb = "Home / Planner", onBack = { navController.popBackStack() })
+            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search year sessions...")
+                Spacer(Modifier.height(12.dp))
+                if (filtered.isEmpty()) EmptyState("No year sessions yet.", Icons.Default.CalendarToday)
+                else LazyVerticalGrid(columns = GridCells.Fixed(2), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
+                    items(filtered) { e -> NEETCard(title = e.yearSession, subtitle = "${e.events.size} events", icon = Icons.Default.CalendarToday, glowColor = NeonGreen, onClick = { navController.navigate(yearPlannerDetailRoute(e.id)) }) }
+                }
+            }
+        }
+        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) { NeonFAB(onClick = { showAdd = true }) }
+    }
+    if (showAdd) SimpleAddDialog("New Year Session", "Session (e.g. 2026-2027)", NeonGreen, Icons.Default.CalendarToday, onSave = { vm.saveYear(YearPlannerEntry(yearSession = it)); showAdd = false }, onDismiss = { showAdd = false })
+}
+
+@Composable
+fun YearPlannerDetailScreen(navController: NavController, yearId: String, vm: PlannerViewModel = hiltViewModel()) {
+    val entries by vm.yearEntries.collectAsState()
+    val entry = entries.find { it.id == yearId }
+    var events by remember(entry) { mutableStateOf(entry?.events ?: emptyList()) }
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = entry?.yearSession ?: "Year Plan", breadcrumb = "Home / Planner / Year", onBack = { navController.popBackStack() })
+            LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
+                itemsIndexed(events) { i, event ->
+                    PlannerEventCard(event = event, index = i + 1, accentColor = NeonGreen,
+                        onUpdate = { updated -> val nl = events.toMutableList().also { it[i] = updated }; events = nl; entry?.let { vm.saveYear(it.copy(events = nl)) } },
+                        onDelete = { val nl = events.toMutableList().also { it.removeAt(i) }; events = nl; entry?.let { vm.saveYear(it.copy(events = nl)) } }
+                    )
+                }
+                item { Button(onClick = { val nl = events + PlannerEvent(); events = nl; entry?.let { vm.saveYear(it.copy(events = nl)) } }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = NeonGreen.copy(0.12f)), border = BorderStroke(1.dp, NeonGreen.copy(0.4f))) { Icon(Icons.Default.Add, null, tint = NeonGreen); Spacer(Modifier.width(8.dp)); Text("Add Event", color = NeonGreen, fontWeight = FontWeight.Bold) } }
+            }
+        }
+    }
+}

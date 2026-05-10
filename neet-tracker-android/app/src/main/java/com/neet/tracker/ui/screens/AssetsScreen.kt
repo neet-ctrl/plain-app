@@ -1,0 +1,236 @@
+package com.neet.tracker.ui.screens
+
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.*
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import com.neet.tracker.navigation.Routes
+import com.neet.tracker.ui.components.*
+import com.neet.tracker.ui.theme.*
+
+@Composable
+fun AssetsScreen(navController: NavController) {
+    val assetCards = listOf(
+        Triple("Notebook Vault", Icons.Default.Book, Routes.NOTEBOOKS) to NeonCyan,
+        Triple("Book Library", Icons.Default.LibraryBooks, Routes.BOOKS) to NeonPurple,
+        Triple("PYQ Archive", Icons.Default.Archive, Routes.PYQ) to NeonGold,
+        Triple("Test Papers", Icons.Default.Assignment, Routes.TEST_PAPERS) to NeonGreen,
+        Triple("Sample Papers", Icons.Default.FileCopy, Routes.SAMPLE_PAPERS) to NeonOrange,
+        Triple("PW Batches", Icons.Default.Groups, Routes.PW_BATCHES) to NeonCyan,
+    )
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(
+                title = "Assets Vault",
+                breadcrumb = "Home",
+                onBack = { navController.popBackStack() }
+            )
+
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp)
+            ) {
+                itemsIndexed(assetCards) { index, (info, color) ->
+                    val visible = remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) {
+                        kotlinx.coroutines.delay(index * 80L)
+                        visible.value = true
+                    }
+                    AnimatedVisibility(
+                        visible = visible.value,
+                        enter = fadeIn(tween(400)) + scaleIn(tween(400, easing = EaseOutBack), 0.75f)
+                    ) {
+                        NEETCard(
+                            title = info.first,
+                            icon = info.second,
+                            glowColor = color,
+                            onClick = { navController.navigate(info.third) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PYQScreen(navController: NavController) {
+    val cards = listOf(
+        Triple("Chapter-wise PYQs", Icons.Default.MenuBook, Routes.PYQ_CHAPTERWISE) to NeonCyan,
+        Triple("Year-wise PYQs", Icons.Default.CalendarViewMonth, Routes.PYQ_YEARWISE) to NeonPurple,
+    )
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "PYQ Archive", breadcrumb = "Home / Assets", onBack = { navController.popBackStack() })
+
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp)
+            ) {
+                items(cards) { (info, color) ->
+                    NEETCard(title = info.first, icon = info.second, glowColor = color, onClick = { navController.navigate(info.third) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TestPapersScreen(navController: NavController) {
+    val cards = listOf(
+        Triple("Online Tests", Icons.Default.Computer, Routes.ONLINE_TESTS) to NeonGreen,
+        Triple("Offline Tests", Icons.Default.OfflineBolt, Routes.OFFLINE_TESTS) to NeonOrange,
+    )
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "Test Papers", breadcrumb = "Home / Assets", onBack = { navController.popBackStack() })
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp)
+            ) {
+                items(cards) { (info, color) ->
+                    NEETCard(title = info.first, icon = info.second, glowColor = color, onClick = { navController.navigate(info.third) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DictionaryScreen(navController: NavController) {
+    val cards = listOf(
+        Triple("NEET Lexicon", Icons.Default.Science, Routes.DICTIONARY_NEET) to NeonCyan,
+        Triple("Word Bank", Icons.Default.Translate, Routes.DICTIONARY_NON_NEET) to NeonPurple,
+    )
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "Lexicon", breadcrumb = "Home", onBack = { navController.popBackStack() })
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp)
+            ) {
+                items(cards) { (info, color) ->
+                    NEETCard(title = info.first, icon = info.second, glowColor = color, onClick = { navController.navigate(info.third) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DiagramsScreen(navController: NavController) {
+    val subjects = listOf(
+        Triple("Botany Diagrams", Icons.Default.Park, "BOTANY") to NeonGreen,
+        Triple("Zoology Diagrams", Icons.Default.Pets, "ZOOLOGY") to NeonOrange,
+    )
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "Diagrams Atlas", breadcrumb = "Home", onBack = { navController.popBackStack() })
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp)
+            ) {
+                items(subjects) { (info, color) ->
+                    NEETCard(title = info.first, icon = info.second, glowColor = color,
+                        onClick = { navController.navigate(com.neet.tracker.navigation.diagramsSubjectRoute(info.third)) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ChapterShortNotesScreen(navController: NavController) {
+    val subjects = listOf(
+        Triple("Physics Notes", Icons.Default.ElectricBolt, "PHYSICS") to NeonCyan,
+        Triple("Chemistry Notes", Icons.Default.Science, "CHEMISTRY") to NeonPurple,
+        Triple("Botany Notes", Icons.Default.Park, "BOTANY") to NeonGreen,
+        Triple("Zoology Notes", Icons.Default.Pets, "ZOOLOGY") to NeonOrange,
+    )
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "Chapter Notes", breadcrumb = "Home", onBack = { navController.popBackStack() })
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp)
+            ) {
+                items(subjects) { (info, color) ->
+                    NEETCard(title = info.first, icon = info.second, glowColor = color,
+                        onClick = { navController.navigate(com.neet.tracker.navigation.chapterShortNotesSubjectRoute(info.third)) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SubjectShortNotesScreen(navController: NavController) {
+    val subjects = listOf(
+        Triple("Physics", Icons.Default.ElectricBolt, "PHYSICS") to NeonCyan,
+        Triple("Chemistry", Icons.Default.Science, "CHEMISTRY") to NeonPurple,
+        Triple("Botany", Icons.Default.Park, "BOTANY") to NeonGreen,
+        Triple("Zoology", Icons.Default.Pets, "ZOOLOGY") to NeonOrange,
+    )
+
+    val vm: com.neet.tracker.ui.viewmodels.SubjectNoteViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+
+    SpaceBackground {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NEETTopBar(title = "Subject Notes", breadcrumb = "Home", onBack = { navController.popBackStack() })
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp)
+            ) {
+                items(subjects) { (info, color) ->
+                    val note by vm.noteFor(info.third).collectAsState()
+                    NEETCard(
+                        title = info.first,
+                        subtitle = if (note?.fileUri?.isNotBlank() == true) "PDF uploaded" else "No PDF yet",
+                        icon = info.second,
+                        glowColor = color,
+                        onClick = {
+                            val fileUri = note?.fileUri
+                            if (!fileUri.isNullOrBlank()) {
+                                navController.navigate(com.neet.tracker.navigation.fileViewerRoute(fileUri, "${info.first} Notes"))
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
