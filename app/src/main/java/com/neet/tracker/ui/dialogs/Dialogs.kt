@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -367,6 +368,7 @@ val PRESET_TAGS = listOf(
     "Must Revise", "Weak Topic", "Strong Topic", "Exam Ready", "Pending"
 )
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TagDialog(currentTags: List<String>, onSave: (List<String>) -> Unit, onDismiss: () -> Unit) {
     var selectedTags by remember { mutableStateOf(currentTags.toMutableList()) }

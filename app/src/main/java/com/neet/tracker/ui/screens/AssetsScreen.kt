@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.neet.tracker.data.models.Subject
 import com.neet.tracker.data.models.SubjectShortNote
 import com.neet.tracker.navigation.Routes
 import com.neet.tracker.ui.components.*
@@ -226,7 +227,8 @@ fun SubjectShortNotesScreen(navController: NavController) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { u ->
             uploadingSubject?.let { subj ->
-                vm.save(SubjectShortNote(subject = subj, fileUri = u.toString()))
+                val subjectEnum = try { Subject.valueOf(subj) } catch (e: Exception) { Subject.GENERAL }
+                vm.save(SubjectShortNote(subject = subjectEnum, fileUri = u.toString()))
             }
         }
         uploadingSubject = null
