@@ -163,3 +163,22 @@ class SyllabusViewModel @Inject constructor(private val dao: NEETDao) : ViewMode
     val syllabus = dao.getSyllabus().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     fun save(s: NEETSyllabus) = viewModelScope.launch { dao.saveSyllabus(s) }
 }
+
+@HiltViewModel
+class HomeCountViewModel @Inject constructor(private val dao: NEETDao) : ViewModel() {
+    val diaryCount   = dao.countDiaryEntries().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val eventCount   = dao.countEventDates().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val dictCount    = dao.countNeetDict().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val mnemonicCount = dao.countMnemonics().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val diagramCount = dao.countDiagrams().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val chapterNoteCount = dao.countChapterNotes().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val dayWasteCount = dao.countDayWaste().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val sequenceCount = dao.countNeetSequence().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val lackCount    = dao.countLackPoints().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    // Assets aggregation (notebooks + books + PYQ + tests + sample papers + PW batches)
+    val assetsCount  = combine(
+        dao.countNotebooks(), dao.countBooks(), dao.countPYQSources(),
+        dao.countTestPapers(), dao.countSamplePapers(), dao.countPWBatches()
+    ) { arr -> arr.sum() }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+}

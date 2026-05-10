@@ -27,6 +27,7 @@ import com.neet.tracker.data.models.StudentProfile
 import com.neet.tracker.navigation.*
 import com.neet.tracker.ui.components.*
 import com.neet.tracker.ui.theme.*
+import com.neet.tracker.ui.viewmodels.HomeCountViewModel
 import com.neet.tracker.ui.viewmodels.ProfileViewModel
 import java.util.Calendar
 
@@ -40,9 +41,41 @@ data class MainCard(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun HomeScreen(navController: NavController, vm: ProfileViewModel = hiltViewModel()) {
+fun HomeScreen(
+    navController: NavController,
+    vm: ProfileViewModel = hiltViewModel(),
+    countsVm: HomeCountViewModel = hiltViewModel()
+) {
     val profile by vm.profile.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
+
+    val assetsCount      by countsVm.assetsCount.collectAsState()
+    val diaryCount       by countsVm.diaryCount.collectAsState()
+    val eventCount       by countsVm.eventCount.collectAsState()
+    val dictCount        by countsVm.dictCount.collectAsState()
+    val mnemonicCount    by countsVm.mnemonicCount.collectAsState()
+    val diagramCount     by countsVm.diagramCount.collectAsState()
+    val chapterNoteCount by countsVm.chapterNoteCount.collectAsState()
+    val dayWasteCount    by countsVm.dayWasteCount.collectAsState()
+    val sequenceCount    by countsVm.sequenceCount.collectAsState()
+    val lackCount        by countsVm.lackCount.collectAsState()
+
+    // Route → live item count (null = no badge shown)
+    val countMap = remember(assetsCount, diaryCount, eventCount, dictCount, mnemonicCount,
+        diagramCount, chapterNoteCount, dayWasteCount, sequenceCount, lackCount) {
+        mapOf(
+            Routes.ASSETS              to assetsCount,
+            Routes.DAILY_DIARY         to diaryCount,
+            Routes.DATE_EVENTS         to eventCount,
+            Routes.DICTIONARY          to dictCount,
+            Routes.MNEMONICS           to mnemonicCount,
+            Routes.DIAGRAMS            to diagramCount,
+            Routes.CHAPTER_SHORT_NOTES to chapterNoteCount,
+            Routes.DAY_WASTE           to dayWasteCount,
+            Routes.NEET_SEQUENCE       to sequenceCount,
+            Routes.LACK_POINTS         to lackCount,
+        )
+    }
 
     // Fully thematic icons — each card's icon perfectly matches its subject
     val mainCards = listOf(
@@ -102,7 +135,11 @@ fun HomeScreen(navController: NavController, vm: ProfileViewModel = hiltViewMode
                             visible = visible,
                             enter = fadeIn(tween(400)) + scaleIn(tween(440, easing = EaseOutBack), initialScale = 0.60f) + slideInVertically(tween(400, easing = EaseOutBack)) { it / 3 }
                         ) {
-                            HomeModuleCard(card = card, onClick = { navController.navigate(card.route) })
+                            HomeModuleCard(
+                                card    = card,
+                                count   = countMap[card.route],
+                                onClick = { navController.navigate(card.route) }
+                            )
                         }
                     }
                 }
@@ -345,7 +382,7 @@ fun HomeHeader(profile: StudentProfile?, navController: NavController) {
 // ─── Maximized 3D Module Card ─────────────────────────────────────────────────
 
 @Composable
-fun HomeModuleCard(card: MainCard, onClick: () -> Unit) {
+fun HomeModuleCard(card: MainCard, count: Int? = null, onClick: () -> Unit) {
     val infiniteTransition = rememberInfiniteTransition(label = "hmc_${card.title}")
     val glowAlpha by infiniteTransition.animateFloat(
         initialValue = 0.14f, targetValue = 0.36f,
@@ -455,6 +492,36 @@ fun HomeModuleCard(card: MainCard, onClick: () -> Unit) {
             modifier = Modifier.fillMaxWidth().height(50.dp).align(Alignment.BottomCenter)
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.32f))))
         )
+
+        // ── Count badge (top-right corner) ────────────────────────────────────
+        if (count != null && count > 0) {
+            val badgePulse by rememberInfiniteTransition(label = "badge_${card.title}").animateFloat(
+                initialValue = 0.75f, targetValue = 1f,
+                animationSpec = infiniteRepeatable(tween(1600, easing = EaseInOutSine), RepeatMode.Reverse),
+                label = "badge_pulse"
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 8.dp, end = 8.dp)
+                    .shadow(8.dp, RoundedCornerShape(10.dp), spotColor = card.accentColor.copy(badgePulse * 0.6f))
+                    .background(
+                        Brush.linearGradient(listOf(card.accentColor.copy(0.85f), card.accentColor.copy(0.55f))),
+                        RoundedCornerShape(10.dp)
+                    )
+                    .border(1.dp, Color.White.copy(0.25f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 7.dp, vertical = 3.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (count > 999) "999+" else count.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 10.sp
+                )
+            }
+        }
 
         // ── Main content
         Column(

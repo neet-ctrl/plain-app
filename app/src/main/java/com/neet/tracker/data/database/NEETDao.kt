@@ -211,4 +211,21 @@ interface NEETDao {
     fun getAllDateEventDates(): Flow<List<String>>
     @Query("SELECT date FROM diary_entries")
     fun getAllDiaryDates(): Flow<List<String>>
+
+    // ── Home card counts ──────────────────────────────────────────────────────
+    @Query("SELECT COUNT(*) FROM notebooks")         fun countNotebooks(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM books")             fun countBooks(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM pyq_sources")       fun countPYQSources(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM test_papers")       fun countTestPapers(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM sample_papers")     fun countSamplePapers(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM pw_batches")        fun countPWBatches(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM diary_entries")     fun countDiaryEntries(): Flow<Int>
+    @Query("SELECT COUNT(DISTINCT date) FROM date_events") fun countEventDates(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM dictionary_neet")   fun countNeetDict(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM mnemonics")         fun countMnemonics(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM diagrams")          fun countDiagrams(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM chapter_short_notes") fun countChapterNotes(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM day_waste")         fun countDayWaste(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM neet_sequence")     fun countNeetSequence(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM lack_points")       fun countLackPoints(): Flow<Int>
 }
