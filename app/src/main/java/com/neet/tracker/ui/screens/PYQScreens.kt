@@ -126,9 +126,9 @@ fun PYQYearwiseScreen(navController: NavController, vm: PYQViewModel = hiltViewM
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Year-wise PYQs", breadcrumb = "Home / Assets / PYQ", onBack = { navController.popBackStack() })
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search books...")
+                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search sources...")
                 Spacer(Modifier.height(12.dp))
-                if (filtered.isEmpty()) EmptyState("No books yet. Tap + to add.", Icons.Default.Archive)
+                if (filtered.isEmpty()) EmptyState("No sources yet. Tap + to add.", Icons.Default.Archive)
                 else LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -204,20 +204,4 @@ fun statusColor(status: Status) = when (status) {
     Status.EXPECTED -> StatusExpected
     Status.REVISION -> StatusRevision
     Status.CROSSED -> StatusCross
-}
-
-@Composable
-fun SimpleAddDialog(title: String, label: String, color: Color, icon: androidx.compose.ui.graphics.vector.ImageVector, onSave: (String) -> Unit, onDismiss: () -> Unit) {
-    var text by remember { mutableStateOf("") }
-    NEETDialog(title = title, icon = icon, accentColor = color, onDismiss = onDismiss) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            DialogTextField(value = text, onValueChange = { text = it }, label = label, icon = icon, accentColor = color)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
-                Button(onClick = { if (text.isNotBlank()) onSave(text) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = color.copy(0.2f)), border = BorderStroke(1.dp, color.copy(0.6f))) {
-                    Text("Add", color = color, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
 }
