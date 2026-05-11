@@ -761,6 +761,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             Box(
                 modifier = Modifier.weight(1f)
                     .clickable(enabled = focusMode) { focusMode = false }
+                    .then(if (annotationMode) Modifier.statusBarsPadding().padding(top = 54.dp) else Modifier)
             ) {
                 when {
                     fileUri.isBlank() -> FileErrorView()
@@ -2626,7 +2627,7 @@ private fun AnnotSidebar(
             if (isVertical) {
                 Box(modifier = Modifier.width(36.dp).height(0.5.dp).background(Color.Black.copy(0.1f)))
             } else {
-                Box(modifier = Modifier.fillMaxHeight().padding(vertical = 6.dp).width(0.5.dp).background(Color.Black.copy(0.1f)))
+                Box(modifier = Modifier.height(36.dp).padding(vertical = 6.dp).width(0.5.dp).background(Color.Black.copy(0.1f)))
             }
             // ── Tool buttons ─────────────────────────────────────────────────
             SIDEBAR_TOOLS.forEach { (t, icon, _) ->
