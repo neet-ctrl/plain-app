@@ -1,9 +1,13 @@
 package com.neet.tracker.ui.viewmodels
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.neet.tracker.data.database.NEETDao
+import com.neet.tracker.data.database.NEETDatabase
 import com.neet.tracker.data.models.*
+import com.neet.tracker.util.BackupManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -168,6 +172,57 @@ class LackPointViewModel @Inject constructor(private val dao: NEETDao) : ViewMod
 class SyllabusViewModel @Inject constructor(private val dao: NEETDao) : ViewModel() {
     val syllabus = dao.getSyllabus().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     fun save(s: NEETSyllabus) = viewModelScope.launch { dao.saveSyllabus(s) }
+}
+
+// ── Backup / Restore ──────────────────────────────────────────────────────────
+
+enum class BackupState { IDLE, RUNNING, SUCCESS, ERROR }
+
+@HiltViewModel
+class BackupViewModel @Inject constructor(
+    private val db: NEETDatabase
+) : ViewModel() {
+
+    private val _state   = MutableStateFlow(BackupState.IDLE)
+    val state: StateFlow<BackupState> = _state.asStateFlow()
+
+    private val _message = MutableStateFlow("")
+    val message: StateFlow<String> = _message.asStateFlow()
+
+    fun createBackup(context: Context, folderUri: Uri) {
+        viewModelScope.launch {
+            _state.value   = BackupState.RUNNING
+            _message.value = "Creating backup…"
+            val result = BackupManager.createBackup(context, db, folderUri)
+            if (result.isSuccess) {
+                _state.value   = BackupState.SUCCESS
+                _message.value = "Backup saved: ${result.getOrNull()}"
+            } else {
+                _state.value   = BackupState.ERROR
+                _message.value = "Backup failed: ${result.exceptionOrNull()?.message}"
+            }
+        }
+    }
+
+    fun restoreBackup(context: Context, fileUri: Uri) {
+        viewModelScope.launch {
+            _state.value   = BackupState.RUNNING
+            _message.value = "Restoring backup…"
+            val result = BackupManager.restoreBackup(context, db, fileUri)
+            if (result.isSuccess) {
+                _state.value   = BackupState.SUCCESS
+                _message.value = "Restore complete — ${result.getOrNull()} records merged."
+            } else {
+                _state.value   = BackupState.ERROR
+                _message.value = "Restore failed: ${result.exceptionOrNull()?.message}"
+            }
+        }
+    }
+
+    fun resetState() {
+        _state.value   = BackupState.IDLE
+        _message.value = ""
+    }
 }
 
 @HiltViewModel

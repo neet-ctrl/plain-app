@@ -32,6 +32,8 @@ import com.neet.tracker.ui.dialogs.DialogTextField
 import com.neet.tracker.ui.dialogs.JsonValidationErrorDialog
 import com.neet.tracker.ui.dialogs.NeetDatePickerButton
 import com.neet.tracker.ui.theme.*
+import com.neet.tracker.ui.viewmodels.BackupState
+import com.neet.tracker.ui.viewmodels.BackupViewModel
 import com.neet.tracker.ui.viewmodels.ProfileViewModel
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -59,6 +61,17 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    val backupVm: BackupViewModel = hiltViewModel()
+    val backupState by backupVm.state.collectAsState()
+    val backupMessage by backupVm.message.collectAsState()
+    val folderPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri?.let { backupVm.createBackup(context, it) }
+    }
+    val filePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { backupVm.restoreBackup(context, it) }
+    }
+
     val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { u ->
             scope.launch {
@@ -512,6 +525,17 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
                         }
                     }
                 }
+
+                // ── Backup & Restore ──────────────────────────────────────
+                item {
+                    BackupRestoreCard(
+                        state = backupState,
+                        message = backupMessage,
+                        onBackup  = { folderPickerLauncher.launch(null) },
+                        onRestore = { filePickerLauncher.launch(arrayOf("*/*", "application/octet-stream")) },
+                        onDismiss = { backupVm.resetState() }
+                    )
+                }
             }
         }
     }
@@ -899,6 +923,208 @@ fun SmallViewButton(label: String, color: Color, onClick: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Icon(Icons.Default.OpenInNew, null, tint = color, modifier = Modifier.size(12.dp))
             Text(label, style = MaterialTheme.typography.labelSmall, color = color)
+        }
+    }
+}
+
+// ── Backup & Restore Card ─────────────────────────────────────────────────────
+
+@Composable
+fun BackupRestoreCard(
+    state: BackupState,
+    message: String,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val accentColor = Color(0xFF00E5FF)
+    val restoreColor = NeonGold
+
+    GlassCard(glowColor = accentColor) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // ── Header ───────────────────────────────────────────────────
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(
+                            Brush.linearGradient(listOf(accentColor.copy(0.30f), accentColor.copy(0.07f))),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .border(1.dp, accentColor.copy(0.50f), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.CloudSync, null, tint = accentColor, modifier = Modifier.size(22.dp))
+                }
+                Column {
+                    Text(
+                        "Backup & Restore",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = accentColor,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        "Export all data as .neet file · Merge-restore safely",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(0.45f)
+                    )
+                }
+            }
+
+            NeonDivider(accentColor.copy(0.35f))
+
+            // ── Buttons ──────────────────────────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Backup button
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(accentColor.copy(0.12f))
+                        .border(1.dp, accentColor.copy(0.55f), RoundedCornerShape(12.dp))
+                        .clickable(enabled = state != BackupState.RUNNING) { onBackup() }
+                        .padding(vertical = 14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.CloudUpload,
+                            null,
+                            tint = accentColor,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text(
+                            "Backup",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = accentColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Save .neet file",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = accentColor.copy(0.55f)
+                        )
+                    }
+                }
+
+                // Restore button
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(restoreColor.copy(0.12f))
+                        .border(1.dp, restoreColor.copy(0.55f), RoundedCornerShape(12.dp))
+                        .clickable(enabled = state != BackupState.RUNNING) { onRestore() }
+                        .padding(vertical = 14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.CloudDownload,
+                            null,
+                            tint = restoreColor,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text(
+                            "Restore",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = restoreColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Open .neet file",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = restoreColor.copy(0.55f)
+                        )
+                    }
+                }
+            }
+
+            // ── Status area ───────────────────────────────────────────────
+            AnimatedVisibility(visible = state != BackupState.IDLE) {
+                val (statusColor, statusIcon, statusBg) = when (state) {
+                    BackupState.RUNNING -> Triple(accentColor, Icons.Default.HourglassTop, accentColor.copy(0.08f))
+                    BackupState.SUCCESS -> Triple(Color(0xFF00E676), Icons.Default.CheckCircle, Color(0xFF00E676).copy(0.08f))
+                    BackupState.ERROR   -> Triple(NeonRed, Icons.Default.ErrorOutline, NeonRed.copy(0.08f))
+                    BackupState.IDLE    -> Triple(accentColor, Icons.Default.Info, accentColor.copy(0.08f))
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(statusBg)
+                        .border(0.5.dp, statusColor.copy(0.35f), RoundedCornerShape(10.dp))
+                        .padding(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (state == BackupState.RUNNING) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = statusColor,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(statusIcon, null, tint = statusColor, modifier = Modifier.size(16.dp))
+                        }
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = statusColor,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (state == BackupState.SUCCESS || state == BackupState.ERROR) {
+                            Icon(
+                                Icons.Default.Close,
+                                null,
+                                tint = statusColor.copy(0.6f),
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clickable { onDismiss() }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ── Info note ─────────────────────────────────────────────────
+            Row(
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    Icons.Default.Info,
+                    null,
+                    tint = Color.White.copy(0.25f),
+                    modifier = Modifier.size(12.dp).padding(top = 1.dp)
+                )
+                Text(
+                    "Backup saves your entire database, PDFs, annotations and settings. " +
+                    "Restore merges backup data with existing data without deleting anything.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(0.28f),
+                    lineHeight = 16.sp
+                )
+            }
         }
     }
 }

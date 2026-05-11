@@ -92,5 +92,6 @@ dependencies {
     implementation(libs.accompanist.systemuicontroller)
     implementation(libs.datastore.preferences)
     implementation(libs.work.runtime.ktx)
+    implementation("androidx.documentfile:documentfile:1.0.1")
     debugImplementation(libs.androidx.ui.tooling)
 }
