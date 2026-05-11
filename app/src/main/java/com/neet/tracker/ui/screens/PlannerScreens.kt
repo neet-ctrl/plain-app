@@ -168,7 +168,7 @@ fun DayPlannerDetailScreen(navController: NavController, entryId: String, vm: Pl
 }
 
 @Composable
-fun PlannerEventCard(event: PlannerEvent, index: Int, accentColor: Color, onUpdate: (PlannerEvent) -> Unit, onDelete: () -> Unit) {
+fun PlannerEventCard(event: PlannerEvent, index: Int, accentColor: Color, onUpdate: (PlannerEvent) -> Unit, onDelete: () -> Unit, timingPickerType: String = "TIME_RANGE") {
     val context = LocalContext.current
     var name by remember(event) { mutableStateOf(event.name) }
     var notes by remember(event) { mutableStateOf(event.notes) }
@@ -246,7 +246,19 @@ fun PlannerEventCard(event: PlannerEvent, index: Int, accentColor: Color, onUpda
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (name.isNotBlank())   PlannerViewField("Event Name", name,   Icons.Default.Event,       accentColor)
                         if (notes.isNotBlank())  PlannerViewField("Notes",      notes,  Icons.Default.Notes,       accentColor)
-                        if (timing.isNotBlank()) PlannerViewField("Time Range", timing, Icons.Default.Schedule,    accentColor)
+                        if (timing.isNotBlank()) PlannerViewField(
+                            when (timingPickerType) {
+                                "DATE_RANGE"  -> "Date Range"
+                                "MONTH_RANGE" -> "Month Range"
+                                else          -> "Time Range"
+                            },
+                            timing,
+                            when (timingPickerType) {
+                                "DATE_RANGE", "MONTH_RANGE" -> Icons.Default.DateRange
+                                else                        -> Icons.Default.Schedule
+                            },
+                            accentColor
+                        )
                         if (remark.isNotBlank()) PlannerViewField("Remark",     remark, Icons.Default.StickyNote2, accentColor)
 
                         if (alarmTime > 0L) {
@@ -288,7 +300,11 @@ fun PlannerEventCard(event: PlannerEvent, index: Int, accentColor: Color, onUpda
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         DialogTextField(value = name, onValueChange = { name = it }, label = "Event Name", icon = Icons.Default.Event, accentColor = accentColor)
                         DialogTextField(value = notes, onValueChange = { notes = it }, label = "Notes / Description", icon = Icons.Default.Notes, accentColor = accentColor, multiline = true)
-                        NeetTimeRangePickerButton(value = timing, onValueChange = { timing = it }, accentColor = accentColor, label = "Event Time Range")
+                        when (timingPickerType) {
+                            "DATE_RANGE"  -> NeetDateRangePickerButton(value = timing, onValueChange = { timing = it }, accentColor = accentColor, label = "Event Date Range")
+                            "MONTH_RANGE" -> NeetMonthRangePickerButton(value = timing, onValueChange = { timing = it }, accentColor = accentColor, label = "Event Month Range")
+                            else          -> NeetTimeRangePickerButton(value = timing, onValueChange = { timing = it }, accentColor = accentColor, label = "Event Time Range")
+                        }
                         DialogTextField(value = remark, onValueChange = { remark = it }, label = "Remark", icon = Icons.Default.StickyNote2, accentColor = accentColor)
 
                         NeonDivider(NeonGold.copy(0.3f))
@@ -470,7 +486,7 @@ fun WeekPlannerDetailScreen(navController: NavController, weekId: String, vm: Pl
             NEETTopBar(title = entry?.weekLabel ?: "Week Plan", breadcrumb = "Home / Planner / Week", onBack = { navController.popBackStack() })
             LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
                 itemsIndexed(events) { i, event ->
-                    PlannerEventCard(event = event, index = i + 1, accentColor = NeonPurple,
+                    PlannerEventCard(event = event, index = i + 1, accentColor = NeonPurple, timingPickerType = "DATE_RANGE",
                         onUpdate = { updated -> val nl = events.toMutableList().also { it[i] = updated }; events = nl; entry?.let { vm.saveWeek(it.copy(events = nl)) } },
                         onDelete = { val nl = events.toMutableList().also { it.removeAt(i) }; events = nl; entry?.let { vm.saveWeek(it.copy(events = nl)) } }
                     )
@@ -521,7 +537,7 @@ fun MonthPlannerDetailScreen(navController: NavController, monthId: String, vm: 
             NEETTopBar(title = entry?.month ?: "Month Plan", breadcrumb = "Home / Planner / Month", onBack = { navController.popBackStack() })
             LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
                 itemsIndexed(events) { i, event ->
-                    PlannerEventCard(event = event, index = i + 1, accentColor = NeonGold,
+                    PlannerEventCard(event = event, index = i + 1, accentColor = NeonGold, timingPickerType = "DATE_RANGE",
                         onUpdate = { updated -> val nl = events.toMutableList().also { it[i] = updated }; events = nl; entry?.let { vm.saveMonth(it.copy(events = nl)) } },
                         onDelete = { val nl = events.toMutableList().also { it.removeAt(i) }; events = nl; entry?.let { vm.saveMonth(it.copy(events = nl)) } }
                     )
@@ -567,7 +583,7 @@ fun YearPlannerDetailScreen(navController: NavController, yearId: String, vm: Pl
             NEETTopBar(title = entry?.yearSession ?: "Year Plan", breadcrumb = "Home / Planner / Year", onBack = { navController.popBackStack() })
             LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
                 itemsIndexed(events) { i, event ->
-                    PlannerEventCard(event = event, index = i + 1, accentColor = NeonGreen,
+                    PlannerEventCard(event = event, index = i + 1, accentColor = NeonGreen, timingPickerType = "MONTH_RANGE",
                         onUpdate = { updated -> val nl = events.toMutableList().also { it[i] = updated }; events = nl; entry?.let { vm.saveYear(it.copy(events = nl)) } },
                         onDelete = { val nl = events.toMutableList().also { it.removeAt(i) }; events = nl; entry?.let { vm.saveYear(it.copy(events = nl)) } }
                     )

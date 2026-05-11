@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -551,6 +554,255 @@ fun NeetTimeRangePickerButton(
                 contentAlignment = Alignment.Center
             ) {
                 Text("$startTime – $endTime", style = MaterialTheme.typography.labelLarge, color = accentColor, fontWeight = FontWeight.ExtraBold)
+            }
+        }
+    }
+}
+
+// ─── 3D Date Range Picker (Start → End using calendar) ────────────────────────
+
+@Composable
+fun NeetDateRangePickerButton(
+    value: String,
+    onValueChange: (String) -> Unit,
+    accentColor: Color = NeonCyan,
+    label: String = "Date Range",
+    modifier: Modifier = Modifier
+) {
+    val parts = remember(value) {
+        if (value.contains("–") || value.contains(" - ")) {
+            value.split(Regex("\\s*[–-]\\s*"), limit = 2)
+        } else listOf(value, "")
+    }
+    var startDate by remember(value) { mutableStateOf(parts.getOrElse(0) { "" }.trim()) }
+    var endDate   by remember(value) { mutableStateOf(parts.getOrElse(1) { "" }.trim()) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp), modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(Icons.Default.DateRange, null, tint = accentColor.copy(0.8f), modifier = Modifier.size(14.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, color = accentColor.copy(0.9f), fontWeight = FontWeight.SemiBold)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            NeetDatePickerButton(
+                selectedDate = startDate,
+                onDateSelected = {
+                    startDate = it
+                    onValueChange(if (endDate.isNotBlank()) "$it – $endDate" else it)
+                },
+                accentColor = accentColor, label = "Start Date", modifier = Modifier.weight(1f)
+            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("→", color = accentColor, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+            }
+            NeetDatePickerButton(
+                selectedDate = endDate,
+                onDateSelected = {
+                    endDate = it
+                    onValueChange(if (startDate.isNotBlank()) "$startDate – $it" else it)
+                },
+                accentColor = accentColor, label = "End Date", modifier = Modifier.weight(1f)
+            )
+        }
+        if (startDate.isNotBlank() && endDate.isNotBlank()) {
+            Box(
+                modifier = Modifier.fillMaxWidth()
+                    .background(accentColor.copy(0.08f), RoundedCornerShape(10.dp))
+                    .border(0.5.dp, accentColor.copy(0.3f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("$startDate – $endDate", style = MaterialTheme.typography.labelLarge, color = accentColor, fontWeight = FontWeight.ExtraBold)
+            }
+        }
+    }
+}
+
+// ─── 3D Month Picker Button ────────────────────────────────────────────────────
+
+@Composable
+fun NeetMonthPickerButton(
+    selectedMonth: String,
+    onMonthSelected: (String) -> Unit,
+    accentColor: Color = NeonCyan,
+    label: String = "Select Month",
+    modifier: Modifier = Modifier
+) {
+    var showPicker by remember { mutableStateOf(false) }
+    val currentYear = remember { Calendar.getInstance().get(Calendar.YEAR) }
+    var displayYear by remember { mutableStateOf(currentYear) }
+    val monthNames = listOf("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+
+    val infiniteTransition = rememberInfiniteTransition(label = "monthbtn_$label")
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.25f, targetValue = 0.55f,
+        animationSpec = infiniteRepeatable(tween(2200, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "monthbtn_glow"
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp), modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(Icons.Default.CalendarViewMonth, null, tint = accentColor.copy(0.8f), modifier = Modifier.size(14.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, color = accentColor.copy(0.9f), fontWeight = FontWeight.SemiBold)
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(12.dp, RoundedCornerShape(18.dp), spotColor = accentColor.copy(glowAlpha * 0.8f), ambientColor = accentColor.copy(0.08f))
+                .clip(RoundedCornerShape(18.dp))
+                .background(Brush.linearGradient(listOf(accentColor.copy(0.15f), Color(0xFF080F1F), accentColor.copy(0.07f))))
+                .border(1.5.dp, Brush.linearGradient(listOf(accentColor.copy(glowAlpha + 0.1f), accentColor.copy(0.15f), accentColor.copy(glowAlpha * 0.6f))), RoundedCornerShape(18.dp))
+                .clickable { showPicker = true }
+                .padding(horizontal = 16.dp, vertical = 14.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Box(
+                    modifier = Modifier.size(44.dp)
+                        .shadow(10.dp, RoundedCornerShape(14.dp), spotColor = accentColor.copy(0.5f))
+                        .background(Brush.linearGradient(listOf(accentColor.copy(0.30f), accentColor.copy(0.08f))), RoundedCornerShape(14.dp))
+                        .border(1.dp, accentColor.copy(glowAlpha + 0.2f), RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.CalendarViewMonth, null, tint = accentColor, modifier = Modifier.size(24.dp))
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    if (selectedMonth.isNotBlank()) {
+                        Text(selectedMonth, style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.ExtraBold)
+                    } else {
+                        Text("Tap to pick month", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(0.35f))
+                    }
+                    Text("Tap to open month picker", style = MaterialTheme.typography.labelSmall, color = accentColor.copy(0.55f))
+                }
+                Box(
+                    modifier = Modifier.size(28.dp)
+                        .background(accentColor.copy(0.15f), RoundedCornerShape(8.dp))
+                        .border(0.5.dp, accentColor.copy(0.4f), RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.KeyboardArrowDown, null, tint = accentColor.copy(0.8f), modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+    }
+
+    if (showPicker) {
+        Dialog(onDismissRequest = { showPicker = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            val dlgGlow by rememberInfiniteTransition(label = "dlg_month").animateFloat(
+                initialValue = 0.7f, targetValue = 1.2f,
+                animationSpec = infiniteRepeatable(tween(2000, easing = EaseInOutSine), RepeatMode.Reverse), label = "dlg_glow"
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .shadow(32.dp, RoundedCornerShape(30.dp), spotColor = accentColor.copy(0.45f))
+                    .clip(RoundedCornerShape(30.dp))
+                    .background(Brush.linearGradient(listOf(Color(0xFF0C1A32), Color(0xFF060C1A), Color(0xFF0A1526))))
+                    .border(1.5.dp, Brush.linearGradient(listOf(accentColor.copy(0.8f), accentColor.copy(0.2f), accentColor.copy(0.6f))), RoundedCornerShape(30.dp))
+                    .padding(24.dp)
+            ) {
+                Box(modifier = Modifier.size(150.dp).align(Alignment.TopStart).offset((-30).dp, (-30).dp)
+                    .background(Brush.radialGradient(listOf(accentColor.copy(0.12f * dlgGlow), Color.Transparent)), CircleShape))
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(modifier = Modifier.size(40.dp).background(accentColor.copy(0.18f), RoundedCornerShape(12.dp)).border(1.dp, accentColor.copy(0.5f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.CalendarViewMonth, null, tint = accentColor, modifier = Modifier.size(22.dp))
+                        }
+                        Text(label, style = MaterialTheme.typography.headlineLarge, color = Color.White, fontWeight = FontWeight.ExtraBold)
+                    }
+                    NeonDivider(accentColor.copy(0.4f))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                        IconButton(onClick = { displayYear-- }) {
+                            Icon(Icons.Default.ChevronLeft, null, tint = accentColor)
+                        }
+                        Text("$displayYear", style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.ExtraBold)
+                        IconButton(onClick = { displayYear++ }) {
+                            Icon(Icons.Default.ChevronRight, null, tint = accentColor)
+                        }
+                    }
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        modifier = Modifier.heightIn(max = 240.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(monthNames.size) { i ->
+                            val monthStr = "${monthNames[i]} $displayYear"
+                            val isSelected = selectedMonth == monthStr
+                            Box(
+                                modifier = Modifier
+                                    .aspectRatio(1.6f)
+                                    .shadow(if (isSelected) 8.dp else 2.dp, RoundedCornerShape(12.dp), spotColor = accentColor.copy(if (isSelected) 0.5f else 0.1f))
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (isSelected) accentColor.copy(0.3f) else Color.White.copy(0.05f))
+                                    .border(1.dp, if (isSelected) accentColor else Color.White.copy(0.1f), RoundedCornerShape(12.dp))
+                                    .clickable { onMonthSelected(monthStr); showPicker = false },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(monthNames[i], style = MaterialTheme.typography.labelLarge, color = if (isSelected) accentColor else Color.White.copy(0.75f), fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Normal)
+                            }
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(onClick = { showPicker = false }, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── 3D Month Range Picker (Start → End month) ────────────────────────────────
+
+@Composable
+fun NeetMonthRangePickerButton(
+    value: String,
+    onValueChange: (String) -> Unit,
+    accentColor: Color = NeonCyan,
+    label: String = "Month Range",
+    modifier: Modifier = Modifier
+) {
+    val parts = remember(value) {
+        if (value.contains("–") || value.contains(" - ")) {
+            value.split(Regex("\\s*[–-]\\s*"), limit = 2)
+        } else listOf(value, "")
+    }
+    var startMonth by remember(value) { mutableStateOf(parts.getOrElse(0) { "" }.trim()) }
+    var endMonth   by remember(value) { mutableStateOf(parts.getOrElse(1) { "" }.trim()) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp), modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(Icons.Default.CalendarViewMonth, null, tint = accentColor.copy(0.8f), modifier = Modifier.size(14.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, color = accentColor.copy(0.9f), fontWeight = FontWeight.SemiBold)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            NeetMonthPickerButton(
+                selectedMonth = startMonth,
+                onMonthSelected = {
+                    startMonth = it
+                    onValueChange(if (endMonth.isNotBlank()) "$it – $endMonth" else it)
+                },
+                accentColor = accentColor, label = "Start Month", modifier = Modifier.weight(1f)
+            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("→", color = accentColor, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+            }
+            NeetMonthPickerButton(
+                selectedMonth = endMonth,
+                onMonthSelected = {
+                    endMonth = it
+                    onValueChange(if (startMonth.isNotBlank()) "$startMonth – $it" else it)
+                },
+                accentColor = accentColor, label = "End Month", modifier = Modifier.weight(1f)
+            )
+        }
+        if (startMonth.isNotBlank() && endMonth.isNotBlank()) {
+            Box(
+                modifier = Modifier.fillMaxWidth()
+                    .background(accentColor.copy(0.08f), RoundedCornerShape(10.dp))
+                    .border(0.5.dp, accentColor.copy(0.3f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("$startMonth – $endMonth", style = MaterialTheme.typography.labelLarge, color = accentColor, fontWeight = FontWeight.ExtraBold)
             }
         }
     }
