@@ -9,7 +9,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-enum class AnnotationTool { PEN, HIGHLIGHTER, ERASER, ARROW, TEXT, IMAGE }
+enum class AnnotationTool { PEN, HIGHLIGHTER, ERASER, ARROW, TEXT, IMAGE, STAMP }
 
 data class AnnotationStroke(
     val points: List<Pair<Float, Float>>,
@@ -40,6 +40,14 @@ data class AnnotationImageBox(
     val imagePath: String = ""
 )
 
+data class AnnotationStamp(
+    val id: String = UUID.randomUUID().toString(),
+    val xNorm: Float = 0.5f,
+    val yNorm: Float = 0.5f,
+    val emoji: String = "⭐",
+    val sizeSp: Float = 30f
+)
+
 object AnnotationManager {
 
     private fun fileFor(context: Context, pdfKey: String): File {
@@ -61,6 +69,13 @@ object AnnotationManager {
         if (!dir.exists()) dir.mkdirs()
         val h = pdfKey.hashCode().toLong() and 0xFFFFFFFFL
         return File(dir, "annot_imgs_$h.json")
+    }
+
+    private fun stampsFileFor(context: Context, pdfKey: String): File {
+        val dir = File(context.filesDir, "annotations")
+        if (!dir.exists()) dir.mkdirs()
+        val h = pdfKey.hashCode().toLong() and 0xFFFFFFFFL
+        return File(dir, "annot_stamps_$h.json")
     }
 
     suspend fun load(context: Context, pdfKey: String): Map<Int, List<AnnotationStroke>> =
@@ -226,6 +241,55 @@ object AnnotationManager {
             } catch (_: Exception) {}
         }
 
+    suspend fun loadStamps(context: Context, pdfKey: String): Map<Int, List<AnnotationStamp>> =
+        withContext(Dispatchers.IO) {
+            val f = stampsFileFor(context, pdfKey)
+            if (!f.exists()) return@withContext emptyMap()
+            val result = mutableMapOf<Int, List<AnnotationStamp>>()
+            try {
+                val root = JSONObject(f.readText())
+                for (key in root.keys()) {
+                    val pageIdx = key.toIntOrNull() ?: continue
+                    val arr  = root.getJSONArray(key)
+                    val list = mutableListOf<AnnotationStamp>()
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        list += AnnotationStamp(
+                            id     = o.optString("id", UUID.randomUUID().toString()),
+                            xNorm  = o.getDouble("x").toFloat(),
+                            yNorm  = o.getDouble("y").toFloat(),
+                            emoji  = o.optString("e", "⭐"),
+                            sizeSp = o.optDouble("s", 30.0).toFloat()
+                        )
+                    }
+                    result[pageIdx] = list
+                }
+            } catch (_: Exception) {}
+            result
+        }
+
+    suspend fun saveStamps(context: Context, pdfKey: String, data: Map<Int, List<AnnotationStamp>>) =
+        withContext(Dispatchers.IO) {
+            try {
+                val root = JSONObject()
+                for ((pageIdx, stamps) in data) {
+                    if (stamps.isEmpty()) continue
+                    val arr = JSONArray()
+                    for (st in stamps) {
+                        val o = JSONObject()
+                        o.put("id", st.id)
+                        o.put("x",  st.xNorm.toDouble())
+                        o.put("y",  st.yNorm.toDouble())
+                        o.put("e",  st.emoji)
+                        o.put("s",  st.sizeSp.toDouble())
+                        arr.put(o)
+                    }
+                    root.put(pageIdx.toString(), arr)
+                }
+                stampsFileFor(context, pdfKey).writeText(root.toString())
+            } catch (_: Exception) {}
+        }
+
     suspend fun copyImageToStorage(context: Context, uri: Uri): String =
         withContext(Dispatchers.IO) {
             try {
@@ -250,5 +314,6 @@ object AnnotationManager {
         runCatching { fileFor(context, pdfKey).delete() }
         runCatching { textsFileFor(context, pdfKey).delete() }
         runCatching { imgBoxesFileFor(context, pdfKey).delete() }
+        runCatching { stampsFileFor(context, pdfKey).delete() }
     }
 }

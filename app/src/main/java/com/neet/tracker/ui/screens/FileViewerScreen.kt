@@ -63,7 +63,23 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.awaitFirstDown
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
 import com.neet.tracker.util.AnnotationImageBox
+import com.neet.tracker.util.AnnotationStamp
+
+private val NEET_STAMPS = listOf(
+    "✅","❌","✔️","❎","⭕","💯","⭐","🌟","🔥","💡",
+    "❓","❗","⚠️","🎯","📌","📍","🔑","🏆","📊","🔍",
+    "✏️","📝","💊","🧬","⚡","🔬","🧪","🧮","📈","📉",
+    "#️⃣","*️⃣","0️⃣","1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣",
+    "8️⃣","9️⃣","🔟","🅰️","🅱️","🆗","🆙","🆕","🆓","🔄",
+    "🔴","🟡","🟢","🔵","🟣","🟠","🔺","🔻","▶️","⏩",
+    "🟥","🟨","🟩","🟦","🟪","⬛","⬜","🏅","🥇","🎖️",
+    "💬","🗯️","💭","🗒️","📋","📖","📚","🖊️","🖋️","🖌️",
+    "⚗️","🔭","🌡️","⏱️","⏰","🔆","🔇","🔕","📢","📣",
+)
 
 private val UV_PAGE_MARKS = listOf(
     "✅" to "Got It",
@@ -222,6 +238,9 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var showSolutionWindow  by remember { mutableStateOf(false) }
     var allPageImageBoxes   by remember { mutableStateOf<Map<Int, List<AnnotationImageBox>>>(emptyMap()) }
     var pendingImageTapPos  by remember { mutableStateOf<Pair<Float, Float>?>(null) }
+    var allPageStamps       by remember { mutableStateOf<Map<Int, List<AnnotationStamp>>>(emptyMap()) }
+    var selectedStampEmoji  by remember { mutableStateOf<String?>(null) }
+    var stampPickerExpanded by remember { mutableStateOf(false) }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { pickedUri ->
         pickedUri?.let { uri ->
             pendingImageTapPos?.let { (xNorm, yNorm) ->
@@ -291,6 +310,12 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
         if (tryAsPdf) {
             val loadedImgs = AnnotationManager.loadImageBoxes(context, fileUri)
             if (loadedImgs.isNotEmpty()) allPageImageBoxes = loadedImgs
+        }
+    }
+    LaunchedEffect(fileUri) {
+        if (tryAsPdf) {
+            val loadedStamps = AnnotationManager.loadStamps(context, fileUri)
+            if (loadedStamps.isNotEmpty()) allPageStamps = loadedStamps
         }
     }
 
@@ -675,6 +700,21 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                                     val upd = cur.filter { it.id != id }
                                     allPageImageBoxes = allPageImageBoxes + (currentPage to upd)
                                     annoScope.launch { AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes) }
+                                },
+                                pageStamps     = allPageStamps[currentPage] ?: emptyList(),
+                                onStampPlace   = { xNorm, yNorm ->
+                                    selectedStampEmoji?.let { emoji ->
+                                        val st  = AnnotationStamp(xNorm = xNorm, yNorm = yNorm, emoji = emoji)
+                                        val cur = allPageStamps[currentPage] ?: emptyList()
+                                        allPageStamps = allPageStamps + (currentPage to cur + st)
+                                        annoScope.launch { AnnotationManager.saveStamps(context, fileUri, allPageStamps) }
+                                    }
+                                },
+                                onStampDelete  = { id ->
+                                    val cur = allPageStamps[currentPage] ?: emptyList()
+                                    val upd = cur.filter { it.id != id }
+                                    allPageStamps = allPageStamps + (currentPage to upd)
+                                    annoScope.launch { AnnotationManager.saveStamps(context, fileUri, allPageStamps) }
                                 }
                             )
                             pdfError -> {
@@ -838,7 +878,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 canUndo          = annoUndoStack.isNotEmpty(),
                 canRedo          = annoRedoStack.isNotEmpty(),
                 zoomEnabled      = annotZoomEnabled,
-                onToolChange     = { annotationTool = it; if (it == AnnotationTool.TEXT || it == AnnotationTool.IMAGE) annotZoomEnabled = false },
+                onToolChange     = { annotationTool = it; if (it == AnnotationTool.TEXT || it == AnnotationTool.IMAGE || it == AnnotationTool.STAMP) annotZoomEnabled = false },
                 onColorChange    = { annotationColorArgb = it },
                 onWidthChange    = { annotationWidthDp = it },
                 onUndo = {
@@ -880,8 +920,17 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     annoScope.launch {
                         AnnotationManager.save(context, fileUri, allPageStrokes)
                         AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes)
+                        AnnotationManager.saveStamps(context, fileUri, allPageStamps)
                     }
-                }
+                },
+                selectedStampEmoji  = selectedStampEmoji,
+                stampPickerExpanded = stampPickerExpanded,
+                onStampSelect = { emoji ->
+                    selectedStampEmoji  = emoji
+                    annotationTool      = AnnotationTool.STAMP
+                    annotZoomEnabled    = false
+                },
+                onStampPickerToggle = { stampPickerExpanded = !stampPickerExpanded }
             )
         }
 
@@ -1105,6 +1154,9 @@ private fun UvPdfPage(
     onImageTap: (Float, Float) -> Unit = { _, _ -> },
     onImageBoxUpdate: (AnnotationImageBox) -> Unit = {},
     onImageBoxDelete: (String) -> Unit = {},
+    pageStamps: List<AnnotationStamp> = emptyList(),
+    onStampPlace: (Float, Float) -> Unit = { _, _ -> },
+    onStampDelete: (String) -> Unit = {},
 ) {
     val density = LocalDensity.current
 
@@ -1222,6 +1274,7 @@ private fun UvPdfPage(
                 onPrev              = onPrev,
                 onNext              = onNext,
                 onImageTap          = onImageTap,
+                onStampPlace        = onStampPlace,
             )
         }
 
@@ -1234,6 +1287,17 @@ private fun UvPdfPage(
                 annotationMode = annotationMode,
                 onUpdate      = onImageBoxUpdate,
                 onDelete      = onImageBoxDelete,
+            )
+        }
+
+        // Stamp overlay composables (visible in both read and annotation mode)
+        if (pageStamps.isNotEmpty()) {
+            StampOverlayLayer(
+                stamps        = pageStamps,
+                imageWidthPx  = imageWidthPx,
+                imageHeightPx = imageHeightPx,
+                annotationMode = annotationMode,
+                onDelete      = onStampDelete,
             )
         }
 
@@ -1333,6 +1397,7 @@ private fun UvPdfPage(
                                 AnnotationTool.ARROW       -> "Arrow  ·  Draw a curved labeling arrow"
                                 AnnotationTool.TEXT        -> "Text  ·  Tap to place a text label"
                                 AnnotationTool.IMAGE       -> "Image  ·  Tap anywhere to place an image"
+                                AnnotationTool.STAMP       -> "Stamp  ·  Tap to place selected emoji"
                             },
                             style = MaterialTheme.typography.labelSmall, color = NeonOrange.copy(0.9f)
                         )
@@ -1380,6 +1445,7 @@ private fun PdfAnnotationOverlay(
     onPrev: () -> Unit = {},
     onNext: () -> Unit = {},
     onImageTap: (Float, Float) -> Unit = { _, _ -> },
+    onStampPlace: (Float, Float) -> Unit = { _, _ -> },
 ) {
     val density = LocalDensity.current
     val strokeWidthPx  = with(density) { strokeWidthDp.dp.toPx() }
@@ -1481,12 +1547,16 @@ private fun PdfAnnotationOverlay(
                     }
                 } else {
                     // ── Original single-touch draw-only mode ────────────────────
-                    if (tool == AnnotationTool.TEXT || tool == AnnotationTool.IMAGE) {
+                    if (tool == AnnotationTool.TEXT || tool == AnnotationTool.IMAGE || tool == AnnotationTool.STAMP) {
                         detectTapGestures { offset ->
                             val nx = (offset.x / imageWidthPx).coerceIn(0f, 1f)
                             val ny = (offset.y / imageHeightPx).coerceIn(0f, 1f)
-                            if (tool == AnnotationTool.TEXT) onTextBoxPlace(nx, ny)
-                            else onImageTap(nx, ny)
+                            when (tool) {
+                                AnnotationTool.TEXT  -> onTextBoxPlace(nx, ny)
+                                AnnotationTool.IMAGE -> onImageTap(nx, ny)
+                                AnnotationTool.STAMP -> onStampPlace(nx, ny)
+                                else -> {}
+                            }
                         }
                     } else {
                         // ── Single-touch: draw OR swipe-to-navigate ─────────────
@@ -1823,6 +1893,53 @@ private fun applyImgResize(
     }
 }
 
+// ─── Stamp Overlay Layer ────────────────────────────────────────────────────────
+
+@Composable
+private fun StampOverlayLayer(
+    stamps: List<AnnotationStamp>,
+    imageWidthPx: Float,
+    imageHeightPx: Float,
+    annotationMode: Boolean,
+    onDelete: (String) -> Unit,
+) {
+    val density = LocalDensity.current
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(with(density) { imageHeightPx.toDp() })
+    ) {
+        stamps.forEach { stamp ->
+            key(stamp.id) {
+                val xDp = with(density) { (stamp.xNorm * imageWidthPx).toDp() }
+                val yDp = with(density) { (stamp.yNorm * imageHeightPx).toDp() }
+                Box(modifier = Modifier.offset(xDp, yDp)) {
+                    Text(
+                        text     = stamp.emoji,
+                        fontSize = stamp.sizeSp.sp,
+                        modifier = Modifier.shadow(3.dp, RoundedCornerShape(4.dp))
+                    )
+                    if (annotationMode) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 8.dp, y = (-8).dp)
+                                .size(20.dp)
+                                .shadow(5.dp, CircleShape, spotColor = NeonRed.copy(0.7f))
+                                .background(NeonRed.copy(0.92f), CircleShape)
+                                .border(1.5.dp, Color.White, CircleShape)
+                                .clickable { onDelete(stamp.id) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(11.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ImageOverlayLayer(
     imageBoxes: List<AnnotationImageBox>,
@@ -2010,6 +2127,10 @@ private fun FloatingAnnotToolbar(
     linePointerColorArgb: Int = android.graphics.Color.parseColor("#FF1744"),
     onLinePointerToggle: () -> Unit = {},
     onLinePointerColorChange: (Int) -> Unit = {},
+    selectedStampEmoji: String? = null,
+    stampPickerExpanded: Boolean = false,
+    onStampSelect: (String) -> Unit = {},
+    onStampPickerToggle: () -> Unit = {},
     onDone: () -> Unit,
 ) {
     Box(
@@ -2330,6 +2451,99 @@ private fun FloatingAnnotToolbar(
                     }
 
                     Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(NeonOrange.copy(0.18f)))
+
+                    // ── Stamp Picker (collapsible) ──────────────────────────────
+                    val stampActive = tool == AnnotationTool.STAMP
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(if (stampActive) 4.dp else 0.dp, RoundedCornerShape(9.dp), spotColor = NeonGold.copy(0.4f))
+                            .background(
+                                if (stampActive) NeonGold.copy(0.18f) else Color.White.copy(0.05f),
+                                RoundedCornerShape(9.dp)
+                            )
+                            .border(
+                                if (stampActive) 1.dp else 0.5.dp,
+                                if (stampActive) NeonGold.copy(0.75f) else Color.White.copy(0.15f),
+                                RoundedCornerShape(9.dp)
+                            )
+                            .clickable { onStampPickerToggle() }
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("🔖", fontSize = 13.sp)
+                                Text(
+                                    text = if (selectedStampEmoji != null && stampActive) "Stamp: $selectedStampEmoji" else "Stamps",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (stampActive) NeonGold else Color.White.copy(0.6f),
+                                    fontWeight = if (stampActive) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 10.sp
+                                )
+                                if (selectedStampEmoji != null) {
+                                    Text(
+                                        selectedStampEmoji!!,
+                                        fontSize = 13.sp,
+                                        modifier = Modifier
+                                            .background(NeonGold.copy(0.15f), RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 3.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                            Icon(
+                                if (stampPickerExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                null,
+                                tint = if (stampActive) NeonGold.copy(0.8f) else Color.White.copy(0.4f),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                    AnimatedVisibility(
+                        visible = stampPickerExpanded,
+                        enter   = expandVertically(tween(200)) + fadeIn(tween(200)),
+                        exit    = shrinkVertically(tween(160)) + fadeOut(tween(160))
+                    ) {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(9),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 172.dp),
+                            contentPadding = PaddingValues(top = 4.dp, bottom = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            verticalArrangement   = Arrangement.spacedBy(3.dp)
+                        ) {
+                            items(NEET_STAMPS) { emoji ->
+                                val sel = selectedStampEmoji == emoji && stampActive
+                                Box(
+                                    modifier = Modifier
+                                        .aspectRatio(1f)
+                                        .shadow(if (sel) 4.dp else 0.dp, RoundedCornerShape(6.dp), spotColor = NeonGold.copy(0.5f))
+                                        .background(
+                                            if (sel) NeonGold.copy(0.3f) else Color.White.copy(0.05f),
+                                            RoundedCornerShape(6.dp)
+                                        )
+                                        .border(
+                                            if (sel) 1.5.dp else 0.5.dp,
+                                            if (sel) NeonGold.copy(0.9f) else Color.White.copy(0.12f),
+                                            RoundedCornerShape(6.dp)
+                                        )
+                                        .clickable { onStampSelect(emoji) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(emoji, fontSize = 15.sp, textAlign = TextAlign.Center)
+                                }
+                            }
+                        }
+                    }
+
+                    Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(NeonOrange.copy(0.12f)))
 
                     // ── Row 4: Actions ─────────────────────────────────────────
                     Row(
