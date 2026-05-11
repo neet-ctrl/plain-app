@@ -1898,10 +1898,12 @@ private fun LinePointerOverlay(colorArgb: Int) {
         else                           -> 0f   // fully faded
     }
 
-    // Once fully faded, wipe the dot list so memory is freed.
-    if (globalAlpha <= 0f && dots.isNotEmpty()) {
-        dots           = emptyList()
-        lastDrawTimeMs = 0L
+    // Once fully faded, wipe the dot list — must be in a side-effect, never during composition.
+    LaunchedEffect(globalAlpha) {
+        if (globalAlpha <= 0f && dots.isNotEmpty()) {
+            dots           = emptyList()
+            lastDrawTimeMs = 0L
+        }
     }
 
     Canvas(
@@ -2323,7 +2325,138 @@ private fun AnnotTopHeader(
     }
 }
 
-// ─── 2. Sidebar tool button ─────────────────────────────────────────────────────
+// ─── 2. Compact non-fullscreen annotation toolbar ──────────────────────────────
+//
+// Shown when annotationMode=true AND annotFullScreen=false (a fallback path;
+// in normal flow annotFullScreen is always set alongside annotationMode, so
+// this is rarely visible — but it must compile and behave correctly).
+
+@Composable
+private fun PdfAnnotationToolbar(
+    tool: AnnotationTool,
+    colorArgb: Int,
+    widthDp: Float,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    onToolChange: (AnnotationTool) -> Unit,
+    onColorChange: (Int) -> Unit,
+    onWidthChange: (Float) -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onClearPage: () -> Unit,
+    onDone: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(8.dp, spotColor = Color.Black.copy(0.35f))
+            .background(Color(0xF00E1A2A))
+    ) {
+        // ── Top action row: Undo / Redo / Clear / colour swatch / Done ───────
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            IconButton(onClick = onUndo, enabled = canUndo, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.Undo, null,
+                    tint = if (canUndo) NeonCyan else Color.White.copy(0.2f),
+                    modifier = Modifier.size(18.dp))
+            }
+            IconButton(onClick = onRedo, enabled = canRedo, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.Redo, null,
+                    tint = if (canRedo) NeonCyan else Color.White.copy(0.2f),
+                    modifier = Modifier.size(18.dp))
+            }
+            Box(modifier = Modifier.width(0.5.dp).height(20.dp).background(Color.White.copy(0.18f)))
+            IconButton(onClick = onClearPage, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.DeleteSweep, null,
+                    tint = NeonRed.copy(0.8f), modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.weight(1f))
+            // Current colour swatch
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .shadow(4.dp, CircleShape, spotColor = Color(colorArgb).copy(0.5f))
+                    .border(1.5.dp, Color.White.copy(0.35f), CircleShape)
+                    .clip(CircleShape)
+                    .background(Color(colorArgb))
+            )
+            Spacer(Modifier.width(6.dp))
+            // Done button
+            Box(
+                modifier = Modifier
+                    .shadow(4.dp, RoundedCornerShape(8.dp), spotColor = NeonGreen.copy(0.4f))
+                    .background(NeonGreen.copy(0.22f), RoundedCornerShape(8.dp))
+                    .border(1.dp, NeonGreen.copy(0.7f), RoundedCornerShape(8.dp))
+                    .clickable(onClick = onDone)
+                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.Check, null, tint = NeonGreen, modifier = Modifier.size(13.dp))
+                    Text("Done", style = MaterialTheme.typography.labelSmall, color = NeonGreen, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // ── Divider ──────────────────────────────────────────────────────────
+        Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color.White.copy(0.1f)))
+
+        // ── Tool selector strip ───────────────────────────────────────────────
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SIDEBAR_TOOLS.forEach { (t, icon, label) ->
+                if (t == null) return@forEach   // skip laser in compact bar
+                val sel = tool == t
+                val accent = when (t) {
+                    AnnotationTool.HIGHLIGHTER -> Color(0xFFFF6F00)
+                    AnnotationTool.ERASER      -> Color(0xFFE53935)
+                    AnnotationTool.TEXT        -> Color(0xFF00ACC1)
+                    AnnotationTool.IMAGE       -> Color(0xFF7C4DFF)
+                    AnnotationTool.STAMP       -> Color(0xFFFF8F00)
+                    else                       -> NeonCyan
+                }
+                Box(
+                    modifier = Modifier
+                        .shadow(if (sel) 6.dp else 0.dp, RoundedCornerShape(10.dp), spotColor = accent.copy(0.45f))
+                        .background(
+                            if (sel) accent.copy(0.22f) else Color.White.copy(0.06f),
+                            RoundedCornerShape(10.dp)
+                        )
+                        .border(
+                            if (sel) 1.dp else 0.5.dp,
+                            if (sel) accent.copy(0.8f) else Color.White.copy(0.12f),
+                            RoundedCornerShape(10.dp)
+                        )
+                        .clickable { onToolChange(t) }
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Icon(icon, null,
+                            tint = if (sel) accent else Color.White.copy(0.55f),
+                            modifier = Modifier.size(16.dp))
+                        Text(label, fontSize = 9.sp,
+                            color = if (sel) accent else Color.White.copy(0.45f),
+                            fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── 3. Sidebar tool button ─────────────────────────────────────────────────────
 @Composable
 private fun SidebarToolButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -2352,7 +2485,7 @@ private fun SidebarToolButton(
     }
 }
 
-// ─── 3. Sidebar ────────────────────────────────────────────────────────────────
+// ─── 4. Sidebar ────────────────────────────────────────────────────────────────
 @Composable
 private fun AnnotSidebar(
     isVertical: Boolean,
@@ -2435,7 +2568,7 @@ private fun AnnotSidebar(
     }
 }
 
-// ─── 4. Shared helpers inside sheets ───────────────────────────────────────────
+// ─── 5. Shared helpers inside sheets ───────────────────────────────────────────
 
 @Composable
 private fun SheetColorRow(
@@ -2500,7 +2633,7 @@ private fun SheetToggleRow(label: String, checked: Boolean, onCheckedChange: (Bo
     }
 }
 
-// ─── 5. Bottom-sheet for each tool ─────────────────────────────────────────────
+// ─── 6. Bottom-sheet for each tool ─────────────────────────────────────────────
 
 @Composable
 private fun AnnotToolSheet(
@@ -2817,7 +2950,7 @@ private fun ImageSheetContent(
     }
 }
 
-// ─── 6. Laser pointer sheet ─────────────────────────────────────────────────────
+// ─── 7. Laser pointer sheet ─────────────────────────────────────────────────────
 @Composable
 private fun LaserSheet(
     linePointerEnabled: Boolean,
