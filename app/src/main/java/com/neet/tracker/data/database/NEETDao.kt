@@ -266,6 +266,14 @@ interface NEETDao {
     @Query("SELECT * FROM test_papers ORDER BY createdAt ASC")
     fun getAllTestPapers(): Flow<List<TestPaper>>
 
+    // ── Global Search extras ──────────────────────────────────────────────────
+    @Query("SELECT * FROM notebook_chapters ORDER BY rowid ASC")
+    fun getAllNotebookChapters(): Flow<List<NotebookChapter>>
+    @Query("SELECT * FROM diagrams ORDER BY subject ASC")
+    fun getAllDiagrams(): Flow<List<Diagram>>
+    @Query("SELECT * FROM chapter_short_notes ORDER BY subject ASC")
+    fun getAllChapterShortNotes(): Flow<List<ChapterShortNote>>
+
     // ── Home card counts ──────────────────────────────────────────────────────
     @Query("SELECT COUNT(*) FROM notebooks")         fun countNotebooks(): Flow<Int>
     @Query("SELECT COUNT(*) FROM books")             fun countBooks(): Flow<Int>

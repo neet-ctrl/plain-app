@@ -248,5 +248,7 @@ fun NEETNavHost() {
             val fileUri = URLDecoder.decode(backStack.arguments?.getString("encodedUri") ?: "", "UTF-8")
             FileViewerScreen(navController, fileUri, title)
         }
+
+        composable(Routes.GLOBAL_SEARCH) { GlobalSearchScreen(navController) }
     }
 }

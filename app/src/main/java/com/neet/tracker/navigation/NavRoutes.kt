@@ -56,6 +56,9 @@ object Routes {
     const val ERROR_NOTEBOOK      = "error_notebook"
     const val REVISION_SCHEDULER  = "revision_scheduler"
 
+    // Global Search
+    const val GLOBAL_SEARCH       = "global_search"
+
     // File Viewer
     const val FILE_VIEWER = "file_viewer/{encodedUri}/{title}?solutionUri={solutionUri}"
 

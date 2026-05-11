@@ -757,6 +757,64 @@ fun HomeHeader(profile: StudentProfile?, navController: NavController) {
                     )
                 }
             }
+
+            // ── Global Search Button ───────────────────────────────────────────
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(8.dp, RoundedCornerShape(16.dp), spotColor = NeonPurple.copy(0.30f))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(NeonPurple.copy(0.14f), NeonCyan.copy(0.08f), NeonPurple.copy(0.10f))
+                        ),
+                        RoundedCornerShape(16.dp)
+                    )
+                    .border(
+                        1.dp,
+                        Brush.linearGradient(
+                            listOf(NeonPurple.copy(0.45f), NeonCyan.copy(0.22f), NeonPurple.copy(0.28f))
+                        ),
+                        RoundedCornerShape(16.dp)
+                    )
+                    .clickable { navController.navigate(Routes.GLOBAL_SEARCH) }
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.size(34.dp)
+                            .background(
+                                Brush.linearGradient(listOf(NeonPurple.copy(0.30f), NeonCyan.copy(0.15f))),
+                                RoundedCornerShape(10.dp)
+                            )
+                            .border(0.5.dp, NeonPurple.copy(0.50f), RoundedCornerShape(10.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Search, null, tint = NeonPurple, modifier = Modifier.size(18.dp))
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            "Search Everything",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Mnemonics · PYQ · Errors · Dictionary & more",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(0.40f)
+                        )
+                    }
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        null,
+                        tint = NeonPurple.copy(0.55f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
     }
 }
