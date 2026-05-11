@@ -1510,6 +1510,88 @@ fun ChapterInputField(
     }
 }
 
+// ─── JSON Validation Error Dialog ────────────────────────────────────────────
+
+@Composable
+fun JsonValidationErrorDialog(
+    errorMessage: String,
+    autoFixed: String?,
+    onAutoCorrect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    NEETDialog(title = "JSON Error", icon = Icons.Default.Warning, accentColor = NeonRed, onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .background(NeonRed.copy(0.08f), RoundedCornerShape(12.dp))
+                    .border(0.5.dp, NeonRed.copy(0.4f), RoundedCornerShape(12.dp))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Default.BugReport, null, tint = NeonRed, modifier = Modifier.size(15.dp))
+                    Text("Invalid JSON Format", style = MaterialTheme.typography.labelMedium, color = NeonRed, fontWeight = FontWeight.Bold)
+                }
+                Text(errorMessage, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.8f), lineHeight = 18.sp)
+            }
+
+            if (autoFixed != null) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.AutoFixHigh, null, tint = NeonGreen, modifier = Modifier.size(14.dp))
+                        Text("Auto-corrected preview:", style = MaterialTheme.typography.labelSmall, color = NeonGreen, fontWeight = FontWeight.Bold)
+                    }
+                    val scrollState = rememberScrollState()
+                    Box(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 130.dp)
+                            .background(Color(0xFF050E22), RoundedCornerShape(10.dp))
+                            .border(0.5.dp, NeonGreen.copy(0.4f), RoundedCornerShape(10.dp))
+                            .padding(10.dp)
+                            .verticalScroll(scrollState)
+                    ) {
+                        Text(
+                            autoFixed,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                            ),
+                            color = NeonGreen
+                        )
+                    }
+                }
+                Button(
+                    onClick = { onAutoCorrect(autoFixed) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonGreen.copy(0.2f)),
+                    border = BorderStroke(1.dp, NeonGreen.copy(0.7f))
+                ) {
+                    Icon(Icons.Default.AutoFixHigh, null, tint = NeonGreen, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Apply Auto-correct & Save", color = NeonGreen, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(NeonOrange.copy(0.08f), RoundedCornerShape(10.dp))
+                        .border(0.5.dp, NeonOrange.copy(0.3f), RoundedCornerShape(10.dp))
+                        .padding(10.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.Info, null, tint = NeonOrange, modifier = Modifier.size(14.dp))
+                        Text("Auto-correct could not fix this. Please review your JSON manually.", style = MaterialTheme.typography.labelSmall, color = NeonOrange.copy(0.85f), lineHeight = 17.sp)
+                    }
+                }
+            }
+
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                border = BorderStroke(1.dp, Color.White.copy(0.2f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+            ) { Text("Dismiss") }
+        }
+    }
+}
+
 // ─── Chapter Simple Add Dialog ────────────────────────────────────────────────
 
 @Composable

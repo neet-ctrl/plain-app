@@ -29,8 +29,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.neet.tracker.data.models.*
 import com.neet.tracker.navigation.fileViewerRoute
+import com.neet.tracker.navigation.diaryEntryRoute
 import com.neet.tracker.navigation.diagramViewerRoute
 import com.neet.tracker.navigation.shortNoteViewerRoute
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.neet.tracker.ui.components.*
 import com.neet.tracker.ui.dialogs.*
 import com.neet.tracker.ui.theme.*
@@ -38,17 +42,26 @@ import com.neet.tracker.ui.viewmodels.*
 
 // ─── Universal Calendar ────────────────────────────────────────────────────────
 
+private sealed class CalendarDetail {
+    data class EventDetail(val event: DateEvent) : CalendarDetail()
+    data class DiaryDetail(val diary: DailyDiary) : CalendarDetail()
+    data class PlannerDetail(val plannerEvent: PlannerEvent, val entryId: String) : CalendarDetail()
+}
+
 @Composable
 fun UniversalCalendarScreen(navController: NavController) {
     val eventVm: DateEventViewModel = hiltViewModel()
     val diaryVm: DiaryViewModel = hiltViewModel()
     val dayPlannerVm: PlannerViewModel = hiltViewModel()
 
-    val dateEvents    by eventVm.allEvents.collectAsState()
-    val diaryEntries  by diaryVm.entries.collectAsState()
+    val dateEvents     by eventVm.allEvents.collectAsState()
+    val diaryEntries   by diaryVm.entries.collectAsState()
     val plannerEntries by dayPlannerVm.dayEntries.collectAsState()
 
-    val allDates = (dateEvents.map { it.date } + diaryEntries.map { it.date } + plannerEntries.map { it.date }).distinct().sorted()
+    val allDates = (dateEvents.map { it.date } + diaryEntries.map { it.date } + plannerEntries.map { it.date })
+        .distinct().sorted()
+
+    var calendarDetail by remember { mutableStateOf<CalendarDetail?>(null) }
 
     SpaceBackground {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -65,7 +78,8 @@ fun UniversalCalendarScreen(navController: NavController) {
                     val eventsForDate  = dateEvents.filter { it.date == date }
                     val diariesForDate = diaryEntries.filter { it.date == date }
                     val plansForDate   = plannerEntries.filter { it.date == date }
-                    val total = eventsForDate.size + diariesForDate.size + plansForDate.size
+                    val plannerPairs   = plansForDate.flatMap { entry -> entry.events.map { ev -> ev to entry } }
+                    val total = eventsForDate.size + diariesForDate.size + plannerPairs.size
 
                     GlassCard(glowColor = NeonCyan, modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -84,11 +98,224 @@ fun UniversalCalendarScreen(navController: NavController) {
                                 }
                             }
                             NeonDivider(NeonCyan.copy(0.3f))
-                            if (eventsForDate.isNotEmpty())  CalendarSection("Events",    NeonGreen, eventsForDate.map { it.name })
-                            if (diariesForDate.isNotEmpty()) CalendarSection("Diary",     NeonGold,  diariesForDate.map { it.nickName.ifBlank { "Diary Entry" } })
-                            if (plansForDate.isNotEmpty())   CalendarSection("Day Plan",  NeonCyan,  plansForDate.flatMap { it.events.map { e -> e.name } })
+                            if (eventsForDate.isNotEmpty()) {
+                                CalendarSectionTappable(
+                                    label = "Events", color = NeonGreen,
+                                    items = eventsForDate.map { it.name.ifBlank { "Event" } to Icons.Default.Event },
+                                    onItemTap = { i -> calendarDetail = CalendarDetail.EventDetail(eventsForDate[i]) }
+                                )
+                            }
+                            if (diariesForDate.isNotEmpty()) {
+                                CalendarSectionTappable(
+                                    label = "Diary", color = NeonGold,
+                                    items = diariesForDate.map { (it.nickName.ifBlank { "Diary Entry" }) to Icons.Default.AutoStories },
+                                    onItemTap = { i -> calendarDetail = CalendarDetail.DiaryDetail(diariesForDate[i]) }
+                                )
+                            }
+                            if (plannerPairs.isNotEmpty()) {
+                                CalendarSectionTappable(
+                                    label = "Day Plan", color = NeonCyan,
+                                    items = plannerPairs.map { (ev, _) -> ev.name.ifBlank { "Plan" } to Icons.Default.Schedule },
+                                    onItemTap = { i ->
+                                        val (ev, entry) = plannerPairs[i]
+                                        calendarDetail = CalendarDetail.PlannerDetail(ev, entry.id)
+                                    }
+                                )
+                            }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    // ── Detail Dialog ───────────────────────────────────────────────────────────
+    calendarDetail?.let { detail ->
+        Dialog(
+            onDismissRequest = { calendarDetail = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.96f)
+                    .wrapContentHeight(),
+                contentAlignment = Alignment.Center
+            ) {
+                val scrollState = rememberScrollState()
+                Column(modifier = Modifier.verticalScroll(scrollState)) {
+                    when (detail) {
+                        is CalendarDetail.EventDetail -> {
+                            val freshEvent = dateEvents.find { it.id == detail.event.id } ?: detail.event
+                            val idx = (dateEvents.filter { it.date == freshEvent.date }.indexOf(freshEvent) + 1).coerceAtLeast(1)
+                            DateEventCard(
+                                event = freshEvent,
+                                index = idx,
+                                onUpdate = { updated -> eventVm.save(updated) },
+                                onDelete = { eventVm.delete(freshEvent); calendarDetail = null },
+                                onShiftToNextDate = {
+                                    val shifted = freshEvent.copy(date = shiftDate(freshEvent.date))
+                                    eventVm.save(shifted)
+                                    eventVm.delete(freshEvent)
+                                    calendarDetail = null
+                                },
+                                onViewFile = if (freshEvent.fileUri.isNotBlank()) {
+                                    { navController.navigate(fileViewerRoute(freshEvent.fileUri, freshEvent.name)) }
+                                } else null,
+                                onUploadFile = null,
+                                onRemoveFile = null
+                            )
+                        }
+                        is CalendarDetail.DiaryDetail -> {
+                            val freshDiary = diaryEntries.find { it.id == detail.diary.id } ?: detail.diary
+                            CalendarDiaryDetailCard(
+                                diary = freshDiary,
+                                onOpenEditor = {
+                                    navController.navigate(diaryEntryRoute(freshDiary.id))
+                                    calendarDetail = null
+                                },
+                                onDelete = { diaryVm.delete(freshDiary); calendarDetail = null },
+                                onDismiss = { calendarDetail = null }
+                            )
+                        }
+                        is CalendarDetail.PlannerDetail -> {
+                            val freshEntry = plannerEntries.find { it.id == detail.entryId }
+                            val freshEvent = freshEntry?.events?.find { it.id == detail.plannerEvent.id } ?: detail.plannerEvent
+                            val freshIdx   = (freshEntry?.events?.indexOf(freshEvent)?.plus(1) ?: 1).coerceAtLeast(1)
+                            PlannerEventCard(
+                                event = freshEvent,
+                                index = freshIdx,
+                                accentColor = NeonCyan,
+                                onUpdate = { updated ->
+                                    freshEntry?.let { entry ->
+                                        val newEvents = entry.events.toMutableList().also { list ->
+                                            val i = list.indexOfFirst { it.id == updated.id }
+                                            if (i >= 0) list[i] = updated
+                                        }
+                                        dayPlannerVm.saveDay(entry.copy(events = newEvents))
+                                    }
+                                },
+                                onDelete = {
+                                    freshEntry?.let { entry ->
+                                        dayPlannerVm.saveDay(entry.copy(events = entry.events.filter { it.id != freshEvent.id }))
+                                    }
+                                    calendarDetail = null
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarSectionTappable(
+    label: String,
+    color: Color,
+    items: List<Pair<String, ImageVector>>,
+    onItemTap: (Int) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(modifier = Modifier.size(6.dp, 18.dp).background(color, RoundedCornerShape(3.dp)))
+            Text(label, style = MaterialTheme.typography.labelLarge, color = color, fontWeight = FontWeight.ExtraBold)
+        }
+        items.forEachIndexed { index, (name, icon) ->
+            Row(
+                modifier = Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(color.copy(0.07f), RoundedCornerShape(8.dp))
+                    .border(0.5.dp, color.copy(0.22f), RoundedCornerShape(8.dp))
+                    .clickable { onItemTap(index) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(modifier = Modifier.size(5.dp).background(color, CircleShape))
+                Icon(icon, null, tint = color.copy(0.7f), modifier = Modifier.size(13.dp))
+                Text(name.ifBlank { "—" }, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.8f), modifier = Modifier.weight(1f))
+                Icon(Icons.Default.OpenInNew, null, tint = color.copy(0.45f), modifier = Modifier.size(12.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarDiaryDetailCard(
+    diary: DailyDiary,
+    onOpenEditor: () -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    GlassCard(glowColor = NeonGold, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ThreeDIconBox(icon = Icons.Default.AutoStories, tint = NeonGold, size = 42.dp, iconSize = 22.dp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(diary.date, style = MaterialTheme.typography.headlineSmall, color = NeonGold, fontWeight = FontWeight.ExtraBold)
+                    if (diary.nickName.isNotBlank()) {
+                        Text(diary.nickName, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.65f))
+                    }
+                }
+                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Delete, null, tint = NeonRed.copy(0.7f), modifier = Modifier.size(18.dp))
+                }
+            }
+            NeonDivider(NeonGold)
+            if (diary.tags.isNotEmpty()) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    diary.tags.take(6).forEach { tag ->
+                        Box(
+                            modifier = Modifier
+                                .background(NeonPurple.copy(0.15f), RoundedCornerShape(12.dp))
+                                .border(0.5.dp, NeonPurple.copy(0.4f), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text("# $tag", style = MaterialTheme.typography.labelSmall, color = NeonPurple)
+                        }
+                    }
+                }
+            }
+            if (diary.content.isNotBlank()) {
+                Box(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(Color.White.copy(0.04f), RoundedCornerShape(10.dp))
+                        .border(0.5.dp, NeonGold.copy(0.2f), RoundedCornerShape(10.dp))
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        diary.content.take(400) + if (diary.content.length > 400) "…" else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(0.8f),
+                        lineHeight = 20.sp
+                    )
+                }
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(Color.White.copy(0.03f), RoundedCornerShape(10.dp))
+                        .padding(12.dp)
+                ) {
+                    Text("No content yet. Tap 'Open Editor' to write.", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.35f))
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                    border = BorderStroke(1.dp, Color.White.copy(0.2f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                ) { Text("Close") }
+                Button(
+                    onClick = onOpenEditor,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonGold.copy(0.2f)),
+                    border = BorderStroke(1.dp, NeonGold.copy(0.6f))
+                ) {
+                    Icon(Icons.Default.Edit, null, tint = NeonGold, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Open Editor", color = NeonGold, fontWeight = FontWeight.Bold)
                 }
             }
         }

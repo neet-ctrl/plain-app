@@ -29,6 +29,7 @@ import com.neet.tracker.data.models.*
 import com.neet.tracker.navigation.fileViewerRoute
 import com.neet.tracker.ui.components.*
 import com.neet.tracker.ui.dialogs.DialogTextField
+import com.neet.tracker.ui.dialogs.JsonValidationErrorDialog
 import com.neet.tracker.ui.dialogs.NeetDatePickerButton
 import com.neet.tracker.ui.theme.*
 import com.neet.tracker.ui.viewmodels.ProfileViewModel
@@ -321,6 +322,10 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
                     var chLibExpanded by remember { mutableStateOf(false) }
                     var jsonInput by remember { mutableStateOf(ChapterStore.loadJson(context)) }
                     val chapCount = remember(jsonInput) { ChapterStore.getChapters(context).size }
+                    var showJsonError by remember { mutableStateOf(false) }
+                    var jsonErrorMsg by remember { mutableStateOf("") }
+                    var jsonAutoFixed by remember { mutableStateOf<String?>(null) }
+                    var jsonSaveSuccess by remember { mutableStateOf(false) }
                     val fmt1Example = """{"Physics":["Units and Measurements","Motion in a Straight Line"],"Chemistry":["Some Basic Concepts","Atomic Structure"],"Biology":["The Living World","Biological Classification"]}"""
                     val fmt2Example = """["Units and Measurements","Some Basic Concepts","The Living World"]"""
 
@@ -409,7 +414,7 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
                                     Text("Paste your chapter JSON below:", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
                                     OutlinedTextField(
                                         value = jsonInput,
-                                        onValueChange = { jsonInput = it },
+                                        onValueChange = { jsonInput = it; jsonSaveSuccess = false },
                                         placeholder = { Text("Paste JSON here...", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.25f)) },
                                         minLines = 4,
                                         maxLines = 10,
@@ -426,14 +431,55 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
                                     )
 
                                     Button(
-                                        onClick = { ChapterStore.saveJson(context, jsonInput) },
+                                        onClick = {
+                                            val trimmed = jsonInput.trim()
+                                            if (trimmed.isBlank()) {
+                                                ChapterStore.saveJson(context, "")
+                                                jsonSaveSuccess = true
+                                            } else {
+                                                val err = ChapterStore.validateJson(trimmed)
+                                                if (err == null) {
+                                                    ChapterStore.saveJson(context, trimmed)
+                                                    jsonSaveSuccess = true
+                                                } else {
+                                                    jsonErrorMsg = err
+                                                    jsonAutoFixed = ChapterStore.autoCorrectJson(trimmed)
+                                                    showJsonError = true
+                                                }
+                                            }
+                                        },
                                         modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(containerColor = NeonGreen.copy(0.2f)),
-                                        border = BorderStroke(1.dp, NeonGreen.copy(0.7f))
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (jsonSaveSuccess) StatusCompleted.copy(0.2f) else NeonGreen.copy(0.2f)
+                                        ),
+                                        border = BorderStroke(1.dp, if (jsonSaveSuccess) StatusCompleted.copy(0.8f) else NeonGreen.copy(0.7f))
                                     ) {
-                                        Icon(Icons.Default.Save, null, tint = NeonGreen, modifier = Modifier.size(16.dp))
+                                        Icon(
+                                            if (jsonSaveSuccess) Icons.Default.CheckCircle else Icons.Default.Save,
+                                            null,
+                                            tint = if (jsonSaveSuccess) StatusCompleted else NeonGreen,
+                                            modifier = Modifier.size(16.dp)
+                                        )
                                         Spacer(Modifier.width(8.dp))
-                                        Text("Save Chapter Library", color = NeonGreen, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            if (jsonSaveSuccess) "Saved!" else "Save Chapter Library",
+                                            color = if (jsonSaveSuccess) StatusCompleted else NeonGreen,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    if (showJsonError) {
+                                        JsonValidationErrorDialog(
+                                            errorMessage = jsonErrorMsg,
+                                            autoFixed = jsonAutoFixed,
+                                            onAutoCorrect = { fixed ->
+                                                jsonInput = fixed
+                                                ChapterStore.saveJson(context, fixed)
+                                                showJsonError = false
+                                                jsonSaveSuccess = true
+                                            },
+                                            onDismiss = { showJsonError = false }
+                                        )
                                     }
 
                                     NeonDivider(NeonRed.copy(0.35f))
