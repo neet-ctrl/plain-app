@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -663,7 +665,13 @@ fun NEETTopBar(
 // ─── 3D Search Bar ────────────────────────────────────────────────────────────
 
 @Composable
-fun NeatSearchBar(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier, placeholder: String = "Search...") {
+fun NeatSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "Search...",
+    focusRequester: FocusRequester? = null,
+) {
     val focused = remember { mutableStateOf(false) }
     val borderAlpha by animateFloatAsState(if (focused.value) 0.80f else 0.28f, label = "focus_border")
     val glowAlpha by animateFloatAsState(if (focused.value) 0.25f else 0.08f, label = "focus_glow")
@@ -704,7 +712,9 @@ fun NeatSearchBar(query: String, onQueryChange: (String) -> Unit, modifier: Modi
         BasicTextField(
             value = query,
             onValueChange = onQueryChange,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).then(
+                if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier
+            ),
             singleLine = true,
             textStyle = TextStyle(color = Color.White, fontSize = 14.sp, fontFamily = ExoFont),
             decorationBox = { inner ->

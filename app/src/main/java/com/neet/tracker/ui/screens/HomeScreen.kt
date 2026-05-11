@@ -25,6 +25,8 @@ import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -81,7 +83,19 @@ fun HomeScreen(
     val context      = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val profile by vm.profile.collectAsState()
-    var searchQuery by remember { mutableStateOf("") }
+    var searchQuery    by remember { mutableStateOf("") }
+    var searchExpanded by remember { mutableStateOf(false) }
+    val searchFocusRequester = remember { FocusRequester() }
+
+    // Auto-focus the text field after the expand animation finishes
+    LaunchedEffect(searchExpanded) {
+        if (searchExpanded) {
+            kotlinx.coroutines.delay(220)
+            runCatching { searchFocusRequester.requestFocus() }
+        } else {
+            searchQuery = ""
+        }
+    }
 
     // ── All-Files storage permission state ────────────────────────────────────
     fun checkStoragePermission() =
@@ -252,7 +266,101 @@ fun HomeScreen(
             HomeHeader(profile = profile, navController = navController)
 
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search 16 modules...")
+
+                // ── Collapsed search pill (default) ──────────────────────────
+                AnimatedVisibility(
+                    visible = !searchExpanded,
+                    enter   = expandVertically(tween(260, easing = EaseOutBack)) + fadeIn(tween(200)),
+                    exit    = shrinkVertically(tween(200)) + fadeOut(tween(150))
+                ) {
+                    val pillShape = RoundedCornerShape(50.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(6.dp, pillShape, spotColor = NeonCyan.copy(0.18f))
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(Color(0xFF0D1A30), NeonCyan.copy(0.04f), Color(0xFF070E1C))
+                                ),
+                                pillShape
+                            )
+                            .border(
+                                0.8.dp,
+                                Brush.linearGradient(
+                                    listOf(Color.White.copy(0.18f), NeonCyan.copy(0.30f), Color.White.copy(0.06f))
+                                ),
+                                pillShape
+                            )
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { searchExpanded = true }
+                            .padding(horizontal = 14.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Search, null,
+                            tint     = NeonCyan.copy(0.75f),
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            "Search 18 modules…",
+                            style    = MaterialTheme.typography.labelMedium,
+                            color    = Color.White.copy(0.30f),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            Icons.Default.KeyboardArrowDown, null,
+                            tint     = NeonCyan.copy(0.45f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                // ── Expanded search bar + collapse button ─────────────────────
+                AnimatedVisibility(
+                    visible = searchExpanded,
+                    enter   = expandVertically(tween(300, easing = EaseOutBack)) + fadeIn(tween(240)),
+                    exit    = shrinkVertically(tween(220)) + fadeOut(tween(160))
+                ) {
+                    Row(
+                        modifier            = Modifier.fillMaxWidth(),
+                        verticalAlignment   = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        NeatSearchBar(
+                            query            = searchQuery,
+                            onQueryChange    = { searchQuery = it },
+                            placeholder      = "Search 18 modules…",
+                            modifier         = Modifier.weight(1f),
+                            focusRequester   = searchFocusRequester
+                        )
+                        // Collapse button
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .shadow(4.dp, RoundedCornerShape(14.dp), spotColor = NeonCyan.copy(0.18f))
+                                .background(
+                                    Brush.linearGradient(listOf(Color(0xFF0D1A30), NeonCyan.copy(0.06f))),
+                                    RoundedCornerShape(14.dp)
+                                )
+                                .border(0.8.dp, NeonCyan.copy(0.28f), RoundedCornerShape(14.dp))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { searchExpanded = false },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.KeyboardArrowUp, null,
+                                tint     = NeonCyan.copy(0.80f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(10.dp))
 
                 // ─── Universal Reminder Card ─────────────────────────────────
