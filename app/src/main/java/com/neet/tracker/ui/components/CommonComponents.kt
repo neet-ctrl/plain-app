@@ -306,10 +306,11 @@ fun NEETCard(
         Status.CROSSED   -> StatusCross
         null             -> glowColor
     }
+    val glowDuration = remember { (1800..2800).random() }
     val infiniteTransition = rememberInfiniteTransition(label = "neet_card")
     val glowPulse by infiniteTransition.animateFloat(
         initialValue = 0.18f, targetValue = 0.42f,
-        animationSpec = infiniteRepeatable(tween((1800..2800).random(), easing = EaseInOutSine), RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(tween(glowDuration, easing = EaseInOutSine), RepeatMode.Reverse),
         label = "pulse"
     )
     var pressed by remember { mutableStateOf(false) }

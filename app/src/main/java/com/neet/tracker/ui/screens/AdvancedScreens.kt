@@ -871,10 +871,11 @@ fun Sequence3DItem(
         else              -> NeonGold
     }
 
+    val glowDuration = remember { (2000..3000).random() }
     val infiniteTransition = rememberInfiniteTransition(label = "seq_${seq.id}")
     val glowPulse by infiniteTransition.animateFloat(
         initialValue = 0.18f, targetValue = 0.42f,
-        animationSpec = infiniteRepeatable(tween((2000..3000).random(), easing = EaseInOutSine), RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(tween(glowDuration, easing = EaseInOutSine), RepeatMode.Reverse),
         label = "seq_glow"
     )
 

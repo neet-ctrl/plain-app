@@ -46,7 +46,9 @@ fun OfflineTestsScreen(navController: NavController, vm: TestPaperViewModel = hi
 
 @Composable
 fun TestListScreen(navController: NavController, title: String, breadcrumb: String, color: Color, type: String, vm: TestPaperViewModel) {
-    val tests by (if (type == "ONLINE") vm.onlineTests else vm.offlineTests).collectAsState()
+    val onlineTests  by vm.onlineTests.collectAsState()
+    val offlineTests by vm.offlineTests.collectAsState()
+    val tests = if (type == "ONLINE") onlineTests else offlineTests
     var searchQuery by remember { mutableStateOf("") }
     var selectedTag by remember { mutableStateOf<String?>(null) }
     var showAdd by remember { mutableStateOf(false) }
