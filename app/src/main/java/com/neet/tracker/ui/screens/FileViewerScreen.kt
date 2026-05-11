@@ -250,9 +250,13 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var isHorizontalScroll by remember { mutableStateOf(false) }
     var zoomEnabled        by remember { mutableStateOf(false) }
 
-    // ── Annotation fullscreen ──────────────────────────────────────────────────
+    // ── Annotation fullscreen + sidebar ───────────────────────────────────────
     var annotFullScreen    by remember { mutableStateOf(false) }
     var annotZoomEnabled   by remember { mutableStateOf(false) }
+    // Sidebar state — draggable, flippable vertical↔horizontal
+    var sidebarIsVertical  by remember { mutableStateOf(true) }
+    var sidebarOffsetX     by remember { mutableFloatStateOf(0f) }
+    var sidebarOffsetY     by remember { mutableFloatStateOf(240f) }
     var showToolSheet      by remember { mutableStateOf(false) }
     var showLaserSheet     by remember { mutableStateOf(false) }
     var showAnnotThumbs    by remember { mutableStateOf(false) }
@@ -754,156 +758,99 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 )
             }
 
-            if (annotationMode && annotFullScreen && tryAsPdf && pdfPages.isNotEmpty()) {
-                // Annotation mode: fixed sidebar on LEFT, PDF fills the RIGHT — matches reference layout
-                Row(modifier = Modifier.weight(1f)) {
-                    AnnotSidebarFixed(
-                        tool               = annotationTool,
-                        linePointerEnabled = linePointerEnabled,
-                        onToolSelect       = { t ->
-                            annotationTool  = t
-                            if (t == AnnotationTool.TEXT || t == AnnotationTool.IMAGE || t == AnnotationTool.STAMP) annotZoomEnabled = false
-                            showToolSheet   = true
-                            showLaserSheet  = false
-                            showAnnotThumbs = false
-                        },
-                        onLaserTap = {
-                            showLaserSheet  = true
-                            showToolSheet   = false
-                            showAnnotThumbs = false
+            Box(
+                modifier = Modifier.weight(1f)
+                    .clickable(enabled = focusMode) { focusMode = false }
+            ) {
+                when {
+                    fileUri.isBlank() -> FileErrorView()
+                    isImage -> {
+                        // Local file image (e.g. copied photo) — render directly from File.
+                        if (localFile != null) {
+                            AsyncImage(
+                                model              = localFile,
+                                contentDescription = title,
+                                modifier           = Modifier.fillMaxSize()
+                            )
+                        } else if (uri != null) {
+                            ImageViewer(uri = uri, title = title)
+                        } else {
+                            FileErrorView()
                         }
-                    )
-                    Box(modifier = Modifier.weight(1f)) {
-                        pdfPageContent()
-                        // Bookmark ribbon
-                        if (isBookmarked) {
-                            Box(
-                                modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp)
-                                    .background(NeonGold.copy(0.9f), RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp, topEnd = 6.dp))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    Text("⭐", fontSize = 11.sp)
-                                    Text("Bookmarked", style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFF1A1000), fontWeight = FontWeight.Bold)
+                    }
+                    tryAsPdf -> {
+                        when {
+                            pdfLoading -> UvLoadingView()
+                            pdfPages.isNotEmpty() -> pdfPageContent()
+                            pdfError -> {
+                                if (uri != null) {
+                                    FileFailureLog(
+                                        uri = uri, title = title,
+                                        detectedMime = mimeType, detectedExt = extension,
+                                        resolvedName = resolvedDisplayName, rawUri = fileUri,
+                                        errorMessage = pdfErrorMessage, context = context
+                                    )
+                                } else {
+                                    // Local file that couldn't be rendered as PDF (e.g. it's a
+                                    // Word doc). Show simpler error with Open Externally button.
+                                    LocalFileRenderError(
+                                        localFile    = localFile,
+                                        title        = title,
+                                        errorMessage = pdfErrorMessage,
+                                        context      = context
+                                    )
                                 }
                             }
+                            else -> UvLoadingView()
                         }
-                        // Current page mark badge
-                        if (currentMark.isNotEmpty()) {
-                            Box(
-                                modifier = Modifier.align(Alignment.TopStart).padding(top = 8.dp, start = 8.dp)
-                                    .background(Color.Black.copy(0.65f), RoundedCornerShape(10.dp))
-                                    .border(0.5.dp, NeonCyan.copy(0.3f), RoundedCornerShape(10.dp))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) { Text(currentMark, fontSize = 16.sp) }
-                        }
-                        // Zoom indicator
-                        if (scale != 1f) {
-                            Box(
-                                modifier = Modifier.align(Alignment.TopEnd)
-                                    .padding(top = if (isBookmarked) 44.dp else 8.dp, end = 8.dp)
-                                    .background(Color.Black.copy(0.65f), RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 8.dp, vertical = 3.dp)
-                            ) { Text("${(scale * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = NeonCyan) }
+                    }
+                    else -> {
+                        if (uri != null) {
+                            FileFailureLog(
+                                uri = uri, title = title,
+                                detectedMime = mimeType, detectedExt = extension,
+                                resolvedName = resolvedDisplayName, rawUri = fileUri,
+                                errorMessage = "URI scheme not supported for in-app viewing.", context = context
+                            )
+                        } else {
+                            FileErrorView()
                         }
                     }
                 }
-            } else {
-                Box(
-                    modifier = Modifier.weight(1f)
-                        .clickable(enabled = focusMode) { focusMode = false }
-                ) {
-                    when {
-                        fileUri.isBlank() -> FileErrorView()
-                        isImage -> {
-                            // Local file image (e.g. copied photo) — render directly from File.
-                            if (localFile != null) {
-                                AsyncImage(
-                                    model              = localFile,
-                                    contentDescription = title,
-                                    modifier           = Modifier.fillMaxSize()
-                                )
-                            } else if (uri != null) {
-                                ImageViewer(uri = uri, title = title)
-                            } else {
-                                FileErrorView()
-                            }
-                        }
-                        tryAsPdf -> {
-                            when {
-                                pdfLoading -> UvLoadingView()
-                                pdfPages.isNotEmpty() -> pdfPageContent()
-                                pdfError -> {
-                                    if (uri != null) {
-                                        FileFailureLog(
-                                            uri = uri, title = title,
-                                            detectedMime = mimeType, detectedExt = extension,
-                                            resolvedName = resolvedDisplayName, rawUri = fileUri,
-                                            errorMessage = pdfErrorMessage, context = context
-                                        )
-                                    } else {
-                                        // Local file that couldn't be rendered as PDF (e.g. it's a
-                                        // Word doc). Show simpler error with Open Externally button.
-                                        LocalFileRenderError(
-                                            localFile    = localFile,
-                                            title        = title,
-                                            errorMessage = pdfErrorMessage,
-                                            context      = context
-                                        )
-                                    }
-                                }
-                                else -> UvLoadingView()
-                            }
-                        }
-                        else -> {
-                            if (uri != null) {
-                                FileFailureLog(
-                                    uri = uri, title = title,
-                                    detectedMime = mimeType, detectedExt = extension,
-                                    resolvedName = resolvedDisplayName, rawUri = fileUri,
-                                    errorMessage = "URI scheme not supported for in-app viewing.", context = context
-                                )
-                            } else {
-                                FileErrorView()
-                            }
-                        }
-                    }
 
-                    // Bookmark ribbon
-                    if (isBookmarked && pdfPages.isNotEmpty()) {
-                        Box(
-                            modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp)
-                                .background(NeonGold.copy(0.9f), RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp, topEnd = 6.dp))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Text("⭐", fontSize = 11.sp)
-                                Text("Bookmarked", style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF1A1000), fontWeight = FontWeight.Bold)
-                            }
+                // Bookmark ribbon
+                if (isBookmarked && pdfPages.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp)
+                            .background(NeonGold.copy(0.9f), RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp, topEnd = 6.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("⭐", fontSize = 11.sp)
+                            Text("Bookmarked", style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF1A1000), fontWeight = FontWeight.Bold)
                         }
                     }
+                }
 
-                    // Current page mark badge
-                    if (currentMark.isNotEmpty() && pdfPages.isNotEmpty()) {
-                        Box(
-                            modifier = Modifier.align(Alignment.TopStart).padding(top = 8.dp, start = 8.dp)
-                                .background(Color.Black.copy(0.65f), RoundedCornerShape(10.dp))
-                                .border(0.5.dp, NeonCyan.copy(0.3f), RoundedCornerShape(10.dp))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) { Text(currentMark, fontSize = 16.sp) }
-                    }
+                // Current page mark badge
+                if (currentMark.isNotEmpty() && pdfPages.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier.align(Alignment.TopStart).padding(top = 8.dp, start = 8.dp)
+                            .background(Color.Black.copy(0.65f), RoundedCornerShape(10.dp))
+                            .border(0.5.dp, NeonCyan.copy(0.3f), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) { Text(currentMark, fontSize = 16.sp) }
+                }
 
-                    // Zoom indicator
-                    if (scale != 1f && pdfPages.isNotEmpty()) {
-                        Box(
-                            modifier = Modifier.align(Alignment.TopEnd)
-                                .padding(top = if (isBookmarked) 44.dp else 8.dp, end = 8.dp)
-                                .background(Color.Black.copy(0.65f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                        ) { Text("${(scale * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = NeonCyan) }
-                    }
+                // Zoom indicator
+                if (scale != 1f && pdfPages.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier.align(Alignment.TopEnd)
+                            .padding(top = if (isBookmarked) 44.dp else 8.dp, end = 8.dp)
+                            .background(Color.Black.copy(0.65f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) { Text("${(scale * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = NeonCyan) }
                 }
             }
 
@@ -1043,6 +990,31 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 },
             )
 
+            // ── Draggable tool sidebar (vertical ↔ horizontal, free position) ──
+            AnnotSidebar(
+                isVertical         = sidebarIsVertical,
+                offsetX            = sidebarOffsetX,
+                offsetY            = sidebarOffsetY,
+                tool               = annotationTool,
+                linePointerEnabled = linePointerEnabled,
+                onDrag             = { dx, dy ->
+                    sidebarOffsetX = (sidebarOffsetX + dx).coerceAtLeast(0f)
+                    sidebarOffsetY = (sidebarOffsetY + dy).coerceAtLeast(0f)
+                },
+                onFlip             = { sidebarIsVertical = !sidebarIsVertical },
+                onToolSelect       = { t ->
+                    annotationTool  = t
+                    if (t == AnnotationTool.TEXT || t == AnnotationTool.IMAGE || t == AnnotationTool.STAMP) annotZoomEnabled = false
+                    showToolSheet   = true
+                    showLaserSheet  = false
+                    showAnnotThumbs = false
+                },
+                onLaserTap         = {
+                    showLaserSheet  = true
+                    showToolSheet   = false
+                    showAnnotThumbs = false
+                },
+            )
 
             // ── Per-tool settings bottom sheet ─────────────────────────────────
             if (showToolSheet) {
@@ -1383,7 +1355,7 @@ private fun UvPdfPage(
                     }
                 } else this
             },
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.TopCenter
     ) {
         val imageWidthPx  = with(density) { maxWidth.toPx() }
         val aspect        = bitmap.height.toFloat() / bitmap.width.toFloat()
