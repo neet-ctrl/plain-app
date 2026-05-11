@@ -1993,12 +1993,15 @@ private fun PdfAnnotationOverlay(
     var eraserPos     by remember { mutableStateOf<Pair<Float, Float>?>(null) }
 
     // Always-fresh callback refs so pointerInput coroutine never captures stale lambdas.
-    // Without these, every new stroke would read the activeStrokes captured at first composition
-    // and overwrite all previously committed strokes.
+    // Without these, every new stroke/stamp/textbox would read the list captured at first
+    // composition and overwrite all previously placed items.
     val liveOnStrokeCommit      = rememberUpdatedState(onStrokeCommit)
     val liveOnStrokesErase      = rememberUpdatedState(onStrokesErase)
     val liveOnEraseGestureStart = rememberUpdatedState(onEraseGestureStart)
     val liveOnPartialErase      = rememberUpdatedState(onPartialErase)
+    val liveOnTextBoxPlace      = rememberUpdatedState(onTextBoxPlace)
+    val liveOnImageTap          = rememberUpdatedState(onImageTap)
+    val liveOnStampPlace        = rememberUpdatedState(onStampPlace)
 
     Canvas(
         modifier = modifier
@@ -2104,9 +2107,9 @@ private fun PdfAnnotationOverlay(
                             val nx = (offset.x / imageWidthPx).coerceIn(0f, 1f)
                             val ny = (offset.y / imageHeightPx).coerceIn(0f, 1f)
                             when (tool) {
-                                AnnotationTool.TEXT  -> onTextBoxPlace(nx, ny)
-                                AnnotationTool.IMAGE -> onImageTap(nx, ny)
-                                AnnotationTool.STAMP -> onStampPlace(nx, ny)
+                                AnnotationTool.TEXT  -> liveOnTextBoxPlace.value(nx, ny)
+                                AnnotationTool.IMAGE -> liveOnImageTap.value(nx, ny)
+                                AnnotationTool.STAMP -> liveOnStampPlace.value(nx, ny)
                                 else -> {}
                             }
                         }
