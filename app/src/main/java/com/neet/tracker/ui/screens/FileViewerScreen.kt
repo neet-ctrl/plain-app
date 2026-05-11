@@ -255,6 +255,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var annotZoomEnabled   by remember { mutableStateOf(false) }
     // Sidebar state — draggable, flippable vertical↔horizontal
     var sidebarIsVertical  by remember { mutableStateOf(true) }
+    var sidebarCollapsed   by remember { mutableStateOf(false) }
     var sidebarOffsetX     by remember { mutableFloatStateOf(0f) }
     var sidebarOffsetY     by remember { mutableFloatStateOf(240f) }
     var showToolSheet      by remember { mutableStateOf(false) }
@@ -1017,6 +1018,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 isVertical         = sidebarIsVertical,
                 offsetX            = sidebarOffsetX,
                 offsetY            = sidebarOffsetY,
+                collapsed          = sidebarCollapsed,
                 tool               = annotationTool,
                 linePointerEnabled = linePointerEnabled,
                 onDrag             = { dx, dy ->
@@ -1024,6 +1026,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     sidebarOffsetY = (sidebarOffsetY + dy).coerceAtLeast(0f)
                 },
                 onFlip             = { sidebarIsVertical = !sidebarIsVertical },
+                onCollapse         = { sidebarCollapsed = !sidebarCollapsed },
                 onToolSelect       = { t ->
                     annotationTool  = t
                     if (t == AnnotationTool.TEXT || t == AnnotationTool.IMAGE || t == AnnotationTool.STAMP) annotZoomEnabled = false
@@ -2683,10 +2686,12 @@ private fun AnnotSidebar(
     isVertical: Boolean,
     offsetX: Float,
     offsetY: Float,
+    collapsed: Boolean,
     tool: AnnotationTool,
     linePointerEnabled: Boolean,
     onDrag: (Float, Float) -> Unit,
     onFlip: () -> Unit,
+    onCollapse: () -> Unit,
     onToolSelect: (AnnotationTool) -> Unit,
     onLaserTap: () -> Unit,
 ) {
@@ -2697,37 +2702,44 @@ private fun AnnotSidebar(
             .border(0.5.dp, Color.Black.copy(0.07f), RoundedCornerShape(14.dp))
             .padding(4.dp)
 
+        // ── Collapse / drag button — always first, handles both tap (collapse) and drag ──
         @Composable
-        fun buttons() {
-            // ── Drag handle ──────────────────────────────────────────────────
+        fun CollapseBtn() {
             Box(
                 modifier = Modifier
                     .size(44.dp)
                     .pointerInput(Unit) {
+                        launch { detectTapGestures(onTap = { onCollapse() }) }
                         detectDragGestures { _, drag -> onDrag(drag.x, drag.y) }
                     },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.DragHandle, null,
-                    tint = Color(0xFFAAAAAA), modifier = Modifier.size(18.dp))
+                Icon(
+                    imageVector = if (collapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
+                    contentDescription = if (collapsed) "Expand toolbar" else "Collapse toolbar",
+                    tint = Color(0xFF555555),
+                    modifier = Modifier.size(20.dp)
+                )
             }
-            // ── Flip orientation ─────────────────────────────────────────────
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clickable { onFlip() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.ScreenRotation, null,
-                    tint = Color(0xFFAAAAAA), modifier = Modifier.size(18.dp))
-            }
-            // ── Divider ──────────────────────────────────────────────────────
+        }
+
+        // ── Collapsed state: only the collapse button ─────────────────────────
+        if (collapsed) {
             if (isVertical) {
-                Box(modifier = Modifier.width(36.dp).height(0.5.dp).background(Color.Black.copy(0.1f)))
+                Column(modifier = panelMod, horizontalAlignment = Alignment.CenterHorizontally) {
+                    CollapseBtn()
+                }
             } else {
-                Box(modifier = Modifier.height(36.dp).padding(vertical = 6.dp).width(0.5.dp).background(Color.Black.copy(0.1f)))
+                Row(modifier = panelMod, verticalAlignment = Alignment.CenterVertically) {
+                    CollapseBtn()
+                }
             }
-            // ── Tool buttons ─────────────────────────────────────────────────
+            return@Box
+        }
+
+        // ── Expanded state: collapse btn + flip + divider + scrollable tools ──
+        @Composable
+        fun ToolButtons() {
             SIDEBAR_TOOLS.forEach { (t, icon, _) ->
                 val sel = if (t == null) linePointerEnabled else tool == t
                 val accent = when (t) {
@@ -2736,8 +2748,8 @@ private fun AnnotSidebar(
                     AnnotationTool.TEXT        -> Color(0xFF00ACC1)
                     AnnotationTool.IMAGE       -> Color(0xFF7C4DFF)
                     AnnotationTool.STAMP       -> Color(0xFFFF8F00)
-                    null                       -> Color(0xFFFF1744)  // laser
-                    else                       -> Color(0xFF1565C0)  // pen/arrow
+                    null                       -> Color(0xFFFF1744)
+                    else                       -> Color(0xFF1565C0)
                 }
                 SidebarToolButton(
                     icon        = icon,
@@ -2749,13 +2761,47 @@ private fun AnnotSidebar(
         }
 
         if (isVertical) {
-            Column(modifier = panelMod,
+            Column(
+                modifier = panelMod,
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp)) { buttons() }
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                CollapseBtn()
+                Box(
+                    modifier = Modifier.size(44.dp).clickable { onFlip() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.ScreenRotation, null,
+                        tint = Color(0xFFAAAAAA), modifier = Modifier.size(18.dp))
+                }
+                Box(modifier = Modifier.width(36.dp).height(0.5.dp).background(Color.Black.copy(0.1f)))
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) { ToolButtons() }
+            }
         } else {
-            Row(modifier = panelMod,
+            Row(
+                modifier = panelMod,
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp)) { buttons() }
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                CollapseBtn()
+                Box(
+                    modifier = Modifier.size(44.dp).clickable { onFlip() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.ScreenRotation, null,
+                        tint = Color(0xFFAAAAAA), modifier = Modifier.size(18.dp))
+                }
+                Box(modifier = Modifier.height(36.dp).padding(vertical = 6.dp).width(0.5.dp).background(Color.Black.copy(0.1f)))
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) { ToolButtons() }
+            }
         }
     }
 }
