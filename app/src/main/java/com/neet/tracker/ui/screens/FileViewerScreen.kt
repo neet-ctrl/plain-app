@@ -1388,7 +1388,7 @@ private fun UvPdfPage(
                     }
                 } else this
             },
-        contentAlignment = Alignment.TopCenter
+        contentAlignment = Alignment.Center
     ) {
         val imageWidthPx  = with(density) { maxWidth.toPx() }
         val aspect        = bitmap.height.toFloat() / bitmap.width.toFloat()
