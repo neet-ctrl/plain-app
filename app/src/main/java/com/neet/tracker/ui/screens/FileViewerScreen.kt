@@ -12,6 +12,8 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.CircleShape
@@ -299,6 +301,11 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var allPageTextBoxes    by remember { mutableStateOf<Map<Int, List<AnnotationTextBox>>>(emptyMap()) }
     var pendingTextPos      by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     var showSolutionWindow  by remember { mutableStateOf(false) }
+    var isSwapped           by remember { mutableStateOf(false) }
+    var solutionPages       by remember { mutableStateOf<List<Bitmap>>(emptyList()) }
+    var solutionLoading     by remember { mutableStateOf(false) }
+    val solPageKey          = "sol_page_${solutionUri.hashCode()}"
+    var solWindowPage       by remember { mutableIntStateOf(prefs.getInt(solPageKey, 0)) }
     var allPageImageBoxes   by remember { mutableStateOf<Map<Int, List<AnnotationImageBox>>>(emptyMap()) }
     var pendingImageTapPos  by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     var allPageStamps       by remember { mutableStateOf<Map<Int, List<AnnotationStamp>>>(emptyMap()) }
@@ -420,6 +427,39 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             }
             pdfLoading = false
         }
+    }
+
+    // ── Solution PDF preloading (for swap + floating window) ──────────────────
+    LaunchedEffect(solutionUri) {
+        if (solutionUri.isBlank()) return@LaunchedEffect
+        solutionLoading = true
+        withContext(Dispatchers.IO) {
+            try {
+                val isLocal = solutionUri.startsWith("/")
+                val fd = if (isLocal) {
+                    ParcelFileDescriptor.open(File(solutionUri), ParcelFileDescriptor.MODE_READ_ONLY)
+                } else {
+                    context.contentResolver.openFileDescriptor(Uri.parse(solutionUri), "r")
+                }
+                fd?.use { pfd ->
+                    PdfRenderer(pfd).use { renderer ->
+                        val bitmaps = mutableListOf<Bitmap>()
+                        for (i in 0 until renderer.pageCount) {
+                            renderer.openPage(i).use { page ->
+                                val w   = (page.width * 2).coerceAtMost(1080)
+                                val h   = (w.toFloat() * page.height / page.width).toInt()
+                                val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                                bmp.eraseColor(android.graphics.Color.WHITE)
+                                page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                                bitmaps.add(bmp)
+                            }
+                        }
+                        solutionPages = bitmaps
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        solutionLoading = false
     }
 
     SpaceBackground {
@@ -688,10 +728,12 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             }
 
             // ── Main content ───────────────────────────────────────────────────
+            // When swapped, main view shows solution pages; floating window shows question pages.
+            val displayPages = if (isSwapped && solutionPages.isNotEmpty()) solutionPages else pdfPages
             // Shared PDF page lambda — reused in both annotation Row and normal Box
             val pdfPageContent: @Composable () -> Unit = {
                 UvPdfPage(
-                    bitmap          = pdfPages[currentPage.coerceIn(0, pdfPages.lastIndex)],
+                    bitmap          = displayPages[currentPage.coerceIn(0, displayPages.lastIndex)],
                     scale           = scale,
                     panOffset       = panOffset,
                     onTransform = { s, p ->
@@ -701,7 +743,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     zoomEnabled        = zoomEnabled,
                     isHorizontalScroll = isHorizontalScroll,
                     onPrev = { if (currentPage > 0) { currentPage--; scale = 1f; panOffset = Offset.Zero } },
-                    onNext = { if (currentPage < pdfPages.lastIndex) { currentPage++; scale = 1f; panOffset = Offset.Zero } },
+                    onNext = { if (currentPage < displayPages.lastIndex) { currentPage++; scale = 1f; panOffset = Offset.Zero } },
                     annotationMode      = annotationMode,
                     annotationTool      = annotationTool,
                     annotationColorArgb = annotationColorArgb,
@@ -944,12 +986,12 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             }
 
             // ── Page nav bar ───────────────────────────────────────────────────
-            if (pdfPages.isNotEmpty() && !focusMode && !annotFullScreen) {
+            if (displayPages.isNotEmpty() && !focusMode && !annotFullScreen) {
                 UvPageNavBar(
                     current = currentPage,
-                    total   = totalPages,
+                    total   = displayPages.size,
                     onPrev  = { if (currentPage > 0) { currentPage--; scale = 1f; panOffset = Offset.Zero } },
-                    onNext  = { if (currentPage < pdfPages.lastIndex) { currentPage++; scale = 1f; panOffset = Offset.Zero } }
+                    onNext  = { if (currentPage < displayPages.lastIndex) { currentPage++; scale = 1f; panOffset = Offset.Zero } }
                 )
             }
 
@@ -1140,8 +1182,30 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
 
         if (showSolutionWindow && solutionUri.isNotBlank()) {
             FloatingSolutionViewer(
-                solutionUri = solutionUri,
-                onDismiss   = { showSolutionWindow = false }
+                solutionPages   = solutionPages,
+                solutionLoading = solutionLoading,
+                questionPages   = pdfPages,
+                mainCurrentPage = currentPage,
+                isSwapped       = isSwapped,
+                onSwap          = {
+                    val floatPage = solWindowPage.coerceIn(0, (solutionPages.lastIndex).coerceAtLeast(0))
+                    val mainPage  = currentPage.coerceIn(0, (pdfPages.lastIndex).coerceAtLeast(0))
+                    if (!isSwapped) {
+                        solWindowPage = mainPage
+                        currentPage   = floatPage.coerceIn(0, (solutionPages.lastIndex).coerceAtLeast(0))
+                    } else {
+                        solWindowPage = currentPage.coerceIn(0, (solutionPages.lastIndex).coerceAtLeast(0))
+                        currentPage   = mainPage
+                    }
+                    isSwapped = !isSwapped
+                    scale     = 1f; panOffset = Offset.Zero
+                },
+                solWindowPage   = solWindowPage,
+                onSolPageChange = { pg ->
+                    solWindowPage = pg
+                    prefs.edit().putInt(solPageKey, pg).apply()
+                },
+                onDismiss       = { showSolutionWindow = false }
             )
         }
 
@@ -4413,61 +4477,54 @@ private fun TextBoxEditorDialog(
 
 @Composable
 private fun FloatingSolutionViewer(
-    solutionUri: String,
+    solutionPages: List<Bitmap>,
+    solutionLoading: Boolean,
+    questionPages: List<Bitmap>,
+    mainCurrentPage: Int,
+    isSwapped: Boolean,
+    onSwap: () -> Unit,
+    solWindowPage: Int,
+    onSolPageChange: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val context = LocalContext.current
     val density = LocalDensity.current
 
-    // ── Window state ──────────────────────────────────────────────────────────
+    // ── Window geometry ───────────────────────────────────────────────────────
     var offsetX        by remember { mutableFloatStateOf(20f) }
     var offsetY        by remember { mutableFloatStateOf(72f) }
     var windowWidthDp  by remember { mutableFloatStateOf(320f) }
     var windowHeightDp by remember { mutableFloatStateOf(480f) }
-    var isHorizontal   by remember { mutableStateOf(false) }
-    var zoomEnabled    by remember { mutableStateOf(false) }
-    var scale          by remember { mutableFloatStateOf(1f) }
-    var panOffset      by remember { mutableStateOf(Offset.Zero) }
 
-    // ── PDF state ─────────────────────────────────────────────────────────────
-    var pages    by remember { mutableStateOf<List<Bitmap>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var errorMsg  by remember { mutableStateOf("") }
-
-    LaunchedEffect(solutionUri) {
-        withContext(Dispatchers.IO) {
-            try {
-                val isLocal = solutionUri.startsWith("/")
-                val fd = if (isLocal) {
-                    ParcelFileDescriptor.open(File(solutionUri), ParcelFileDescriptor.MODE_READ_ONLY)
-                } else {
-                    context.contentResolver.openFileDescriptor(Uri.parse(solutionUri), "r")
-                }
-                fd?.use { pfd ->
-                    PdfRenderer(pfd).use { renderer ->
-                        val bitmaps = mutableListOf<Bitmap>()
-                        for (i in 0 until renderer.pageCount) {
-                            renderer.openPage(i).use { page ->
-                                val w   = (page.width * 2).coerceAtMost(1080)
-                                val h   = (w.toFloat() * page.height / page.width).toInt()
-                                val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                                bmp.eraseColor(android.graphics.Color.WHITE)
-                                page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                                bitmaps.add(bmp)
-                            }
-                        }
-                        pages = bitmaps
-                    }
-                }
-            } catch (e: Exception) {
-                errorMsg = e.message ?: "Failed"
-            } finally {
-                isLoading = false
-            }
-        }
+    // ── Page state ────────────────────────────────────────────────────────────
+    val displayPages = if (isSwapped) questionPages else solutionPages
+    var currentPage by remember(isSwapped) {
+        mutableIntStateOf(
+            if (isSwapped) mainCurrentPage.coerceIn(0, (questionPages.lastIndex).coerceAtLeast(0))
+            else solWindowPage.coerceIn(0, (solutionPages.lastIndex).coerceAtLeast(0))
+        )
     }
 
-    // ── Full-screen transparent host (floating above everything) ──────────────
+    // Persist solution window page whenever it changes (only when not swapped)
+    LaunchedEffect(currentPage, isSwapped) {
+        if (!isSwapped) onSolPageChange(currentPage)
+    }
+
+    // Keep currentPage in bounds if displayPages shrinks
+    LaunchedEffect(displayPages.size) {
+        if (displayPages.isNotEmpty() && currentPage > displayPages.lastIndex)
+            currentPage = displayPages.lastIndex
+    }
+
+    // ── Swipe gesture accumulator ─────────────────────────────────────────────
+    var swipeAccum by remember { mutableFloatStateOf(0f) }
+    val swipeThreshPx = with(density) { 80.dp.toPx() }
+
+    // ── Thumbnail strip visibility ────────────────────────────────────────────
+    var showThumbs by remember { mutableStateOf(false) }
+
+    val accentCol = if (isSwapped) NeonCyan else NeonGold
+
+    // ── Full-screen transparent host ──────────────────────────────────────────
     Box(modifier = Modifier.fillMaxSize()) {
 
         // ── Floating window ───────────────────────────────────────────────────
@@ -4481,15 +4538,15 @@ private fun FloatingSolutionViewer(
                 }
                 .width(windowWidthDp.dp)
                 .height(windowHeightDp.dp)
-                .shadow(28.dp, RoundedCornerShape(16.dp), spotColor = NeonGold.copy(0.55f))
+                .shadow(28.dp, RoundedCornerShape(16.dp), spotColor = accentCol.copy(0.5f))
                 .background(Color(0xFF060D1B), RoundedCornerShape(16.dp))
-                .border(1.5.dp, NeonGold.copy(0.65f), RoundedCornerShape(16.dp))
+                .border(1.5.dp, accentCol.copy(0.65f), RoundedCornerShape(16.dp))
                 .clip(RoundedCornerShape(16.dp))
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
 
-                // ── Header / drag handle bar ──────────────────────────────────
-                Row(
+                // ── Header ────────────────────────────────────────────────────
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .pointerInput(Unit) {
@@ -4500,135 +4557,212 @@ private fun FloatingSolutionViewer(
                         }
                         .background(
                             Brush.horizontalGradient(
-                                listOf(NeonGold.copy(0.18f), NeonGold.copy(0.06f))
+                                listOf(accentCol.copy(0.18f), accentCol.copy(0.06f))
                             )
                         )
-                        .padding(horizontal = 10.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // Three-line drag indicator
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(3.dp),
-                        modifier = Modifier.padding(end = 3.dp)
+                    // ── Main header row ───────────────────────────────────────
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
-                        repeat(3) {
-                            Box(
-                                modifier = Modifier
-                                    .width(18.dp)
-                                    .height(2.dp)
-                                    .background(NeonGold.copy(0.55f), RoundedCornerShape(1.dp))
+                        // Three-line drag indicator
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
+                            modifier = Modifier.padding(end = 2.dp)
+                        ) {
+                            repeat(3) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(16.dp).height(2.dp)
+                                        .background(accentCol.copy(0.55f), RoundedCornerShape(1.dp))
+                                )
+                            }
+                        }
+                        Icon(Icons.Default.PictureAsPdf, null,
+                            tint = accentCol, modifier = Modifier.size(12.dp))
+                        Text(
+                            text = if (isSwapped) "Question" else "Solution",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = accentCol,
+                            fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        // Page counter
+                        if (displayPages.isNotEmpty()) {
+                            Text(
+                                "${currentPage + 1}/${displayPages.size}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = accentCol.copy(0.7f)
                             )
                         }
-                    }
-                    Icon(Icons.Default.PictureAsPdf, null,
-                        tint = NeonGold, modifier = Modifier.size(13.dp))
-                    Text(
-                        "Solution",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = NeonGold,
-                        fontWeight = FontWeight.ExtraBold,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    // V/H scroll toggle
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .background(
-                                if (isHorizontal) NeonCyan.copy(0.22f) else Color.White.copy(0.07f),
-                                RoundedCornerShape(7.dp)
-                            )
-                            .border(
-                                1.dp,
-                                if (isHorizontal) NeonCyan.copy(0.7f) else Color.White.copy(0.18f),
-                                RoundedCornerShape(7.dp)
-                            )
-                            .clickable {
-                                isHorizontal = !isHorizontal
-                                scale = 1f; panOffset = Offset.Zero
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            if (isHorizontal) Icons.Default.MoreHoriz else Icons.Default.MoreVert,
-                            null,
-                            tint = if (isHorizontal) NeonCyan else Color.White.copy(0.45f),
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-
-                    // Zoom toggle
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .background(
-                                if (zoomEnabled) NeonGold.copy(0.25f) else Color.White.copy(0.07f),
-                                RoundedCornerShape(7.dp)
-                            )
-                            .border(
-                                1.dp,
-                                if (zoomEnabled) NeonGold.copy(0.7f) else Color.White.copy(0.18f),
-                                RoundedCornerShape(7.dp)
-                            )
-                            .clickable {
-                                zoomEnabled = !zoomEnabled
-                                scale = 1f; panOffset = Offset.Zero
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            if (zoomEnabled) Icons.Default.ZoomIn else Icons.Default.ZoomOut,
-                            null,
-                            tint = if (zoomEnabled) NeonGold else Color.White.copy(0.45f),
-                            modifier = Modifier.size(14.dp)
-                        )
+                        // Thumbnail strip toggle
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .background(
+                                    if (showThumbs) accentCol.copy(0.2f) else Color.White.copy(0.07f),
+                                    RoundedCornerShape(7.dp)
+                                )
+                                .border(
+                                    1.dp,
+                                    if (showThumbs) accentCol.copy(0.65f) else Color.White.copy(0.18f),
+                                    RoundedCornerShape(7.dp)
+                                )
+                                .clickable { showThumbs = !showThumbs },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.GridView, null,
+                                tint = if (showThumbs) accentCol else Color.White.copy(0.45f),
+                                modifier = Modifier.size(13.dp))
+                        }
+                        // Swap button
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .background(
+                                    if (isSwapped) NeonCyan.copy(0.22f) else NeonGold.copy(0.15f),
+                                    RoundedCornerShape(7.dp)
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isSwapped) NeonCyan.copy(0.7f) else NeonGold.copy(0.4f),
+                                    RoundedCornerShape(7.dp)
+                                )
+                                .clickable(onClick = onSwap),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.SwapVert, null,
+                                tint = if (isSwapped) NeonCyan else NeonGold,
+                                modifier = Modifier.size(13.dp))
+                        }
+                        // Close button
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .background(NeonRed.copy(0.18f), CircleShape)
+                                .border(1.dp, NeonRed.copy(0.5f), CircleShape)
+                                .clickable { onDismiss() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Close, null,
+                                tint = NeonRed, modifier = Modifier.size(11.dp))
+                        }
                     }
 
-                    // Close button
-                    Box(
-                        modifier = Modifier
-                            .size(26.dp)
-                            .background(NeonRed.copy(0.18f), CircleShape)
-                            .border(1.dp, NeonRed.copy(0.5f), CircleShape)
-                            .clickable { onDismiss() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Close, null,
-                            tint = NeonRed, modifier = Modifier.size(12.dp))
+                    // ── Thumbnail strip ───────────────────────────────────────
+                    if (showThumbs && displayPages.isNotEmpty()) {
+                        val thumbState = rememberLazyListState()
+                        LaunchedEffect(currentPage) {
+                            runCatching {
+                                thumbState.animateScrollToItem(
+                                    currentPage.coerceIn(0, displayPages.lastIndex)
+                                )
+                            }
+                        }
+                        LazyRow(
+                            state = thumbState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color.Black.copy(0.3f))
+                                .padding(horizontal = 6.dp, vertical = 5.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            contentPadding = PaddingValues(horizontal = 2.dp)
+                        ) {
+                            itemsIndexed(displayPages) { index, bmp ->
+                                val isCurrent = index == currentPage
+                                Box(
+                                    modifier = Modifier
+                                        .width(if (isCurrent) 38.dp else 32.dp)
+                                        .height(if (isCurrent) 52.dp else 44.dp)
+                                        .shadow(if (isCurrent) 4.dp else 0.dp, RoundedCornerShape(6.dp))
+                                        .background(Color.White.copy(0.05f), RoundedCornerShape(6.dp))
+                                        .border(
+                                            if (isCurrent) 1.5.dp else 0.5.dp,
+                                            if (isCurrent) accentCol else Color.White.copy(0.2f),
+                                            RoundedCornerShape(6.dp)
+                                        )
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable {
+                                            currentPage = index
+                                            showThumbs = false
+                                        }
+                                ) {
+                                    Image(
+                                        bitmap = bmp.asImageBitmap(),
+                                        contentDescription = "Page ${index + 1}",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                    if (isCurrent) {
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomCenter)
+                                                .fillMaxWidth()
+                                                .background(accentCol.copy(0.75f))
+                                                .padding(vertical = 1.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                "${index + 1}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color.Black,
+                                                fontSize = 7.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
                 // Header bottom divider
-                Box(modifier = Modifier
-                    .fillMaxWidth().height(1.dp)
-                    .background(NeonGold.copy(0.3f)))
-
-                // ── PDF content area ──────────────────────────────────────────
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .fillMaxWidth().height(1.dp)
+                        .background(accentCol.copy(0.3f))
+                )
+
+                // ── PDF content area (single-page, swipe-navigated) ───────────
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
                         .background(Color(0xFF050B16))
-                        .then(
-                            if (zoomEnabled) {
-                                Modifier.pointerInput(zoomEnabled) {
-                                    detectTransformGestures { _, pan, zoom, _ ->
-                                        scale     = (scale * zoom).coerceIn(0.5f, 4f)
-                                        panOffset = panOffset + pan
+                        .pointerInput(displayPages.size) {
+                            if (displayPages.size > 1) {
+                                detectVerticalDragGestures(
+                                    onDragStart  = { swipeAccum = 0f },
+                                    onDragEnd    = { swipeAccum = 0f },
+                                    onDragCancel = { swipeAccum = 0f },
+                                    onVerticalDrag = { _, delta ->
+                                        swipeAccum += delta
+                                        if (swipeAccum > swipeThreshPx) {
+                                            if (currentPage > 0) currentPage--
+                                            swipeAccum = 0f
+                                        } else if (swipeAccum < -swipeThreshPx) {
+                                            if (currentPage < displayPages.lastIndex) currentPage++
+                                            swipeAccum = 0f
+                                        }
                                     }
-                                }
-                            } else Modifier
-                        )
+                                )
+                            }
+                        }
                 ) {
                     when {
-                        isLoading -> {
+                        solutionLoading && !isSwapped -> {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
                                     CircularProgressIndicator(
-                                        color  = NeonGold,
+                                        color = NeonGold,
                                         modifier = Modifier.size(28.dp),
                                         strokeWidth = 2.dp
                                     )
@@ -4638,7 +4772,7 @@ private fun FloatingSolutionViewer(
                                 }
                             }
                         }
-                        errorMsg.isNotBlank() || pages.isEmpty() -> {
+                        displayPages.isEmpty() -> {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -4646,58 +4780,100 @@ private fun FloatingSolutionViewer(
                                 ) {
                                     Icon(Icons.Default.BrokenImage, null,
                                         tint = NeonRed.copy(0.6f), modifier = Modifier.size(32.dp))
-                                    Text("Could not open solution",
+                                    Text("Could not open document",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color.White.copy(0.38f))
                                 }
                             }
                         }
                         else -> {
-                            val contentMod = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer {
-                                    scaleX       = scale
-                                    scaleY       = scale
-                                    translationX = panOffset.x
-                                    translationY = panOffset.y
-                                }
-                            if (isHorizontal) {
-                                LazyRow(
-                                    modifier            = contentMod,
-                                    contentPadding      = PaddingValues(8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    items(pages) { bmp ->
-                                        Image(
-                                            bitmap             = bmp.asImageBitmap(),
-                                            contentDescription = null,
-                                            modifier           = Modifier
-                                                .fillMaxHeight()
-                                                .wrapContentWidth()
-                                                .shadow(6.dp, RoundedCornerShape(6.dp))
-                                                .clip(RoundedCornerShape(6.dp))
-                                        )
-                                    }
-                                }
-                            } else {
-                                LazyColumn(
-                                    modifier           = contentMod,
-                                    contentPadding     = PaddingValues(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    items(pages) { bmp ->
-                                        Image(
-                                            bitmap             = bmp.asImageBitmap(),
-                                            contentDescription = null,
-                                            modifier           = Modifier
-                                                .fillMaxWidth()
-                                                .wrapContentHeight()
-                                                .shadow(6.dp, RoundedCornerShape(6.dp))
-                                                .clip(RoundedCornerShape(6.dp))
-                                        )
+                            val safePage = currentPage.coerceIn(0, displayPages.lastIndex)
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                Image(
+                                    bitmap = displayPages[safePage].asImageBitmap(),
+                                    contentDescription = "Page ${safePage + 1}",
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                // Swipe-direction hint arrows on right edge
+                                if (displayPages.size > 1) {
+                                    Column(
+                                        modifier = Modifier
+                                            .align(Alignment.CenterEnd)
+                                            .padding(end = 4.dp),
+                                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        if (safePage > 0)
+                                            Icon(Icons.Default.KeyboardArrowUp, null,
+                                                tint = accentCol.copy(0.35f),
+                                                modifier = Modifier.size(18.dp))
+                                        if (safePage < displayPages.lastIndex)
+                                            Icon(Icons.Default.KeyboardArrowDown, null,
+                                                tint = accentCol.copy(0.35f),
+                                                modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+
+                // ── Prev / Next page nav bar ──────────────────────────────────
+                if (displayPages.size > 1) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.Black.copy(0.35f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .background(
+                                    if (currentPage > 0) accentCol.copy(0.15f) else Color.White.copy(0.04f),
+                                    RoundedCornerShape(7.dp)
+                                )
+                                .border(
+                                    0.5.dp,
+                                    if (currentPage > 0) accentCol.copy(0.4f) else Color.White.copy(0.1f),
+                                    RoundedCornerShape(7.dp)
+                                )
+                                .clickable(enabled = currentPage > 0) { currentPage-- },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.ChevronLeft, null,
+                                tint = if (currentPage > 0) accentCol else Color.White.copy(0.2f),
+                                modifier = Modifier.size(14.dp))
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            "${currentPage + 1} / ${displayPages.size}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = accentCol.copy(0.75f),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .background(
+                                    if (currentPage < displayPages.lastIndex) accentCol.copy(0.15f) else Color.White.copy(0.04f),
+                                    RoundedCornerShape(7.dp)
+                                )
+                                .border(
+                                    0.5.dp,
+                                    if (currentPage < displayPages.lastIndex) accentCol.copy(0.4f) else Color.White.copy(0.1f),
+                                    RoundedCornerShape(7.dp)
+                                )
+                                .clickable(enabled = currentPage < displayPages.lastIndex) { currentPage++ },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.ChevronRight, null,
+                                tint = if (currentPage < displayPages.lastIndex) accentCol else Color.White.copy(0.2f),
+                                modifier = Modifier.size(14.dp))
                         }
                     }
                 }
