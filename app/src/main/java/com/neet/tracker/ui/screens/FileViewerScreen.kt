@@ -2026,7 +2026,7 @@ private fun LinePointerOverlay(colorArgb: Int) {
     // Frame-driven clock — drives recomposition at ~60 fps for smooth fade.
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
-        while (true) { withFrameMillis { t -> nowMs = t } }
+        while (true) { withFrameMillis { nowMs = System.currentTimeMillis() } }
     }
 
     // Global alpha: 1f while drawing / within 4s of last stroke; then fade out.
