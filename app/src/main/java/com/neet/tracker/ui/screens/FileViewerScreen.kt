@@ -1179,7 +1179,8 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 onFlip             = { sidebarIsVertical = !sidebarIsVertical },
                 onCollapse         = { sidebarCollapsed = !sidebarCollapsed },
                 onToolSelect       = { t ->
-                    annotationTool  = t
+                    annotationTool     = t
+                    linePointerEnabled = false
                     if (t == AnnotationTool.TEXT || t == AnnotationTool.IMAGE || t == AnnotationTool.STAMP) annotZoomEnabled = false
                     showToolSheet   = true
                     showLaserSheet  = false
@@ -2257,9 +2258,8 @@ private data class LaserDot(val x: Float, val y: Float, val timeMs: Long)
 
 @Composable
 private fun LinePointerOverlay(colorArgb: Int) {
-    val inactivityMs  = 4_000L
+    val inactivityMs  = 3_000L
     val fadeMs        = 800L
-    val cometMs       = 280L   // trail visible behind finger while actively drawing
 
     var dots           by remember { mutableStateOf<List<LaserDot>>(emptyList()) }
     var lastDrawTimeMs by remember { mutableLongStateOf(0L) }
@@ -2317,16 +2317,8 @@ private fun LinePointerOverlay(colorArgb: Int) {
 
         val nc = drawContext.canvas.nativeCanvas
 
-        // ── Choose which dots to show for the trail ──────────────────────────
-        // While finger is moving: show only the comet tail (last cometMs worth of points).
-        // After lift: show the entire recorded trail.
-        val trailDots: List<LaserDot> = if (isDrawing) {
-            val cutoff = nowMs - cometMs
-            val recent = dots.filter { it.timeMs >= cutoff }
-            if (recent.size >= 2) recent else dots.takeLast(2)
-        } else {
-            dots
-        }
+        // ── Always show the full recorded trail — both while drawing and after lift ──
+        val trailDots: List<LaserDot> = dots
 
         // ── Build a smooth quadratic-bezier path from trail dots ─────────────
         fun buildPath(pts: List<LaserDot>): android.graphics.Path {
@@ -2384,12 +2376,26 @@ private fun LinePointerOverlay(colorArgb: Int) {
             alpha         = 0.42f
         ))
 
-        // Layer 3 — Bright inner core (thin, crisp, high opacity)
+        // Layer 3 — Bright inner core (colored, thin)
         nc.drawPath(trailPath, trailPaint(
-            strokeWidthPx =  3.dp.toPx(),
-            blurPx        =  0f,
+            strokeWidthPx =  4.dp.toPx(),
+            blurPx        =  1.dp.toPx(),
             alpha         = 0.94f
         ))
+
+        // Layer 4 — White center axis glow (makes it look like a real laser beam)
+        nc.drawPath(trailPath, android.graphics.Paint().apply {
+            isAntiAlias = true
+            isDither    = true
+            style       = android.graphics.Paint.Style.STROKE
+            strokeCap   = android.graphics.Paint.Cap.ROUND
+            strokeJoin  = android.graphics.Paint.Join.ROUND
+            strokeWidth = 1.8.dp.toPx()
+            color       = android.graphics.Color.argb(
+                (0.95f * globalAlpha * 255f).toInt().coerceIn(0, 255), 255, 255, 255
+            )
+            maskFilter  = android.graphics.BlurMaskFilter(1.2.dp.toPx(), android.graphics.BlurMaskFilter.Blur.NORMAL)
+        })
 
         // ── Laser head — 4-layer glowing circle at the newest tip ────────────
         val tip = dots.last()
