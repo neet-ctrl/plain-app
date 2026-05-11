@@ -4948,7 +4948,8 @@ private fun FloatingSolutionViewer(
     val swipeThreshPx = with(density) { 80.dp.toPx() }
 
     // ── Thumbnail strip visibility ────────────────────────────────────────────
-    var showThumbs by remember { mutableStateOf(false) }
+    var showThumbs  by remember { mutableStateOf(false) }
+    var isCollapsed by remember { mutableStateOf(false) }
 
     val accentCol = if (isSwapped) NeonCyan else NeonGold
 
@@ -4960,8 +4961,53 @@ private fun FloatingSolutionViewer(
     // ── Full-screen transparent host ──────────────────────────────────────────
     Box(modifier = Modifier.fillMaxSize()) {
 
+        // ── Collapsed bubble (draggable icon) ─────────────────────────────────
+        if (isCollapsed) {
+            Box(
+                modifier = Modifier
+                    .offset {
+                        IntOffset(
+                            with(density) { offsetX.dp.roundToPx() },
+                            with(density) { offsetY.dp.roundToPx() }
+                        )
+                    }
+                    .size(58.dp)
+                    .shadow(20.dp, CircleShape, spotColor = accentCol.copy(0.7f))
+                    .background(
+                        Brush.radialGradient(listOf(accentCol.copy(0.32f), Color(0xFF07101F))),
+                        CircleShape
+                    )
+                    .border(1.5.dp, accentCol.copy(0.80f), CircleShape)
+                    .pointerInput(Unit) {
+                        detectDragGestures { _, drag ->
+                            offsetX += with(density) { drag.x.toDp().value }
+                            offsetY += with(density) { drag.y.toDp().value }
+                        }
+                    }
+                    .clickable { isCollapsed = false },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                ) {
+                    Icon(
+                        Icons.Default.PictureAsPdf, null,
+                        tint     = accentCol,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        if (isSwapped) "Q" else "Sol",
+                        fontSize    = 8.sp,
+                        fontWeight  = FontWeight.ExtraBold,
+                        color       = accentCol
+                    )
+                }
+            }
+        }
+
         // ── Floating window ───────────────────────────────────────────────────
-        Box(
+        if (!isCollapsed) Box(
             modifier = Modifier
                 .offset {
                     IntOffset(
@@ -5031,6 +5077,19 @@ private fun FloatingSolutionViewer(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = accentCol.copy(0.7f)
                             )
+                        }
+                        // Collapse to bubble
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .background(Color.White.copy(0.07f), RoundedCornerShape(7.dp))
+                                .border(1.dp, accentCol.copy(0.50f), RoundedCornerShape(7.dp))
+                                .clickable { isCollapsed = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Minimize, null,
+                                tint     = accentCol.copy(0.90f),
+                                modifier = Modifier.size(13.dp))
                         }
                         // Thumbnail strip toggle
                         Box(
