@@ -787,7 +787,9 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                         val upd = cur.filter { it.id != id }
                         allPageStamps = allPageStamps + (currentPage to upd)
                         annoScope.launch { AnnotationManager.saveStamps(context, fileUri, allPageStamps) }
-                    }
+                    },
+                    toolHintVisible    = toolHintVisible,
+                    linePointerEnabled = linePointerEnabled
                 )
             }
 
@@ -1357,6 +1359,8 @@ private fun UvPdfPage(
     pageStamps: List<AnnotationStamp> = emptyList(),
     onStampPlace: (Float, Float) -> Unit = { _, _ -> },
     onStampDelete: (String) -> Unit = {},
+    toolHintVisible: Boolean = false,
+    linePointerEnabled: Boolean = false,
 ) {
     val density = LocalDensity.current
 
