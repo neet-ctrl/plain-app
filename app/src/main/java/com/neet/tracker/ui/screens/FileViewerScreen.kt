@@ -414,7 +414,9 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
         Column(modifier = Modifier.fillMaxSize()) {
 
             // ── Top bar (hidden in focus mode) ─────────────────────────────────
-            AnimatedVisibility(visible = !focusMode && !annotFullScreen, enter = fadeIn(), exit = fadeOut()) {
+            AnimatedVisibility(visible = !focusMode && !annotFullScreen,
+                enter = expandVertically(tween(200)) + fadeIn(tween(200)),
+                exit  = shrinkVertically(tween(180)) + fadeOut(tween(180))) {
                 NEETTopBar(
                     title      = title,
                     breadcrumb = if (pdfPages.isNotEmpty() && totalPages > 0) "Page ${currentPage + 1} / $totalPages" else "File Viewer",
@@ -526,7 +528,9 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             }
 
             // ── Focus mode exit bar ────────────────────────────────────────────
-            AnimatedVisibility(visible = focusMode, enter = fadeIn(), exit = fadeOut()) {
+            AnimatedVisibility(visible = focusMode,
+                enter = expandVertically(tween(180)) + fadeIn(tween(180)),
+                exit  = shrinkVertically(tween(160)) + fadeOut(tween(160))) {
                 Box(
                     modifier = Modifier.fillMaxWidth()
                         .background(NeonCyan.copy(0.12f))
@@ -559,7 +563,9 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             }
 
             // ── Viewer controls strip (scroll direction + zoom) ────────────────
-            AnimatedVisibility(visible = pdfPages.isNotEmpty() && !focusMode && !annotFullScreen, enter = fadeIn(), exit = fadeOut()) {
+            AnimatedVisibility(visible = pdfPages.isNotEmpty() && !focusMode && !annotFullScreen,
+                enter = expandVertically(tween(180)) + fadeIn(tween(180)),
+                exit  = shrinkVertically(tween(160)) + fadeOut(tween(160))) {
                 UvViewerControls(
                     isHorizontalScroll = isHorizontalScroll,
                     onScrollToggle = {
@@ -845,7 +851,8 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             // ── Per-page mark strip ────────────────────────────────────────────
             AnimatedVisibility(
                 visible = pdfPages.isNotEmpty() && !focusMode && !annotFullScreen,
-                enter = fadeIn(), exit = fadeOut()
+                enter = expandVertically(tween(180)) + fadeIn(tween(180)),
+                exit  = shrinkVertically(tween(160)) + fadeOut(tween(160))
             ) {
                 Column {
                     NeonDivider(NeonCyan.copy(0.15f))
