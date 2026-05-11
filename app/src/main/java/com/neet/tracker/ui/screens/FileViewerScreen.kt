@@ -316,6 +316,11 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var allPageImageBoxes   by remember { mutableStateOf<Map<Int, List<AnnotationImageBox>>>(emptyMap()) }
     var pendingImageTapPos  by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     var allPageStamps       by remember { mutableStateOf<Map<Int, List<AnnotationStamp>>>(emptyMap()) }
+    // Solution PDF annotations — always kept separate so question ↔ solution never cross-contaminate
+    var solPageStrokes    by remember { mutableStateOf<Map<Int, List<AnnotationStroke>>>(emptyMap()) }
+    var solPageTextBoxes  by remember { mutableStateOf<Map<Int, List<AnnotationTextBox>>>(emptyMap()) }
+    var solPageImageBoxes by remember { mutableStateOf<Map<Int, List<AnnotationImageBox>>>(emptyMap()) }
+    var solPageStamps     by remember { mutableStateOf<Map<Int, List<AnnotationStamp>>>(emptyMap()) }
     var selectedStampEmoji  by remember { mutableStateOf<String?>(null) }
     var stampPickerExpanded by remember { mutableStateOf(false) }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { pickedUri ->
@@ -332,9 +337,11 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                             hNorm     = iH,
                             imagePath = path
                         )
-                        val cur = allPageImageBoxes[currentPage] ?: emptyList()
-                        allPageImageBoxes = allPageImageBoxes + (currentPage to cur + newBox)
-                        AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes)
+                        val annoKey  = if (isSwapped) solutionUri else fileUri
+                        val boxes    = if (isSwapped) solPageImageBoxes else allPageImageBoxes
+                        val newMap   = boxes + (currentPage to ((boxes[currentPage] ?: emptyList()) + newBox))
+                        if (isSwapped) solPageImageBoxes = newMap else allPageImageBoxes = newMap
+                        AnnotationManager.saveImageBoxes(context, annoKey, newMap)
                     }
                     pendingImageTapPos = null
                 }
@@ -355,9 +362,11 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                             hNorm     = iH,
                             imagePath = path
                         )
-                        val cur = allPageImageBoxes[currentPage] ?: emptyList()
-                        allPageImageBoxes = allPageImageBoxes + (currentPage to cur + newBox)
-                        AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes)
+                        val annoKey  = if (isSwapped) solutionUri else fileUri
+                        val boxes    = if (isSwapped) solPageImageBoxes else allPageImageBoxes
+                        val newMap   = boxes + (currentPage to ((boxes[currentPage] ?: emptyList()) + newBox))
+                        if (isSwapped) solPageImageBoxes = newMap else allPageImageBoxes = newMap
+                        AnnotationManager.saveImageBoxes(context, annoKey, newMap)
                     }
                     pendingImageTapPos = null
                 }
@@ -386,9 +395,11 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                             hNorm     = iH,
                             imagePath = path
                         )
-                        val cur = allPageImageBoxes[currentPage] ?: emptyList()
-                        allPageImageBoxes = allPageImageBoxes + (currentPage to cur + newBox)
-                        AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes)
+                        val annoKey  = if (isSwapped) solutionUri else fileUri
+                        val boxes    = if (isSwapped) solPageImageBoxes else allPageImageBoxes
+                        val newMap   = boxes + (currentPage to ((boxes[currentPage] ?: emptyList()) + newBox))
+                        if (isSwapped) solPageImageBoxes = newMap else allPageImageBoxes = newMap
+                        AnnotationManager.saveImageBoxes(context, annoKey, newMap)
                     }
                     pendingImageTapPos = null
                 }
@@ -447,6 +458,19 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
         if (tryAsPdf) {
             val loadedStamps = AnnotationManager.loadStamps(context, fileUri)
             if (loadedStamps.isNotEmpty()) allPageStamps = loadedStamps
+        }
+    }
+    // Load solution PDF annotations — independent of question annotations
+    LaunchedEffect(solutionUri) {
+        if (solutionUri.isNotBlank()) {
+            val s  = AnnotationManager.load(context, solutionUri)
+            val t  = AnnotationManager.loadTextBoxes(context, solutionUri)
+            val im = AnnotationManager.loadImageBoxes(context, solutionUri)
+            val st = AnnotationManager.loadStamps(context, solutionUri)
+            if (s.isNotEmpty())  solPageStrokes    = s
+            if (t.isNotEmpty())  solPageTextBoxes  = t
+            if (im.isNotEmpty()) solPageImageBoxes = im
+            if (st.isNotEmpty()) solPageStamps     = st
         }
     }
 
@@ -522,6 +546,18 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
         }
         solutionLoading = false
     }
+
+    // ── Annotation routing — correct PDF always gets correct annotations ──────────
+    // When swapped: main viewer shows solution → pass solution annotations; float shows question → pass question annotations
+    val activeAnnoKey       = if (isSwapped) solutionUri    else fileUri
+    val activeStrokes       = if (isSwapped) solPageStrokes  else allPageStrokes
+    val activeTextBoxes     = if (isSwapped) solPageTextBoxes  else allPageTextBoxes
+    val activeImageBoxes    = if (isSwapped) solPageImageBoxes else allPageImageBoxes
+    val activeStamps        = if (isSwapped) solPageStamps   else allPageStamps
+    val setActiveStrokes    : (Map<Int, List<AnnotationStroke>>)   -> Unit = { if (isSwapped) solPageStrokes    = it else allPageStrokes    = it }
+    val setActiveTextBoxes  : (Map<Int, List<AnnotationTextBox>>)  -> Unit = { if (isSwapped) solPageTextBoxes  = it else allPageTextBoxes  = it }
+    val setActiveImageBoxes : (Map<Int, List<AnnotationImageBox>>) -> Unit = { if (isSwapped) solPageImageBoxes = it else allPageImageBoxes = it }
+    val setActiveStamps     : (Map<Int, List<AnnotationStamp>>)    -> Unit = { if (isSwapped) solPageStamps     = it else allPageStamps     = it }
 
     SpaceBackground {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -818,79 +854,71 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     eraserErasesPen     = annotEraserErasesPen,
                     eraserErasesHigh    = annotEraserErasesHigh,
                     onPartialErase      = { toRemove, toAdd ->
-                        annoUndoStack  = (annoUndoStack + allPageStrokes).takeLast(50)
-                        annoRedoStack  = emptyList()
-                        val current    = allPageStrokes[currentPage] ?: emptyList()
-                        val removedSet = toRemove.toSet()
-                        val updated    = current.filter { it !in removedSet } + toAdd
-                        allPageStrokes = allPageStrokes + (currentPage to updated)
-                        annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                        annoUndoStack = (annoUndoStack + activeStrokes).takeLast(50)
+                        annoRedoStack = emptyList()
+                        val updated = (activeStrokes[currentPage] ?: emptyList()).filter { it !in toRemove.toSet() } + toAdd
+                        val next = activeStrokes + (currentPage to updated)
+                        setActiveStrokes(next)
+                        annoScope.launch { AnnotationManager.save(context, activeAnnoKey, next) }
                     },
-                    pageStrokes         = allPageStrokes[currentPage] ?: emptyList(),
+                    pageStrokes         = activeStrokes[currentPage] ?: emptyList(),
                     onStrokeCommit = { stroke ->
-                        annoUndoStack  = (annoUndoStack + allPageStrokes).takeLast(50)
-                        annoRedoStack  = emptyList()
-                        val updated    = (allPageStrokes[currentPage] ?: emptyList()) + stroke
-                        allPageStrokes = allPageStrokes + (currentPage to updated)
-                        annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                        annoUndoStack = (annoUndoStack + activeStrokes).takeLast(50)
+                        annoRedoStack = emptyList()
+                        val next = activeStrokes + (currentPage to ((activeStrokes[currentPage] ?: emptyList()) + stroke))
+                        setActiveStrokes(next)
+                        annoScope.launch { AnnotationManager.save(context, activeAnnoKey, next) }
                     },
                     onEraseGestureStart = {
-                        // Push undo snapshot once per eraser drag gesture
-                        annoUndoStack = (annoUndoStack + allPageStrokes).takeLast(50)
+                        annoUndoStack = (annoUndoStack + activeStrokes).takeLast(50)
                         annoRedoStack = emptyList()
                     },
                     onStrokesErase = { removed ->
-                        val current    = allPageStrokes[currentPage] ?: emptyList()
-                        val removedSet = removed.toSet()
-                        val updated    = current.filter { it !in removedSet }
-                        allPageStrokes = allPageStrokes + (currentPage to updated)
-                        annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                        val next = activeStrokes + (currentPage to ((activeStrokes[currentPage] ?: emptyList()).filter { it !in removed.toSet() }))
+                        setActiveStrokes(next)
+                        annoScope.launch { AnnotationManager.save(context, activeAnnoKey, next) }
                     },
-                    pageTextBoxes   = allPageTextBoxes[currentPage] ?: emptyList(),
+                    pageTextBoxes   = activeTextBoxes[currentPage] ?: emptyList(),
                     onTextBoxPlace  = { xNorm, yNorm ->
                         pendingTextPos = Pair(xNorm, yNorm)
                         if (annotAutoDeselect) { annotationTool = AnnotationTool.PEN; showToolSheet = false }
                     },
                     onTextBoxDelete = { id ->
-                        val cur = allPageTextBoxes[currentPage] ?: emptyList()
-                        val upd = cur.filter { it.id != id }
-                        allPageTextBoxes = allPageTextBoxes + (currentPage to upd)
-                        annoScope.launch { AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes) }
+                        val next = activeTextBoxes + (currentPage to ((activeTextBoxes[currentPage] ?: emptyList()).filter { it.id != id }))
+                        setActiveTextBoxes(next)
+                        annoScope.launch { AnnotationManager.saveTextBoxes(context, activeAnnoKey, next) }
                     },
                     onTextBoxTap = { tb -> pendingEditTextBox = tb },
-                    pageImageBoxes  = allPageImageBoxes[currentPage] ?: emptyList(),
+                    pageImageBoxes  = activeImageBoxes[currentPage] ?: emptyList(),
                     onImageTap      = { xNorm, yNorm ->
                         pendingImageTapPos = Pair(xNorm, yNorm)
                         imagePicker.launch("image/*")
                         if (annotAutoDeselect) { annotationTool = AnnotationTool.PEN; showToolSheet = false }
                     },
                     onImageBoxUpdate = { updatedBox ->
-                        val cur = allPageImageBoxes[currentPage] ?: emptyList()
-                        val upd = cur.map { if (it.id == updatedBox.id) updatedBox else it }
-                        allPageImageBoxes = allPageImageBoxes + (currentPage to upd)
-                        annoScope.launch { AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes) }
+                        val next = activeImageBoxes + (currentPage to ((activeImageBoxes[currentPage] ?: emptyList()).map { if (it.id == updatedBox.id) updatedBox else it }))
+                        setActiveImageBoxes(next)
+                        annoScope.launch { AnnotationManager.saveImageBoxes(context, activeAnnoKey, next) }
                     },
                     onImageBoxDelete = { id ->
-                        val cur = allPageImageBoxes[currentPage] ?: emptyList()
-                        val upd = cur.filter { it.id != id }
-                        allPageImageBoxes = allPageImageBoxes + (currentPage to upd)
-                        annoScope.launch { AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes) }
+                        val next = activeImageBoxes + (currentPage to ((activeImageBoxes[currentPage] ?: emptyList()).filter { it.id != id }))
+                        setActiveImageBoxes(next)
+                        annoScope.launch { AnnotationManager.saveImageBoxes(context, activeAnnoKey, next) }
                     },
-                    pageStamps     = allPageStamps[currentPage] ?: emptyList(),
+                    pageStamps     = activeStamps[currentPage] ?: emptyList(),
                     onStampPlace   = { xNorm, yNorm ->
                         selectedStampEmoji?.let { emoji ->
-                            val st  = AnnotationStamp(xNorm = xNorm, yNorm = yNorm, emoji = emoji)
-                            val cur = allPageStamps[currentPage] ?: emptyList()
-                            allPageStamps = allPageStamps + (currentPage to cur + st)
-                            annoScope.launch { AnnotationManager.saveStamps(context, fileUri, allPageStamps) }
+                            val st   = AnnotationStamp(xNorm = xNorm, yNorm = yNorm, emoji = emoji)
+                            val next = activeStamps + (currentPage to ((activeStamps[currentPage] ?: emptyList()) + st))
+                            setActiveStamps(next)
+                            annoScope.launch { AnnotationManager.saveStamps(context, activeAnnoKey, next) }
                         }
                         if (annotAutoDeselect) { annotationTool = AnnotationTool.PEN; showToolSheet = false }
                     },
                     onStampDelete  = { id ->
-                        val cur = allPageStamps[currentPage] ?: emptyList()
-                        val upd = cur.filter { it.id != id }
-                        allPageStamps = allPageStamps + (currentPage to upd)
-                        annoScope.launch { AnnotationManager.saveStamps(context, fileUri, allPageStamps) }
+                        val next = activeStamps + (currentPage to ((activeStamps[currentPage] ?: emptyList()).filter { it.id != id }))
+                        setActiveStamps(next)
+                        annoScope.launch { AnnotationManager.saveStamps(context, activeAnnoKey, next) }
                     },
                     toolHintVisible    = toolHintVisible,
                     linePointerEnabled = linePointerEnabled
@@ -1042,9 +1070,13 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 enter = slideInVertically { it } + fadeIn(),
                 exit  = slideOutVertically { it } + fadeOut()
             ) {
-                UvThumbStrip(pdfPages, currentPage) {
-                    currentPage = it; scale = 1f; panOffset = Offset.Zero
-                }
+                UvThumbStrip(
+                    pages       = displayPages,
+                    currentPage = currentPage,
+                    allStrokes  = activeStrokes,
+                    allStamps   = activeStamps,
+                    onPageClick = { currentPage = it; scale = 1f; panOffset = Offset.Zero }
+                )
             }
 
             // ── Page nav bar ───────────────────────────────────────────────────
@@ -1085,26 +1117,27 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 solutionUri    = solutionUri,
                 onUndo         = {
                     annoUndoStack.lastOrNull()?.let { snap ->
-                        annoRedoStack  = annoRedoStack + allPageStrokes
-                        allPageStrokes = snap
-                        annoUndoStack  = annoUndoStack.dropLast(1)
-                        annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                        annoRedoStack = annoRedoStack + activeStrokes
+                        setActiveStrokes(snap)
+                        annoUndoStack = annoUndoStack.dropLast(1)
+                        annoScope.launch { AnnotationManager.save(context, activeAnnoKey, snap) }
                     }
                 },
                 onRedo         = {
                     annoRedoStack.lastOrNull()?.let { snap ->
-                        annoUndoStack  = (annoUndoStack + allPageStrokes).takeLast(50)
-                        allPageStrokes = snap
-                        annoRedoStack  = annoRedoStack.dropLast(1)
-                        annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                        annoUndoStack = (annoUndoStack + activeStrokes).takeLast(50)
+                        setActiveStrokes(snap)
+                        annoRedoStack = annoRedoStack.dropLast(1)
+                        annoScope.launch { AnnotationManager.save(context, activeAnnoKey, snap) }
                     }
                 },
                 onClearPage    = {
-                    if ((allPageStrokes[currentPage] ?: emptyList()).isNotEmpty()) {
-                        annoUndoStack  = (annoUndoStack + allPageStrokes).takeLast(50)
-                        annoRedoStack  = emptyList()
-                        allPageStrokes = allPageStrokes + (currentPage to emptyList())
-                        annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                    if ((activeStrokes[currentPage] ?: emptyList()).isNotEmpty()) {
+                        annoUndoStack = (annoUndoStack + activeStrokes).takeLast(50)
+                        annoRedoStack = emptyList()
+                        val cleared = activeStrokes + (currentPage to emptyList())
+                        setActiveStrokes(cleared)
+                        annoScope.launch { AnnotationManager.save(context, activeAnnoKey, cleared) }
                     }
                 },
                 onZoomToggle   = { annotZoomEnabled = !annotZoomEnabled },
@@ -1123,9 +1156,10 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     showLaserSheet     = false
                     showAnnotThumbs    = false
                     annoScope.launch {
-                        AnnotationManager.save(context, fileUri, allPageStrokes)
-                        AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes)
-                        AnnotationManager.saveStamps(context, fileUri, allPageStamps)
+                        AnnotationManager.save(context, activeAnnoKey, activeStrokes)
+                        AnnotationManager.saveTextBoxes(context, activeAnnoKey, activeTextBoxes)
+                        AnnotationManager.saveImageBoxes(context, activeAnnoKey, activeImageBoxes)
+                        AnnotationManager.saveStamps(context, activeAnnoKey, activeStamps)
                     }
                 },
             )
@@ -1195,11 +1229,12 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     },
                     onStampPickerToggle     = { stampPickerExpanded = !stampPickerExpanded },
                     onDeleteAnnot           = {
-                        if ((allPageStrokes[currentPage] ?: emptyList()).isNotEmpty()) {
-                            annoUndoStack  = (annoUndoStack + allPageStrokes).takeLast(50)
-                            annoRedoStack  = emptyList()
-                            allPageStrokes = allPageStrokes + (currentPage to emptyList())
-                            annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                        if ((activeStrokes[currentPage] ?: emptyList()).isNotEmpty()) {
+                            annoUndoStack = (annoUndoStack + activeStrokes).takeLast(50)
+                            annoRedoStack = emptyList()
+                            val cleared = activeStrokes + (currentPage to emptyList())
+                            setActiveStrokes(cleared)
+                            annoScope.launch { AnnotationManager.save(context, activeAnnoKey, cleared) }
                         }
                     },
                     onImageGallery  = { pendingImageTapPos = 0.5f to 0.5f; imagePicker.launch("image/*"); showToolSheet = false },
@@ -1228,9 +1263,11 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 exit     = slideOutVertically(tween(180)) { it } + fadeOut(tween(180))
             ) {
                 AnnotThumbPicker(
-                    pages       = pdfPages,
+                    pages       = displayPages,
                     currentPage = currentPage,
-                    totalPages  = totalPages,
+                    totalPages  = displayPages.size,
+                    allStrokes  = activeStrokes,
+                    allStamps   = activeStamps,
                     onPageClick = { page ->
                         currentPage     = page
                         scale           = 1f
@@ -1244,18 +1281,30 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
 
         if (showSolutionWindow && solutionUri.isNotBlank()) {
             FloatingSolutionViewer(
-                solutionPages   = solutionPages,
-                solutionLoading = solutionLoading,
-                questionPages   = pdfPages,
-                mainCurrentPage = currentPage,
+                solutionPages     = solutionPages,
+                solutionLoading   = solutionLoading,
+                questionPages     = pdfPages,
+                questionStrokes   = allPageStrokes,
+                questionTextBoxes = allPageTextBoxes,
+                questionStamps    = allPageStamps,
+                solutionStrokes   = solPageStrokes,
+                solutionTextBoxes = solPageTextBoxes,
+                solutionStamps    = solPageStamps,
+                mainCurrentPage   = currentPage,
                 isSwapped       = isSwapped,
                 onSwap          = {
-                    // Save all annotations before swapping so nothing is lost
+                    // Save ALL annotations for BOTH PDFs before swapping so nothing is lost
                     annoScope.launch {
                         AnnotationManager.save(context, fileUri, allPageStrokes)
                         AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes)
                         AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes)
                         AnnotationManager.saveStamps(context, fileUri, allPageStamps)
+                        if (solutionUri.isNotBlank()) {
+                            AnnotationManager.save(context, solutionUri, solPageStrokes)
+                            AnnotationManager.saveTextBoxes(context, solutionUri, solPageTextBoxes)
+                            AnnotationManager.saveImageBoxes(context, solutionUri, solPageImageBoxes)
+                            AnnotationManager.saveStamps(context, solutionUri, solPageStamps)
+                        }
                     }
                     val floatPage = solWindowPage.coerceIn(0, (solutionPages.lastIndex).coerceAtLeast(0))
                     val mainPage  = currentPage.coerceIn(0, (pdfPages.lastIndex).coerceAtLeast(0))
@@ -1333,9 +1382,9 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     lastTextItalic    = tb.isItalic
                     lastTextBgArgb    = tb.bgArgb
                     lastTextBorder    = tb.hasBorder
-                    val cur = allPageTextBoxes[currentPage] ?: emptyList()
-                    allPageTextBoxes = allPageTextBoxes + (currentPage to cur + tb)
-                    annoScope.launch { AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes) }
+                    val next = activeTextBoxes + (currentPage to ((activeTextBoxes[currentPage] ?: emptyList()) + tb))
+                    setActiveTextBoxes(next)
+                    annoScope.launch { AnnotationManager.saveTextBoxes(context, activeAnnoKey, next) }
                     pendingTextPos = null
                 },
                 onDismiss = { pendingTextPos = null }
@@ -1347,17 +1396,15 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 yNorm       = tb.yNorm,
                 existingBox = tb,
                 onSave = { updated ->
-                    val cur = allPageTextBoxes[currentPage] ?: emptyList()
-                    val upd = cur.map { if (it.id == tb.id) updated.copy(id = tb.id) else it }
-                    allPageTextBoxes = allPageTextBoxes + (currentPage to upd)
-                    annoScope.launch { AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes) }
+                    val next = activeTextBoxes + (currentPage to ((activeTextBoxes[currentPage] ?: emptyList()).map { if (it.id == tb.id) updated.copy(id = tb.id) else it }))
+                    setActiveTextBoxes(next)
+                    annoScope.launch { AnnotationManager.saveTextBoxes(context, activeAnnoKey, next) }
                     pendingEditTextBox = null
                 },
                 onDelete = {
-                    val cur = allPageTextBoxes[currentPage] ?: emptyList()
-                    val upd = cur.filter { it.id != tb.id }
-                    allPageTextBoxes = allPageTextBoxes + (currentPage to upd)
-                    annoScope.launch { AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes) }
+                    val next = activeTextBoxes + (currentPage to ((activeTextBoxes[currentPage] ?: emptyList()).filter { it.id != tb.id }))
+                    setActiveTextBoxes(next)
+                    annoScope.launch { AnnotationManager.saveTextBoxes(context, activeAnnoKey, next) }
                     pendingEditTextBox = null
                 },
                 onDismiss = { pendingEditTextBox = null }
@@ -3387,6 +3434,8 @@ private fun AnnotThumbPicker(
     pages: List<android.graphics.Bitmap>,
     currentPage: Int,
     totalPages: Int,
+    allStrokes: Map<Int, List<AnnotationStroke>> = emptyMap(),
+    allStamps: Map<Int, List<AnnotationStamp>> = emptyMap(),
     onPageClick: (Int) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -3456,7 +3505,7 @@ private fun AnnotThumbPicker(
                     verticalArrangement = Arrangement.spacedBy(5.dp),
                     modifier = Modifier.clickable { onPageClick(index) }
                 ) {
-                    Box(
+                    BoxWithConstraints(
                         modifier = Modifier
                             .width(58.dp)
                             .shadow(
@@ -3476,6 +3525,31 @@ private fun AnnotThumbPicker(
                             contentDescription = "Page ${index + 1}",
                             modifier = Modifier.fillMaxWidth()
                         )
+                        val pageStrokes = allStrokes[index] ?: emptyList()
+                        if (pageStrokes.isNotEmpty()) {
+                            Canvas(modifier = Modifier.fillMaxWidth().aspectRatio(bmp.width.toFloat() / bmp.height.toFloat())) {
+                                for (stroke in pageStrokes) {
+                                    if (stroke.points.size < 2) continue
+                                    val path = Path()
+                                    stroke.points.forEachIndexed { i, (px, py) ->
+                                        if (i == 0) path.moveTo(px * size.width, py * size.height)
+                                        else path.lineTo(px * size.width, py * size.height)
+                                    }
+                                    drawPath(path, Color(stroke.colorArgb),
+                                        style = DrawStyle(
+                                            width = (stroke.widthDp * size.width / 1080f).coerceAtLeast(0.8f),
+                                            cap = StrokeCap.Round, join = StrokeJoin.Round))
+                                }
+                            }
+                        }
+                        val pageStamps = allStamps[index] ?: emptyList()
+                        pageStamps.forEach { st ->
+                            val density = LocalDensity.current
+                            Box(modifier = Modifier.offset(
+                                x = with(density) { (st.xNorm * constraints.maxWidth.toFloat()).toDp() - 3.dp },
+                                y = with(density) { (st.yNorm * constraints.maxWidth.toFloat() * bmp.height.toFloat() / bmp.width.toFloat()).toDp() - 3.dp }
+                            )) { Text(st.emoji, fontSize = 7.sp) }
+                        }
                         // Selected page tint overlay
                         if (selected) {
                             Box(modifier = Modifier
@@ -3629,7 +3703,13 @@ private fun UvPageNavBar(current: Int, total: Int, onPrev: () -> Unit, onNext: (
 // ─── Thumbnail Strip ──────────────────────────────────────────────────────────
 
 @Composable
-private fun UvThumbStrip(pages: List<Bitmap>, currentPage: Int, onPageClick: (Int) -> Unit) {
+private fun UvThumbStrip(
+    pages: List<Bitmap>,
+    currentPage: Int,
+    allStrokes: Map<Int, List<AnnotationStroke>> = emptyMap(),
+    allStamps: Map<Int, List<AnnotationStamp>> = emptyMap(),
+    onPageClick: (Int) -> Unit,
+) {
     val listState = rememberLazyListState()
     LaunchedEffect(currentPage) {
         runCatching { listState.animateScrollToItem(currentPage.coerceIn(0, pages.lastIndex)) }
@@ -3660,7 +3740,7 @@ private fun UvThumbStrip(pages: List<Bitmap>, currentPage: Int, onPageClick: (In
                     verticalArrangement = Arrangement.spacedBy(3.dp),
                     modifier = Modifier.clickable { onPageClick(index) }
                 ) {
-                    Box(
+                    BoxWithConstraints(
                         modifier = Modifier
                             .width(52.dp)
                             .shadow(if (selected) 8.dp else 2.dp, RoundedCornerShape(6.dp),
@@ -3673,6 +3753,31 @@ private fun UvThumbStrip(pages: List<Bitmap>, currentPage: Int, onPageClick: (In
                             )
                     ) {
                         Image(bitmap = bmp.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxWidth())
+                        val pageStrokes = allStrokes[index] ?: emptyList()
+                        if (pageStrokes.isNotEmpty()) {
+                            Canvas(modifier = Modifier.fillMaxWidth().aspectRatio(bmp.width.toFloat() / bmp.height.toFloat())) {
+                                for (stroke in pageStrokes) {
+                                    if (stroke.points.size < 2) continue
+                                    val path = Path()
+                                    stroke.points.forEachIndexed { i, (px, py) ->
+                                        if (i == 0) path.moveTo(px * size.width, py * size.height)
+                                        else path.lineTo(px * size.width, py * size.height)
+                                    }
+                                    drawPath(path, Color(stroke.colorArgb),
+                                        style = DrawStyle(
+                                            width = (stroke.widthDp * size.width / 1080f).coerceAtLeast(0.8f),
+                                            cap = StrokeCap.Round, join = StrokeJoin.Round))
+                                }
+                            }
+                        }
+                        val pageStamps = allStamps[index] ?: emptyList()
+                        pageStamps.forEach { st ->
+                            val density = LocalDensity.current
+                            Box(modifier = Modifier.offset(
+                                x = with(density) { (st.xNorm * constraints.maxWidth.toFloat()).toDp() - 3.dp },
+                                y = with(density) { (st.yNorm * constraints.maxWidth.toFloat() * bmp.height.toFloat() / bmp.width.toFloat()).toDp() - 3.dp }
+                            )) { Text(st.emoji, fontSize = 6.sp) }
+                        }
                     }
                     Text("${index + 1}", fontSize = 9.sp,
                         style = MaterialTheme.typography.labelSmall,
@@ -4650,6 +4755,12 @@ private fun FloatingSolutionViewer(
     solutionPages: List<Bitmap>,
     solutionLoading: Boolean,
     questionPages: List<Bitmap>,
+    questionStrokes: Map<Int, List<AnnotationStroke>> = emptyMap(),
+    questionTextBoxes: Map<Int, List<AnnotationTextBox>> = emptyMap(),
+    questionStamps: Map<Int, List<AnnotationStamp>> = emptyMap(),
+    solutionStrokes: Map<Int, List<AnnotationStroke>> = emptyMap(),
+    solutionTextBoxes: Map<Int, List<AnnotationTextBox>> = emptyMap(),
+    solutionStamps: Map<Int, List<AnnotationStamp>> = emptyMap(),
     mainCurrentPage: Int,
     isSwapped: Boolean,
     onSwap: () -> Unit,
@@ -4694,6 +4805,11 @@ private fun FloatingSolutionViewer(
     var showThumbs by remember { mutableStateOf(false) }
 
     val accentCol = if (isSwapped) NeonCyan else NeonGold
+
+    // Float shows annotations for the PDF it is currently displaying
+    val floatStrokes   = if (isSwapped) questionStrokes   else solutionStrokes
+    val floatTextBoxes = if (isSwapped) questionTextBoxes else solutionTextBoxes
+    val floatStamps    = if (isSwapped) questionStamps    else solutionStamps
 
     // ── Full-screen transparent host ──────────────────────────────────────────
     Box(modifier = Modifier.fillMaxSize()) {
@@ -4845,7 +4961,7 @@ private fun FloatingSolutionViewer(
                         ) {
                             itemsIndexed(displayPages) { index, bmp ->
                                 val isCurrent = index == currentPage
-                                Box(
+                                BoxWithConstraints(
                                     modifier = Modifier
                                         .width(if (isCurrent) 38.dp else 32.dp)
                                         .height(if (isCurrent) 52.dp else 44.dp)
@@ -4868,6 +4984,30 @@ private fun FloatingSolutionViewer(
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier.fillMaxSize()
                                     )
+                                    val tAnnotStrokes = floatStrokes[index] ?: emptyList()
+                                    if (tAnnotStrokes.isNotEmpty()) {
+                                        Canvas(modifier = Modifier.fillMaxSize()) {
+                                            for (stroke in tAnnotStrokes) {
+                                                if (stroke.points.size < 2) continue
+                                                val path = Path()
+                                                stroke.points.forEachIndexed { i, (px, py) ->
+                                                    if (i == 0) path.moveTo(px * size.width, py * size.height)
+                                                    else path.lineTo(px * size.width, py * size.height)
+                                                }
+                                                drawPath(path, Color(stroke.colorArgb),
+                                                    style = DrawStyle(
+                                                        width = (stroke.widthDp * size.width / 1080f).coerceAtLeast(0.8f),
+                                                        cap = StrokeCap.Round, join = StrokeJoin.Round))
+                                            }
+                                        }
+                                    }
+                                    val tAnnotStamps = floatStamps[index] ?: emptyList()
+                                    tAnnotStamps.forEach { st ->
+                                        Box(modifier = Modifier.offset(
+                                            x = with(density) { (st.xNorm * constraints.maxWidth.toFloat()).toDp() - 3.dp },
+                                            y = with(density) { (st.yNorm * constraints.maxHeight.toFloat()).toDp() - 3.dp }
+                                        )) { Text(st.emoji, fontSize = 5.sp) }
+                                    }
                                     if (isCurrent) {
                                         Box(
                                             modifier = Modifier
@@ -4960,14 +5100,65 @@ private fun FloatingSolutionViewer(
                             }
                         }
                         else -> {
-                            val safePage = currentPage.coerceIn(0, displayPages.lastIndex)
-                            Box(modifier = Modifier.fillMaxSize()) {
+                            val safePage     = currentPage.coerceIn(0, displayPages.lastIndex)
+                            val bmpPage      = displayPages[safePage]
+                            val pageStrokesF = floatStrokes[safePage]   ?: emptyList()
+                            val pageTBoxesF  = floatTextBoxes[safePage] ?: emptyList()
+                            val pageStampsF  = floatStamps[safePage]    ?: emptyList()
+                            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                val boxW      = constraints.maxWidth.toFloat()
+                                val boxH      = constraints.maxHeight.toFloat()
+                                val imgAspect = bmpPage.width.toFloat() / bmpPage.height.toFloat()
+                                val fitW = if (imgAspect > boxW / boxH) boxW else boxH * imgAspect
+                                val fitH = if (imgAspect > boxW / boxH) boxW / imgAspect else boxH
+                                val offX = (boxW - fitW) / 2f
+                                val offY = (boxH - fitH) / 2f
                                 Image(
-                                    bitmap = displayPages[safePage].asImageBitmap(),
+                                    bitmap = bmpPage.asImageBitmap(),
                                     contentDescription = "Page ${safePage + 1}",
                                     contentScale = ContentScale.Fit,
                                     modifier = Modifier.fillMaxSize()
                                 )
+                                // Annotation overlay positioned over the actual ContentScale.Fit image area
+                                if (pageStrokesF.isNotEmpty() || pageTBoxesF.isNotEmpty() || pageStampsF.isNotEmpty()) {
+                                    Box(modifier = Modifier
+                                        .size(with(density) { fitW.toDp() }, with(density) { fitH.toDp() })
+                                        .offset(with(density) { offX.toDp() }, with(density) { offY.toDp() })
+                                    ) {
+                                        if (pageStrokesF.isNotEmpty()) {
+                                            Canvas(modifier = Modifier.fillMaxSize()) {
+                                                for (stroke in pageStrokesF) {
+                                                    if (stroke.points.size < 2) continue
+                                                    val path = Path()
+                                                    stroke.points.forEachIndexed { i, (px, py) ->
+                                                        if (i == 0) path.moveTo(px * fitW, py * fitH)
+                                                        else path.lineTo(px * fitW, py * fitH)
+                                                    }
+                                                    drawPath(path, Color(stroke.colorArgb),
+                                                        style = DrawStyle(
+                                                            width = with(density) { stroke.widthDp.dp.toPx() },
+                                                            cap = StrokeCap.Round, join = StrokeJoin.Round))
+                                                }
+                                            }
+                                        }
+                                        pageTBoxesF.forEach { tb ->
+                                            Box(modifier = Modifier
+                                                .offset(with(density) { (tb.xNorm * fitW).toDp() }, with(density) { (tb.yNorm * fitH).toDp() })
+                                                .padding(2.dp)
+                                            ) {
+                                                Text(tb.text, color = Color(tb.colorArgb),
+                                                    fontSize = (tb.fontSizeSp * 0.55f).sp,
+                                                    fontWeight = if (tb.isBold) FontWeight.Bold else FontWeight.Normal)
+                                            }
+                                        }
+                                        pageStampsF.forEach { st ->
+                                            Box(modifier = Modifier.offset(
+                                                with(density) { (st.xNorm * fitW).toDp() },
+                                                with(density) { (st.yNorm * fitH).toDp() }
+                                            )) { Text(st.emoji, fontSize = (st.sizeSp * 0.45f).sp) }
+                                        }
+                                    }
+                                }
                                 // Swipe-direction hint arrows on right edge
                                 if (displayPages.size > 1) {
                                     Column(
