@@ -63,8 +63,9 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
     val scope = rememberCoroutineScope()
 
     val backupVm: BackupViewModel = hiltViewModel()
-    val backupState by backupVm.state.collectAsState()
-    val backupMessage by backupVm.message.collectAsState()
+    val backupState       by backupVm.state.collectAsState()
+    val backupMessage     by backupVm.message.collectAsState()
+    val restartRequired   by backupVm.restartRequired.collectAsState()
     val folderPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri?.let { backupVm.createBackup(context, it) }
     }
@@ -538,6 +539,49 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
                 }
             }
         }
+    }
+
+    // ── Restart Required Dialog (shown after a successful restore) ────────────
+    if (restartRequired) {
+        AlertDialog(
+            onDismissRequest = {},
+            containerColor   = Color(0xFF08122A),
+            shape            = RoundedCornerShape(24.dp),
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Icons.Default.RestartAlt, null, tint = NeonCyan, modifier = Modifier.size(22.dp))
+                    Text("Restart Required", fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            },
+            text = {
+                Text(
+                    "Restore is complete. The app must restart for all your data — including profile details, error notebook, revision scheduler, and all other records — to appear correctly.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(0.75f),
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                        intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                        android.os.Process.killProcess(android.os.Process.myPid())
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+                ) {
+                    Icon(Icons.Default.RestartAlt, null, modifier = Modifier.size(16.dp), tint = Color.Black)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Restart Now", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { backupVm.resetState() }) {
+                    Text("Later", color = Color.White.copy(0.5f))
+                }
+            }
+        )
     }
 
     // Target Edit Dialog
@@ -1118,8 +1162,8 @@ fun BackupRestoreCard(
                     modifier = Modifier.size(12.dp).padding(top = 1.dp)
                 )
                 Text(
-                    "Backup saves your entire database, PDFs, annotations and settings. " +
-                    "Restore merges backup data with existing data without deleting anything.",
+                    "Backup saves your entire database (all screens), PDFs, annotations, alarm settings and preferences. " +
+                    "After a restore the app will prompt you to restart so all data — profile, error notebook, revision planner, performance stats and more — loads correctly.",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(0.28f),
                     lineHeight = 16.sp

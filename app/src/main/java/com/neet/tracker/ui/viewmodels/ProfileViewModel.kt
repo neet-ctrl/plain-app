@@ -183,11 +183,14 @@ class BackupViewModel @Inject constructor(
     private val db: NEETDatabase
 ) : ViewModel() {
 
-    private val _state   = MutableStateFlow(BackupState.IDLE)
+    private val _state          = MutableStateFlow(BackupState.IDLE)
     val state: StateFlow<BackupState> = _state.asStateFlow()
 
-    private val _message = MutableStateFlow("")
+    private val _message        = MutableStateFlow("")
     val message: StateFlow<String> = _message.asStateFlow()
+
+    private val _restartRequired = MutableStateFlow(false)
+    val restartRequired: StateFlow<Boolean> = _restartRequired.asStateFlow()
 
     fun createBackup(context: Context, folderUri: Uri) {
         viewModelScope.launch {
@@ -210,8 +213,9 @@ class BackupViewModel @Inject constructor(
             _message.value = "Restoring backup…"
             val result = BackupManager.restoreBackup(context, db, fileUri)
             if (result.isSuccess) {
-                _state.value   = BackupState.SUCCESS
-                _message.value = "Restore complete — ${result.getOrNull()} records merged."
+                _state.value          = BackupState.SUCCESS
+                _message.value        = "Restore complete — ${result.getOrNull()} records found. Tap Restart to apply."
+                _restartRequired.value = true
             } else {
                 _state.value   = BackupState.ERROR
                 _message.value = "Restore failed: ${result.exceptionOrNull()?.message}"
@@ -220,8 +224,9 @@ class BackupViewModel @Inject constructor(
     }
 
     fun resetState() {
-        _state.value   = BackupState.IDLE
-        _message.value = ""
+        _state.value          = BackupState.IDLE
+        _message.value        = ""
+        _restartRequired.value = false
     }
 }
 

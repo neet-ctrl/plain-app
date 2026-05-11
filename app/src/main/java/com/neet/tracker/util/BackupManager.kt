@@ -18,7 +18,11 @@ import java.util.zip.ZipOutputStream
 
 object BackupManager {
 
-    private val SHARED_PREF_NAMES = listOf("uv_viewer", "neet_chapter_library")
+    private val SHARED_PREF_NAMES = listOf(
+        "uv_viewer",
+        "neet_chapter_library",
+        "neet_alarms"
+    )
 
     // Every Room table — if a table doesn't exist in the backup DB it's silently skipped.
     private val ALL_TABLES = listOf(
@@ -40,7 +44,10 @@ object BackupManager {
         "subject_short_notes",
         "lack_points",
         "neet_syllabus",
-        "reminders"
+        "reminders",
+        "error_entries",
+        "revision_items",
+        "flashcard_progress"
     )
 
     // ── Backup ────────────────────────────────────────────────────────────────
@@ -127,8 +134,17 @@ object BackupManager {
 
     /**
      * Restores a .neet backup from [fileUri].
-     * Merges data — existing records are kept; backup records are INSERT OR REPLACE'd.
-     * Returns total row count merged on success.
+     *
+     * Strategy (most reliable — guarantees profile & all data are fully recovered):
+     *  1. Extract ZIP to a temp dir.
+     *  2. Count total rows in backup DB (for reporting).
+     *  3. Merge user-created files (PDFs, annotations, images) — non-destructive.
+     *  4. Restore SharedPreferences — backup values merge over current.
+     *  5. Close Room, overwrite the live .db file with the backup copy, delete
+     *     WAL/SHM so SQLite starts clean. Room auto-reconnects on next access.
+     *
+     * Caller should prompt the user to restart the app after success so that
+     * all Room Flows see the new database content.
      */
     suspend fun restoreBackup(
         context: Context,
@@ -158,56 +174,24 @@ object BackupManager {
                 }
             }
 
-            var rowsRestored = 0
-
-            // 2. Merge Room database
+            // 2. Count rows in backup DB (for reporting only)
+            var rowsTotal = 0
             val backupDbFile = File(restoreDir, "database.db")
             if (backupDbFile.exists()) {
                 val srcDb = SQLiteDatabase.openDatabase(
-                    backupDbFile.absolutePath,
-                    null,
-                    SQLiteDatabase.OPEN_READONLY
+                    backupDbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY
                 )
-                val dstDb = db.openHelper.writableDatabase
-                dstDb.beginTransaction()
-                try {
-                    ALL_TABLES.forEach { table ->
-                        runCatching {
-                            srcDb.rawQuery("SELECT * FROM $table", null).use { cursor ->
-                                if (cursor.moveToFirst()) {
-                                    val colNames     = cursor.columnNames
-                                    val cols         = colNames.joinToString(",")
-                                    val placeholders = colNames.joinToString(",") { "?" }
-                                    do {
-                                        val vals = Array<Any?>(colNames.size) { i ->
-                                            when (cursor.getType(i)) {
-                                                Cursor.FIELD_TYPE_INTEGER -> cursor.getLong(i)
-                                                Cursor.FIELD_TYPE_FLOAT   -> cursor.getDouble(i)
-                                                Cursor.FIELD_TYPE_BLOB    -> cursor.getBlob(i)
-                                                Cursor.FIELD_TYPE_NULL    -> null
-                                                else                      -> cursor.getString(i)
-                                            }
-                                        }
-                                        runCatching {
-                                            dstDb.execSQL(
-                                                "INSERT OR REPLACE INTO $table ($cols) VALUES ($placeholders)",
-                                                vals
-                                            )
-                                            rowsRestored++
-                                        }
-                                    } while (cursor.moveToNext())
-                                }
-                            }
+                ALL_TABLES.forEach { table ->
+                    runCatching {
+                        srcDb.rawQuery("SELECT COUNT(*) FROM $table", null).use { c ->
+                            if (c.moveToFirst()) rowsTotal += c.getInt(0)
                         }
                     }
-                    dstDb.setTransactionSuccessful()
-                } finally {
-                    dstDb.endTransaction()
-                    srcDb.close()
                 }
+                srcDb.close()
             }
 
-            // 3. Copy files — only add files that don't yet exist (merge, not overwrite)
+            // 3. Merge files — only add files that don't yet exist (non-destructive)
             val backupFiles = File(restoreDir, "files")
             if (backupFiles.exists()) {
                 val targetDir = context.filesDir
@@ -219,7 +203,7 @@ object BackupManager {
                 }
             }
 
-            // 4. Restore SharedPreferences (backup values are merged over current)
+            // 4. Restore SharedPreferences
             val prefsFile = File(restoreDir, "prefs.json")
             if (prefsFile.exists()) {
                 runCatching {
@@ -243,8 +227,24 @@ object BackupManager {
                 }
             }
 
+            // 5. Replace the live database file with the backup copy.
+            //    Close Room first so the file is not locked, then overwrite,
+            //    then delete WAL/SHM so SQLite opens cleanly on next access.
+            if (backupDbFile.exists()) {
+                val liveDbFile = context.getDatabasePath("neet_tracker.db")
+                val liveWal    = File(liveDbFile.parentFile, "neet_tracker.db-wal")
+                val liveShm    = File(liveDbFile.parentFile, "neet_tracker.db-shm")
+
+                runCatching { db.close() }
+
+                liveDbFile.parentFile?.mkdirs()
+                backupDbFile.copyTo(liveDbFile, overwrite = true)
+                liveWal.delete()
+                liveShm.delete()
+            }
+
             restoreDir.deleteRecursively()
-            rowsRestored
+            rowsTotal
         }
     }
 
