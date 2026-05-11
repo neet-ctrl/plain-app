@@ -249,7 +249,8 @@ fun NEETNavHost() {
             FileViewerScreen(navController, fileUri, title)
         }
 
-        composable(Routes.GLOBAL_SEARCH)    { GlobalSearchScreen(navController) }
-        composable(Routes.FLASHCARD_REVIEW) { FlashcardScreen(navController) }
+        composable(Routes.GLOBAL_SEARCH)         { GlobalSearchScreen(navController) }
+        composable(Routes.FLASHCARD_REVIEW)      { FlashcardScreen(navController) }
+        composable(Routes.PERFORMANCE_ANALYTICS) { PerformanceAnalyticsScreen(navController) }
     }
 }

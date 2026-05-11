@@ -265,6 +265,8 @@ interface NEETDao {
     fun getAllPYQYears(): Flow<List<PYQYear>>
     @Query("SELECT * FROM test_papers ORDER BY createdAt ASC")
     fun getAllTestPapers(): Flow<List<TestPaper>>
+    @Query("SELECT * FROM pw_tests ORDER BY createdAt ASC")
+    fun getAllPWTests(): Flow<List<PWTest>>
 
     // ── Global Search extras ──────────────────────────────────────────────────
     @Query("SELECT * FROM notebook_chapters ORDER BY rowid ASC")

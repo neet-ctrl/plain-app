@@ -62,6 +62,9 @@ object Routes {
     // Flashcard Review
     const val FLASHCARD_REVIEW    = "flashcard_review"
 
+    // Performance Analytics
+    const val PERFORMANCE_ANALYTICS = "performance_analytics"
+
     // File Viewer
     const val FILE_VIEWER = "file_viewer/{encodedUri}/{title}?solutionUri={solutionUri}"
 
