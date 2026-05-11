@@ -4,7 +4,6 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.tabIndicatorOffset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -159,13 +158,16 @@ fun RevisionSchedulerScreen(
                 contentColor     = NeonCyan,
                 edgePadding      = 16.dp,
                 indicator = { positions ->
-                    TabRowDefaults.Indicator(
-                        modifier = Modifier
-                            .tabIndicatorOffset(positions[selectedTab])
+                    val tabPos = positions[selectedTab]
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .wrapContentSize(align = Alignment.BottomStart)
+                            .offset(x = tabPos.left)
+                            .width(tabPos.width)
                             .padding(horizontal = 12.dp)
-                            .clip(CircleShape),
-                        color = NeonCyan,
-                        height = 2.dp
+                            .height(2.dp)
+                            .background(NeonCyan, CircleShape)
                     )
                 }
             ) {
