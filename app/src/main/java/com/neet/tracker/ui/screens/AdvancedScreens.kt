@@ -233,6 +233,12 @@ fun UniversalCalendarScreen(navController: NavController) {
         ) {
             Box(
                 modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.82f)),
+                contentAlignment = Alignment.Center
+            ) {
+            Box(
+                modifier = Modifier
                     .fillMaxWidth(0.96f)
                     .wrapContentHeight(),
                 contentAlignment = Alignment.Center
@@ -312,6 +318,7 @@ fun UniversalCalendarScreen(navController: NavController) {
                         }
                     }
                 }
+            }
             }
         }
     }
