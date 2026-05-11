@@ -342,63 +342,6 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
         }
     }
 
-    // ── File picker (OpenDocument — opens system storage browser, not gallery) ──
-    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { pickedUri ->
-        pickedUri?.let { uri ->
-            pendingImageTapPos?.let { (xNorm, yNorm) ->
-                annoScope.launch {
-                    val path = AnnotationManager.copyImageToStorage(context, uri)
-                    if (path.isNotBlank()) {
-                        val iW = 0.45f; val iH = 0.35f
-                        val newBox = AnnotationImageBox(
-                            xNorm     = (xNorm - iW / 2).coerceIn(0f, (1f - iW).coerceAtLeast(0f)),
-                            yNorm     = (yNorm - iH / 2).coerceIn(0f, (1f - iH).coerceAtLeast(0f)),
-                            wNorm     = iW,
-                            hNorm     = iH,
-                            imagePath = path
-                        )
-                        val cur = allPageImageBoxes[currentPage] ?: emptyList()
-                        allPageImageBoxes = allPageImageBoxes + (currentPage to cur + newBox)
-                        AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes)
-                    }
-                    pendingImageTapPos = null
-                }
-            }
-        }
-    }
-
-    // ── Camera launcher (TakePicture — writes to a FileProvider temp file) ──────
-    var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
-    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        if (success) {
-            cameraImageUri?.let { uri ->
-                pendingImageTapPos?.let { (xNorm, yNorm) ->
-                    annoScope.launch {
-                        val path = AnnotationManager.copyImageToStorage(context, uri)
-                        if (path.isNotBlank()) {
-                            val iW = 0.45f; val iH = 0.35f
-                            val newBox = AnnotationImageBox(
-                                xNorm     = (xNorm - iW / 2).coerceIn(0f, (1f - iW).coerceAtLeast(0f)),
-                                yNorm     = (yNorm - iH / 2).coerceIn(0f, (1f - iH).coerceAtLeast(0f)),
-                                wNorm     = iW,
-                                hNorm     = iH,
-                                imagePath = path
-                            )
-                            val cur = allPageImageBoxes[currentPage] ?: emptyList()
-                            allPageImageBoxes = allPageImageBoxes + (currentPage to cur + newBox)
-                            AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes)
-                        }
-                        pendingImageTapPos = null
-                        cameraImageUri = null
-                    }
-                }
-            }
-        } else {
-            pendingImageTapPos = null
-            cameraImageUri = null
-        }
-    }
-
     // ── Notes ──────────────────────────────────────────────────────────────────
     var notesText by remember(noteKey) { mutableStateOf(prefs.getString(noteKey, "") ?: "") }
     LaunchedEffect(notesText) { prefs.edit().putString(noteKey, notesText).apply() }
@@ -1206,18 +1149,8 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                         }
                     },
                     onImageGallery  = { pendingImageTapPos = 0.5f to 0.5f; imagePicker.launch("image/*"); showToolSheet = false },
-                    onImageFiles    = { pendingImageTapPos = 0.5f to 0.5f; filePicker.launch(arrayOf("image/*")); showToolSheet = false },
-                    onImageCamera   = {
-                        pendingImageTapPos = 0.5f to 0.5f
-                        try {
-                            val dir = File(context.cacheDir, "camera_captures").also { it.mkdirs() }
-                            val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
-                            val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                            cameraImageUri = uri
-                            cameraLauncher.launch(uri)
-                        } catch (_: Exception) { pendingImageTapPos = null }
-                        showToolSheet = false
-                    },
+                    onImageFiles    = { pendingImageTapPos = 0.5f to 0.5f; imagePicker.launch("image/*"); showToolSheet = false },
+                    onImageCamera   = { pendingImageTapPos = 0.5f to 0.5f; imagePicker.launch("image/*"); showToolSheet = false },
                     onClose         = { showToolSheet = false },
                 )
             }
