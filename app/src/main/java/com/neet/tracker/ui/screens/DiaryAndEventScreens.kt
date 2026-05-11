@@ -593,8 +593,8 @@ fun DateEventCard(
                 } else {
                     // ── Edit Mode ──────────────────────────────────────────────
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        DialogTextField(value = name, onValueChange = { name = it; onUpdate(event.copy(name = name)) }, label = "Event Name", icon = Icons.Default.Event, accentColor = statusColor)
-                        DialogTextField(value = detail, onValueChange = { detail = it; onUpdate(event.copy(detail = detail)) }, label = "Details", icon = Icons.Default.Description, accentColor = statusColor, multiline = true)
+                        DialogTextField(value = name, onValueChange = { name = it }, label = "Event Name", icon = Icons.Default.Event, accentColor = statusColor)
+                        DialogTextField(value = detail, onValueChange = { detail = it }, label = "Details", icon = Icons.Default.Description, accentColor = statusColor, multiline = true)
                         NeetTimeRangePickerButton(value = timeRange, onValueChange = { timeRange = it; onUpdate(event.copy(timeRange = timeRange)) }, accentColor = statusColor, label = "Event Time Range")
 
                         if (event.url.isNotBlank()) {
@@ -657,7 +657,7 @@ fun DateEventCard(
                             }
                         }
                         if (showCrossInput) {
-                            DialogTextField(value = crossReason, onValueChange = { crossReason = it; onUpdate(event.copy(crossReason = crossReason)) }, label = "Reason for missing", icon = Icons.Default.ReportProblem, accentColor = StatusCross)
+                            DialogTextField(value = crossReason, onValueChange = { crossReason = it }, label = "Reason for missing", icon = Icons.Default.ReportProblem, accentColor = StatusCross)
                             Button(
                                 onClick = onShiftToNextDate,
                                 modifier = Modifier.fillMaxWidth(),
@@ -668,6 +668,21 @@ fun DateEventCard(
                                 Spacer(Modifier.width(6.dp))
                                 Text("Shift to Next Date", color = NeonOrange, style = MaterialTheme.typography.labelLarge)
                             }
+                        }
+
+                        // ── Save Button ────────────────────────────────────────
+                        Button(
+                            onClick = {
+                                onUpdate(event.copy(name = name, detail = detail, crossReason = crossReason))
+                                isViewMode = true
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = statusColor.copy(0.2f)),
+                            border = BorderStroke(1.dp, statusColor.copy(0.7f))
+                        ) {
+                            Icon(Icons.Default.Save, null, tint = statusColor, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Save Event", color = statusColor, fontWeight = FontWeight.Bold)
                         }
 
                         if (onViewFile != null || onUploadFile != null) {
