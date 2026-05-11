@@ -59,6 +59,11 @@ import java.io.File
 import java.util.UUID
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.text.font.FontStyle
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.awaitFirstDown
+import com.neet.tracker.util.AnnotationImageBox
 
 private val UV_PAGE_MARKS = listOf(
     "✅" to "Got It",
@@ -215,6 +220,31 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var allPageTextBoxes    by remember { mutableStateOf<Map<Int, List<AnnotationTextBox>>>(emptyMap()) }
     var pendingTextPos      by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     var showSolutionWindow  by remember { mutableStateOf(false) }
+    var allPageImageBoxes   by remember { mutableStateOf<Map<Int, List<AnnotationImageBox>>>(emptyMap()) }
+    var pendingImageTapPos  by remember { mutableStateOf<Pair<Float, Float>?>(null) }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { pickedUri ->
+        pickedUri?.let { uri ->
+            pendingImageTapPos?.let { (xNorm, yNorm) ->
+                annoScope.launch {
+                    val path = AnnotationManager.copyImageToStorage(context, uri)
+                    if (path.isNotBlank()) {
+                        val iW = 0.45f; val iH = 0.35f
+                        val newBox = AnnotationImageBox(
+                            xNorm     = (xNorm - iW / 2).coerceIn(0f, (1f - iW).coerceAtLeast(0f)),
+                            yNorm     = (yNorm - iH / 2).coerceIn(0f, (1f - iH).coerceAtLeast(0f)),
+                            wNorm     = iW,
+                            hNorm     = iH,
+                            imagePath = path
+                        )
+                        val cur = allPageImageBoxes[currentPage] ?: emptyList()
+                        allPageImageBoxes = allPageImageBoxes + (currentPage to cur + newBox)
+                        AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes)
+                    }
+                    pendingImageTapPos = null
+                }
+            }
+        }
+    }
 
     // ── Notes ──────────────────────────────────────────────────────────────────
     var notesText by remember(noteKey) { mutableStateOf(prefs.getString(noteKey, "") ?: "") }
@@ -255,6 +285,12 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
         if (tryAsPdf) {
             val loadedTexts = AnnotationManager.loadTextBoxes(context, fileUri)
             if (loadedTexts.isNotEmpty()) allPageTextBoxes = loadedTexts
+        }
+    }
+    LaunchedEffect(fileUri) {
+        if (tryAsPdf) {
+            val loadedImgs = AnnotationManager.loadImageBoxes(context, fileUri)
+            if (loadedImgs.isNotEmpty()) allPageImageBoxes = loadedImgs
         }
     }
 
@@ -622,6 +658,23 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                                     val upd = cur.filter { it.id != id }
                                     allPageTextBoxes = allPageTextBoxes + (currentPage to upd)
                                     annoScope.launch { AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes) }
+                                },
+                                pageImageBoxes  = allPageImageBoxes[currentPage] ?: emptyList(),
+                                onImageTap      = { xNorm, yNorm ->
+                                    pendingImageTapPos = Pair(xNorm, yNorm)
+                                    imagePicker.launch("image/*")
+                                },
+                                onImageBoxUpdate = { updatedBox ->
+                                    val cur = allPageImageBoxes[currentPage] ?: emptyList()
+                                    val upd = cur.map { if (it.id == updatedBox.id) updatedBox else it }
+                                    allPageImageBoxes = allPageImageBoxes + (currentPage to upd)
+                                    annoScope.launch { AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes) }
+                                },
+                                onImageBoxDelete = { id ->
+                                    val cur = allPageImageBoxes[currentPage] ?: emptyList()
+                                    val upd = cur.filter { it.id != id }
+                                    allPageImageBoxes = allPageImageBoxes + (currentPage to upd)
+                                    annoScope.launch { AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes) }
                                 }
                             )
                             pdfError -> {
@@ -785,7 +838,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 canUndo          = annoUndoStack.isNotEmpty(),
                 canRedo          = annoRedoStack.isNotEmpty(),
                 zoomEnabled      = annotZoomEnabled,
-                onToolChange     = { annotationTool = it; if (it == AnnotationTool.TEXT) annotZoomEnabled = false },
+                onToolChange     = { annotationTool = it; if (it == AnnotationTool.TEXT || it == AnnotationTool.IMAGE) annotZoomEnabled = false },
                 onColorChange    = { annotationColorArgb = it },
                 onWidthChange    = { annotationWidthDp = it },
                 onUndo = {
@@ -1048,6 +1101,10 @@ private fun UvPdfPage(
     pageTextBoxes: List<AnnotationTextBox> = emptyList(),
     onTextBoxPlace: (Float, Float) -> Unit = { _, _ -> },
     onTextBoxDelete: (String) -> Unit = {},
+    pageImageBoxes: List<AnnotationImageBox> = emptyList(),
+    onImageTap: (Float, Float) -> Unit = { _, _ -> },
+    onImageBoxUpdate: (AnnotationImageBox) -> Unit = {},
+    onImageBoxDelete: (String) -> Unit = {},
 ) {
     val density = LocalDensity.current
 
@@ -1164,6 +1221,19 @@ private fun UvPdfPage(
                 onStrokesErase      = onStrokesErase,
                 onPrev              = onPrev,
                 onNext              = onNext,
+                onImageTap          = onImageTap,
+            )
+        }
+
+        // Image overlay composables (visible in both read and annotation mode)
+        if (pageImageBoxes.isNotEmpty()) {
+            ImageOverlayLayer(
+                imageBoxes    = pageImageBoxes,
+                imageWidthPx  = imageWidthPx,
+                imageHeightPx = imageHeightPx,
+                annotationMode = annotationMode,
+                onUpdate      = onImageBoxUpdate,
+                onDelete      = onImageBoxDelete,
             )
         }
 
@@ -1262,6 +1332,7 @@ private fun UvPdfPage(
                                 AnnotationTool.ERASER      -> "Eraser  ·  Touch strokes to erase"
                                 AnnotationTool.ARROW       -> "Arrow  ·  Draw a curved labeling arrow"
                                 AnnotationTool.TEXT        -> "Text  ·  Tap to place a text label"
+                                AnnotationTool.IMAGE       -> "Image  ·  Tap anywhere to place an image"
                             },
                             style = MaterialTheme.typography.labelSmall, color = NeonOrange.copy(0.9f)
                         )
@@ -1308,6 +1379,7 @@ private fun PdfAnnotationOverlay(
     onStrokesErase: (List<AnnotationStroke>) -> Unit,
     onPrev: () -> Unit = {},
     onNext: () -> Unit = {},
+    onImageTap: (Float, Float) -> Unit = { _, _ -> },
 ) {
     val density = LocalDensity.current
     val strokeWidthPx  = with(density) { strokeWidthDp.dp.toPx() }
@@ -1409,11 +1481,12 @@ private fun PdfAnnotationOverlay(
                     }
                 } else {
                     // ── Original single-touch draw-only mode ────────────────────
-                    if (tool == AnnotationTool.TEXT) {
+                    if (tool == AnnotationTool.TEXT || tool == AnnotationTool.IMAGE) {
                         detectTapGestures { offset ->
                             val nx = (offset.x / imageWidthPx).coerceIn(0f, 1f)
                             val ny = (offset.y / imageHeightPx).coerceIn(0f, 1f)
-                            onTextBoxPlace(nx, ny)
+                            if (tool == AnnotationTool.TEXT) onTextBoxPlace(nx, ny)
+                            else onImageTap(nx, ny)
                         }
                     } else {
                         // ── Single-touch: draw OR swipe-to-navigate ─────────────
@@ -1671,6 +1744,244 @@ private fun LinePointerOverlay(
     }
 }
 
+// ─── Image Overlay Composables ────────────────────────────────────────────────
+
+private enum class ImgDragZone { BODY, TL, TC, TR, ML, MR, BL, BC, BR, DELETE }
+
+private fun hitTestImgZone(
+    pos: Offset,
+    padPx: Float,
+    wPx: Float,
+    @Suppress("UNUSED_PARAMETER") hPx: Float,
+    handleR: Float,
+): ImgDragZone {
+    // Delete button hit test (top-right corner of image, clamped inside expanded box)
+    val delDx = pos.x - (padPx + wPx - 12f)
+    val delDy = pos.y - (padPx - 14f).coerceAtLeast(8f)
+    if (Offset(delDx, delDy).getDistance() <= handleR) return ImgDragZone.DELETE
+
+    val handles = listOf(
+        ImgDragZone.TL to Offset(padPx, padPx),
+        ImgDragZone.TC to Offset(padPx + wPx / 2, padPx),
+        ImgDragZone.TR to Offset(padPx + wPx, padPx),
+        ImgDragZone.ML to Offset(padPx, padPx + hPx / 2),
+        ImgDragZone.MR to Offset(padPx + wPx, padPx + hPx / 2),
+        ImgDragZone.BL to Offset(padPx, padPx + hPx),
+        ImgDragZone.BC to Offset(padPx + wPx / 2, padPx + hPx),
+        ImgDragZone.BR to Offset(padPx + wPx, padPx + hPx),
+    )
+    for ((zone, center) in handles) {
+        if ((pos - center).getDistance() <= handleR) return zone
+    }
+    return ImgDragZone.BODY
+}
+
+private fun applyImgResize(
+    box: AnnotationImageBox,
+    zone: ImgDragZone,
+    dx: Float,
+    dy: Float,
+    iWpx: Float,
+    iHpx: Float,
+): AnnotationImageBox {
+    val minW = 60f / iWpx
+    val minH = 60f / iHpx
+    val dxN  = dx / iWpx
+    val dyN  = dy / iHpx
+
+    fun moveL(b: AnnotationImageBox, d: Float): AnnotationImageBox {
+        val newW   = (b.wNorm - d).coerceAtLeast(minW)
+        val usedDx = b.wNorm - newW
+        return b.copy(xNorm = b.xNorm + usedDx, wNorm = newW)
+    }
+    fun moveR(b: AnnotationImageBox, d: Float): AnnotationImageBox =
+        b.copy(wNorm = (b.wNorm + d).coerceAtLeast(minW))
+    fun moveT(b: AnnotationImageBox, d: Float): AnnotationImageBox {
+        val newH   = (b.hNorm - d).coerceAtLeast(minH)
+        val usedDy = b.hNorm - newH
+        return b.copy(yNorm = b.yNorm + usedDy, hNorm = newH)
+    }
+    fun moveB(b: AnnotationImageBox, d: Float): AnnotationImageBox =
+        b.copy(hNorm = (b.hNorm + d).coerceAtLeast(minH))
+    fun moveBody(b: AnnotationImageBox, dxN2: Float, dyN2: Float): AnnotationImageBox =
+        b.copy(
+            xNorm = (b.xNorm + dxN2).coerceIn(0f, (1f - b.wNorm).coerceAtLeast(0f)),
+            yNorm = (b.yNorm + dyN2).coerceIn(0f, (1f - b.hNorm).coerceAtLeast(0f))
+        )
+
+    return when (zone) {
+        ImgDragZone.BODY   -> moveBody(box, dxN, dyN)
+        ImgDragZone.TL     -> moveL(moveT(box, dyN), dxN)
+        ImgDragZone.TC     -> moveT(box, dyN)
+        ImgDragZone.TR     -> moveR(moveT(box, dyN), dxN)
+        ImgDragZone.ML     -> moveL(box, dxN)
+        ImgDragZone.MR     -> moveR(box, dxN)
+        ImgDragZone.BL     -> moveL(moveB(box, dyN), dxN)
+        ImgDragZone.BC     -> moveB(box, dyN)
+        ImgDragZone.BR     -> moveR(moveB(box, dyN), dxN)
+        ImgDragZone.DELETE -> box
+    }
+}
+
+@Composable
+private fun ImageOverlayLayer(
+    imageBoxes: List<AnnotationImageBox>,
+    imageWidthPx: Float,
+    imageHeightPx: Float,
+    annotationMode: Boolean,
+    onUpdate: (AnnotationImageBox) -> Unit,
+    onDelete: (String) -> Unit,
+) {
+    val density = LocalDensity.current
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(with(density) { imageHeightPx.toDp() })
+    ) {
+        imageBoxes.forEach { box ->
+            key(box.id) {
+                ImageBoxItem(
+                    box           = box,
+                    imageWidthPx  = imageWidthPx,
+                    imageHeightPx = imageHeightPx,
+                    annotationMode = annotationMode,
+                    onUpdate      = onUpdate,
+                    onDelete      = { onDelete(box.id) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImageBoxItem(
+    box: AnnotationImageBox,
+    imageWidthPx: Float,
+    imageHeightPx: Float,
+    annotationMode: Boolean,
+    onUpdate: (AnnotationImageBox) -> Unit,
+    onDelete: () -> Unit,
+) {
+    val density      = LocalDensity.current
+    val padDp        = 22.dp
+    val padPx        = with(density) { padDp.toPx() }
+    val handleR      = with(density) { 24.dp.toPx() }
+    val handleSizeDp = 15.dp
+    val halfHPx      = with(density) { (handleSizeDp / 2).toPx() }
+
+    var liveBox by remember(box.id) { mutableStateOf(box) }
+    LaunchedEffect(box) { liveBox = box }
+
+    // Derived from live state — recomputed on every recomposition triggered by liveBox changes
+    val wPx    = liveBox.wNorm * imageWidthPx
+    val hPx    = liveBox.hNorm * imageHeightPx
+    val xOffDp = with(density) { (liveBox.xNorm * imageWidthPx - padPx).toDp() }
+    val yOffDp = with(density) { (liveBox.yNorm * imageHeightPx - padPx).toDp() }
+    val wExpDp = with(density) { (wPx + 2 * padPx).toDp() }
+    val hExpDp = with(density) { (hPx + 2 * padPx).toDp() }
+
+    Box(
+        modifier = Modifier
+            .offset(xOffDp, yOffDp)
+            .size(wExpDp, hExpDp)
+            .then(
+                if (annotationMode) Modifier.pointerInput(box.id) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val down  = awaitFirstDown(requireUnconsumed = false)
+                            val curWpx = liveBox.wNorm * imageWidthPx
+                            val curHpx = liveBox.hNorm * imageHeightPx
+                            val zone  = hitTestImgZone(down.position, padPx, curWpx, curHpx, handleR)
+                            var prev  = down.position
+
+                            if (zone == ImgDragZone.DELETE) {
+                                var moved = false
+                                loop@ while (true) {
+                                    val evt = awaitPointerEvent()
+                                    val ch  = evt.changes.find { it.id == down.id } ?: break@loop
+                                    if ((ch.position - down.position).getDistance() > 14f) moved = true
+                                    if (!ch.pressed) { if (!moved) onDelete(); break@loop }
+                                    ch.consume()
+                                }
+                            } else {
+                                loop@ while (true) {
+                                    val evt  = awaitPointerEvent()
+                                    val ch   = evt.changes.find { it.id == down.id } ?: break@loop
+                                    if (!ch.pressed) { onUpdate(liveBox); break@loop }
+                                    val drag = ch.position - prev
+                                    prev     = ch.position
+                                    liveBox  = applyImgResize(liveBox, zone, drag.x, drag.y, imageWidthPx, imageHeightPx)
+                                    ch.consume()
+                                }
+                            }
+                        }
+                    }
+                } else Modifier
+            )
+    ) {
+        // Image content, padded inside expanded hit-box
+        val imgWDp = with(density) { wPx.toDp() }
+        val imgHDp = with(density) { hPx.toDp() }
+        Box(modifier = Modifier.offset(padDp, padDp).size(imgWDp, imgHDp)) {
+            val imageFile = remember(box.imagePath) { File(box.imagePath) }
+            AsyncImage(
+                model              = imageFile,
+                contentDescription = null,
+                modifier           = Modifier.fillMaxSize(),
+                contentScale       = ContentScale.Fit
+            )
+            if (annotationMode) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .border(1.5.dp, NeonCyan.copy(0.85f), RoundedCornerShape(4.dp))
+                )
+            }
+        }
+
+        if (annotationMode) {
+            // 8 resize handle circles
+            listOf(
+                Offset(padPx,           padPx),
+                Offset(padPx + wPx / 2, padPx),
+                Offset(padPx + wPx,     padPx),
+                Offset(padPx,           padPx + hPx / 2),
+                Offset(padPx + wPx,     padPx + hPx / 2),
+                Offset(padPx,           padPx + hPx),
+                Offset(padPx + wPx / 2, padPx + hPx),
+                Offset(padPx + wPx,     padPx + hPx),
+            ).forEach { center ->
+                Box(
+                    modifier = Modifier
+                        .offset(
+                            x = with(density) { (center.x - halfHPx).toDp() },
+                            y = with(density) { (center.y - halfHPx).toDp() }
+                        )
+                        .size(handleSizeDp)
+                        .shadow(4.dp, CircleShape, spotColor = NeonCyan.copy(0.7f))
+                        .background(NeonCyan, CircleShape)
+                        .border(2.dp, Color.White, CircleShape)
+                )
+            }
+
+            // Delete button — top-right, just outside the image, inside expanded box
+            val delX = with(density) { (padPx + wPx - 12f).toDp() }
+            val delY = with(density) { (padPx - 14f).coerceAtLeast(6f).toDp() }
+            Box(
+                modifier = Modifier
+                    .offset(delX, delY)
+                    .size(26.dp)
+                    .shadow(6.dp, CircleShape, spotColor = NeonRed.copy(0.8f))
+                    .background(NeonRed.copy(0.95f), CircleShape)
+                    .border(2.dp, Color.White, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(14.dp))
+            }
+        }
+    }
+}
+
 // ─── Floating Annotation Toolbar (draggable, collapsible) ─────────────────────
 
 @Composable
@@ -1803,7 +2114,7 @@ private fun FloatingAnnotToolbar(
                         }
                     }
 
-                    // ── Row 2: Arrow + Text tools ──────────────────────────────
+                    // ── Row 2: Arrow + Text + Image tools ─────────────────────
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -1811,6 +2122,7 @@ private fun FloatingAnnotToolbar(
                         listOf(
                             Triple(AnnotationTool.ARROW, Icons.Default.ArrowForward, "Arrow"),
                             Triple(AnnotationTool.TEXT,  Icons.Default.TextFields,   "Text"),
+                            Triple(AnnotationTool.IMAGE, Icons.Default.Image,        "Image"),
                         ).forEach { (t, icon, label) ->
                             val sel = tool == t
                             Box(

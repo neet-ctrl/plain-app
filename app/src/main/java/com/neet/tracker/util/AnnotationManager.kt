@@ -3,12 +3,13 @@ package com.neet.tracker.util
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.content.Context
+import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-enum class AnnotationTool { PEN, HIGHLIGHTER, ERASER, ARROW, TEXT }
+enum class AnnotationTool { PEN, HIGHLIGHTER, ERASER, ARROW, TEXT, IMAGE }
 
 data class AnnotationStroke(
     val points: List<Pair<Float, Float>>,
@@ -30,6 +31,15 @@ data class AnnotationTextBox(
     val hasBorder: Boolean = true
 )
 
+data class AnnotationImageBox(
+    val id: String = UUID.randomUUID().toString(),
+    val xNorm: Float = 0.1f,
+    val yNorm: Float = 0.1f,
+    val wNorm: Float = 0.45f,
+    val hNorm: Float = 0.35f,
+    val imagePath: String = ""
+)
+
 object AnnotationManager {
 
     private fun fileFor(context: Context, pdfKey: String): File {
@@ -44,6 +54,13 @@ object AnnotationManager {
         if (!dir.exists()) dir.mkdirs()
         val h = pdfKey.hashCode().toLong() and 0xFFFFFFFFL
         return File(dir, "annot_texts_$h.json")
+    }
+
+    private fun imgBoxesFileFor(context: Context, pdfKey: String): File {
+        val dir = File(context.filesDir, "annotations")
+        if (!dir.exists()) dir.mkdirs()
+        val h = pdfKey.hashCode().toLong() and 0xFFFFFFFFL
+        return File(dir, "annot_imgs_$h.json")
     }
 
     suspend fun load(context: Context, pdfKey: String): Map<Int, List<AnnotationStroke>> =
@@ -158,8 +175,80 @@ object AnnotationManager {
             } catch (_: Exception) {}
         }
 
+    suspend fun loadImageBoxes(context: Context, pdfKey: String): Map<Int, List<AnnotationImageBox>> =
+        withContext(Dispatchers.IO) {
+            val f = imgBoxesFileFor(context, pdfKey)
+            if (!f.exists()) return@withContext emptyMap()
+            val result = mutableMapOf<Int, List<AnnotationImageBox>>()
+            try {
+                val root = JSONObject(f.readText())
+                for (key in root.keys()) {
+                    val pageIdx = key.toIntOrNull() ?: continue
+                    val arr  = root.getJSONArray(key)
+                    val list = mutableListOf<AnnotationImageBox>()
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        list += AnnotationImageBox(
+                            id        = o.optString("id", UUID.randomUUID().toString()),
+                            xNorm     = o.getDouble("x").toFloat(),
+                            yNorm     = o.getDouble("y").toFloat(),
+                            wNorm     = o.getDouble("w").toFloat(),
+                            hNorm     = o.getDouble("h").toFloat(),
+                            imagePath = o.optString("path", "")
+                        )
+                    }
+                    result[pageIdx] = list
+                }
+            } catch (_: Exception) {}
+            result
+        }
+
+    suspend fun saveImageBoxes(context: Context, pdfKey: String, data: Map<Int, List<AnnotationImageBox>>) =
+        withContext(Dispatchers.IO) {
+            try {
+                val root = JSONObject()
+                for ((pageIdx, boxes) in data) {
+                    if (boxes.isEmpty()) continue
+                    val arr = JSONArray()
+                    for (b in boxes) {
+                        val o = JSONObject()
+                        o.put("id",   b.id)
+                        o.put("x",    b.xNorm.toDouble())
+                        o.put("y",    b.yNorm.toDouble())
+                        o.put("w",    b.wNorm.toDouble())
+                        o.put("h",    b.hNorm.toDouble())
+                        o.put("path", b.imagePath)
+                        arr.put(o)
+                    }
+                    root.put(pageIdx.toString(), arr)
+                }
+                imgBoxesFileFor(context, pdfKey).writeText(root.toString())
+            } catch (_: Exception) {}
+        }
+
+    suspend fun copyImageToStorage(context: Context, uri: Uri): String =
+        withContext(Dispatchers.IO) {
+            try {
+                val dir = File(context.filesDir, "annotation_images")
+                if (!dir.exists()) dir.mkdirs()
+                val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+                val ext  = when {
+                    mime.contains("png")  -> "png"
+                    mime.contains("gif")  -> "gif"
+                    mime.contains("webp") -> "webp"
+                    else                  -> "jpg"
+                }
+                val dest = File(dir, "${UUID.randomUUID()}.$ext")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    dest.outputStream().use { output -> input.copyTo(output) }
+                }
+                dest.absolutePath
+            } catch (_: Exception) { "" }
+        }
+
     fun clearAll(context: Context, pdfKey: String) {
         runCatching { fileFor(context, pdfKey).delete() }
         runCatching { textsFileFor(context, pdfKey).delete() }
+        runCatching { imgBoxesFileFor(context, pdfKey).delete() }
     }
 }
