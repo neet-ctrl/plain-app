@@ -3,6 +3,7 @@ package com.neet.tracker.ui.screens
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -20,6 +21,7 @@ import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -28,6 +30,7 @@ import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.neet.tracker.data.models.FlashcardType
+import com.neet.tracker.ui.components.SpaceBackground
 import com.neet.tracker.ui.theme.*
 import com.neet.tracker.ui.viewmodels.*
 
@@ -272,7 +275,14 @@ private fun FcReviewPhase(ui: FlashcardUiState, vm: FlashcardViewModel) {
             contentAlignment = Alignment.Center
         ) {
             when (ui.mode) {
-                FlashcardMode.FLIP_CARD -> FcFlipCard(card, ui.isFlipped, cardColor, glowPulse) { vm.flipCard() }
+                FlashcardMode.FLIP_CARD -> FcFlipCard(
+                    card       = card,
+                    isFlipped  = ui.isFlipped,
+                    cardColor  = cardColor,
+                    glowPulse  = glowPulse,
+                    onClick    = { vm.flipCard() },
+                    onRate     = { q -> vm.submitRating(q) }
+                )
                 FlashcardMode.MULTIPLE_CHOICE -> FcMcqView(card, ui, cardColor, glowPulse, vm)
                 FlashcardMode.TYPE_ANSWER -> FcTypeView(card, ui, cardColor, glowPulse, vm)
             }
@@ -339,7 +349,8 @@ private fun FcFlipCard(
     isFlipped: Boolean,
     cardColor: Color,
     glowPulse: Float,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onRate: (Int) -> Unit = {}
 ) {
     val rotation by animateFloatAsState(
         targetValue = if (isFlipped) 180f else 0f,
@@ -347,28 +358,106 @@ private fun FcFlipCard(
         label = "flip"
     )
 
+    // Swipe-to-rate state
+    var dragOffsetX by remember { mutableStateOf(0f) }
+    val swipeThreshold = 130f
+    val swipeColor = when {
+        dragOffsetX >  40f -> NeonGreen
+        dragOffsetX < -40f -> NeonRed
+        else               -> Color.Transparent
+    }
+    val swipeLabel = when {
+        dragOffsetX >  swipeThreshold / 2 -> "Good ✓"
+        dragOffsetX < -swipeThreshold / 2 -> "Again ✗"
+        else                               -> ""
+    }
+    val swipeLabelAlpha = (kotlin.math.abs(dragOffsetX) / swipeThreshold).coerceIn(0f, 1f)
+
+    val animatedOffset by animateFloatAsState(
+        targetValue = dragOffsetX,
+        animationSpec = if (dragOffsetX == 0f) spring(stiffness = Spring.StiffnessMedium) else snap(),
+        label = "drag_offset"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1.55f)
-            .shadow(24.dp, RoundedCornerShape(28.dp), spotColor = cardColor.copy(glowPulse * 0.55f))
-            .graphicsLayer {
-                rotationY = rotation
-                cameraDistance = 12f * density
-            }
-            .clip(RoundedCornerShape(28.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            ),
+            .aspectRatio(1.55f),
         contentAlignment = Alignment.Center
     ) {
-        if (rotation <= 90f) {
-            FcCardFront(card, cardColor, glowPulse)
-        } else {
-            Box(modifier = Modifier.fillMaxSize().graphicsLayer { rotationY = 180f }) {
-                FcCardBack(card, cardColor, glowPulse)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .offset { IntOffset((animatedOffset / 3).toInt(), 0) }
+                .shadow(24.dp, RoundedCornerShape(28.dp), spotColor = cardColor.copy(glowPulse * 0.55f))
+                .graphicsLayer {
+                    rotationY = rotation
+                    cameraDistance = 12f * density
+                    rotationZ = (dragOffsetX / 20f).coerceIn(-6f, 6f)
+                }
+                .clip(RoundedCornerShape(28.dp))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { if (kotlin.math.abs(dragOffsetX) < 10f) onClick() }
+                )
+                .then(
+                    if (isFlipped) Modifier.pointerInput(isFlipped) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                val finalOffset = dragOffsetX
+                                dragOffsetX = 0f
+                                when {
+                                    finalOffset >  swipeThreshold -> onRate(2) // Good
+                                    finalOffset < -swipeThreshold -> onRate(0) // Again
+                                }
+                            },
+                            onDragCancel = { dragOffsetX = 0f },
+                            onHorizontalDrag = { _, delta ->
+                                dragOffsetX = (dragOffsetX + delta).coerceIn(-200f, 200f)
+                            }
+                        )
+                    } else Modifier
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            if (rotation <= 90f) {
+                FcCardFront(card, cardColor, glowPulse)
+            } else {
+                Box(modifier = Modifier.fillMaxSize().graphicsLayer { rotationY = 180f }) {
+                    FcCardBack(card, cardColor, glowPulse)
+                }
+            }
+
+            // Swipe indicator overlay
+            if (isFlipped && kotlin.math.abs(dragOffsetX) > 20f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(swipeColor.copy(0.18f), RoundedCornerShape(28.dp))
+                        .border(2.dp, swipeColor.copy(swipeLabelAlpha * 0.8f), RoundedCornerShape(28.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (swipeLabel.isNotEmpty()) {
+                        Text(
+                            text = swipeLabel,
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = swipeColor.copy(swipeLabelAlpha),
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
+            }
+        }
+
+        // Swipe hint arrows (shown after flip, before first drag)
+        if (isFlipped && dragOffsetX == 0f) {
+            Row(
+                modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("← Again", style = MaterialTheme.typography.labelSmall, color = NeonRed.copy(0.45f))
+                Text("Good →", style = MaterialTheme.typography.labelSmall, color = NeonGreen.copy(0.45f))
             }
         }
     }
@@ -539,7 +628,10 @@ private fun FcMcqView(
     val infiniteTransition = rememberInfiniteTransition(label = "mcq")
     val igp by infiniteTransition.animateFloat(0.5f, 1f, infiniteRepeatable(tween(1800, easing = EaseInOutSine), RepeatMode.Reverse), "igp")
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+    ) {
         // Term display card
         Box(
             modifier = Modifier
@@ -650,7 +742,10 @@ private fun FcTypeView(
     glowPulse: Float,
     vm: FlashcardViewModel
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+    ) {
         // Definition displayed — type the term
         Box(
             modifier = Modifier
@@ -794,16 +889,19 @@ private fun FcResultsPhase(
     vm: FlashcardViewModel,
     navController: NavController
 ) {
-    val results = ui.sessionResults
-    val total = results.size
-    val easy   = results.count { it.quality == 3 }
-    val good   = results.count { it.quality == 2 }
-    val hard   = results.count { it.quality == 1 }
-    val missed = results.count { it.quality == 0 }
-    val correct = easy + good
+    val results  = ui.sessionResults
+    val total    = results.size
+    val easy     = results.count { it.quality == 3 }
+    val good     = results.count { it.quality == 2 }
+    val hard     = results.count { it.quality == 1 }
+    val missed   = results.count { it.quality == 0 }
+    val correct  = easy + good
     val accuracy = if (total > 0) (correct * 100 / total) else 0
-    val avgMs = if (total > 0) results.sumOf { it.responseTimeMs } / total else 0
-    val elapsed = ((System.currentTimeMillis() - ui.sessionStartTime) / 1000).let { s -> "${s / 60}m ${s % 60}s" }
+    val avgMs    = if (total > 0) results.sumOf { it.responseTimeMs } / total else 0L
+    val elapsed  = ((System.currentTimeMillis() - ui.sessionStartTime) / 1000).let { s -> "${s / 60}m ${s % 60}s" }
+    val (ins1, ins2, ins3) = FlashcardAI.generateSessionInsight(
+        accuracy, avgMs, missed, hard, ui.totalRequeues, ui.nextDueCount
+    )
 
     val infiniteTransition = rememberInfiniteTransition(label = "fc_results")
     val glowPulse by infiniteTransition.animateFloat(
@@ -847,11 +945,41 @@ private fun FcResultsPhase(
                     }, fontSize = 30.sp)
                 }
                 Text("Session Complete!", style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.ExtraBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     FcResultStat("$total", "Cards", NeonCyan)
                     FcResultStat("$accuracy%", "Accuracy", if (accuracy >= 70) NeonGreen else NeonOrange)
                     FcResultStat(elapsed, "Time", NeonGold)
                     FcResultStat("${avgMs / 1000}s", "Avg/Card", NeonPurple)
+                }
+                if (ui.streakBest > 1 || ui.totalRequeues > 0) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (ui.streakBest > 1) {
+                            Row(
+                                modifier = Modifier
+                                    .background(NeonOrange.copy(0.12f), RoundedCornerShape(10.dp))
+                                    .border(0.5.dp, NeonOrange.copy(0.3f), RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Default.LocalFireDepartment, null, tint = NeonOrange, modifier = Modifier.size(13.dp))
+                                Text("Best streak: ${ui.streakBest}", style = MaterialTheme.typography.labelSmall, color = NeonOrange, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        if (ui.totalRequeues > 0) {
+                            Row(
+                                modifier = Modifier
+                                    .background(NeonRed.copy(0.10f), RoundedCornerShape(10.dp))
+                                    .border(0.5.dp, NeonRed.copy(0.25f), RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, null, tint = NeonRed, modifier = Modifier.size(13.dp))
+                                Text("Re-queued: ${ui.totalRequeues}", style = MaterialTheme.typography.labelSmall, color = NeonRed, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -869,18 +997,7 @@ private fun FcResultsPhase(
         // ── AI Insights ──────────────────────────────────────────────────────
         FcSetupSection("AI INSIGHTS") {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                val insight1 = when {
-                    accuracy >= 90 -> "Exceptional! Your memory retention is excellent. Next review in 7+ days."
-                    accuracy >= 70 -> "Good progress! Focus on the ${missed + hard} harder cards in your next session."
-                    accuracy >= 50 -> "Keep going! Consistent daily reviews will rapidly improve your recall."
-                    else           -> "These cards need more attention. Try shorter sessions more frequently."
-                }
-                val insight2 = "Average response time: ${avgMs / 1000}s per card — " +
-                    if (avgMs < 5000) "great recall speed!" else "try to reduce thinking time for mastery."
-                val insight3 = "${ui.nextDueCount} cards due tomorrow — " +
-                    if (ui.nextDueCount > 0) "schedule a quick ${(ui.nextDueCount * 30 / 60)}min session." else "no cards scheduled for tomorrow."
-
-                listOf(insight1, insight2, insight3).forEach { msg ->
+                listOf(ins1, ins2, ins3).forEach { msg ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

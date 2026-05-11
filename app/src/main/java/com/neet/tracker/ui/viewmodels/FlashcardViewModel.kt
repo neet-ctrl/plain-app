@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.neet.tracker.data.database.NEETDao
 import com.neet.tracker.data.models.*
-import com.neet.tracker.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -72,7 +71,13 @@ data class FlashcardUiState(
     val sessionResults: List<SessionCardResult> = emptyList(),
     val sessionStartTime: Long = 0L,
     val nextDueCount: Int = 0,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    // ── Advanced AI state ────────────────────────────────────────────────────
+    val requeuedCardIds: Set<String> = emptySet(),
+    val consecutiveFails: Map<String, Int> = emptyMap(),
+    val autoHintTriggered: Boolean = false,
+    val streakBest: Int = 0,
+    val totalRequeues: Int = 0
 )
 
 // ─── AI Engine (offline, no API key needed) ───────────────────────────────────
@@ -109,7 +114,11 @@ object FlashcardAI {
             "hyper" to "excess/above", "hypo" to "deficient/below",
             "proto" to "first/primitive", "mono" to "single", "poly" to "many",
             "micro" to "small", "macro" to "large", "inter" to "between",
-            "intra" to "within", "trans" to "across"
+            "intra" to "within", "trans" to "across", "mito" to "thread (mitochondria)",
+            "chloro" to "green", "derma" to "skin", "osteo" to "bone",
+            "cardio" to "heart", "neuro" to "nerve", "hemo" to "blood",
+            "angio" to "vessel", "phyte" to "plant", "zoo" to "animal",
+            "sporo" to "spore", "gameto" to "gamete/sex cell"
         )
         for ((root, meaning) in bioRoots) {
             if (lower.contains(root)) {
@@ -151,7 +160,6 @@ object FlashcardAI {
         val b = correct.trim().lowercase()
         if (a == b) return true
         if (a.length < 3 || b.length < 3) return a == b
-        // Levenshtein distance ≤ 2
         val dp = Array(a.length + 1) { IntArray(b.length + 1) }
         for (i in dp.indices) dp[i][0] = i
         for (j in 0..b.length) dp[0][j] = j
@@ -160,6 +168,31 @@ object FlashcardAI {
             else 1 + minOf(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
         }
         return dp[a.length][b.length] <= 2
+    }
+
+    // ── Advanced AI: Generate context-aware session insight ──────────────────
+
+    fun generateSessionInsight(
+        accuracy: Int,
+        avgMs: Long,
+        missed: Int,
+        hard: Int,
+        requeues: Int,
+        nextDueCount: Int
+    ): Triple<String, String, String> {
+        val i1 = when {
+            accuracy >= 90 -> "Excellent retention! Your memory pathways are strong. Interval will extend significantly."
+            accuracy >= 75 -> "Good session! Focus the next round on the ${missed + hard} harder cards."
+            accuracy >= 55 -> "Consistent daily reviews will rapidly close the gap. Keep going!"
+            requeues > 0   -> "$requeues cards were re-queued — this is normal. Repetition is learning."
+            else           -> "These cards need more attention. Shorter, more frequent sessions accelerate recall."
+        }
+        val i2 = "Avg response: ${avgMs / 1000}s/card — " +
+            if (avgMs < 4000) "excellent recall speed!" else "try to respond faster to build automaticity."
+        val i3 = if (nextDueCount > 0)
+            "$nextDueCount cards due tomorrow — schedule a ~${(nextDueCount * 25 / 60).coerceAtLeast(1)}min session."
+        else "No cards due tomorrow — you're ahead of schedule!"
+        return Triple(i1, i2, i3)
     }
 }
 
@@ -199,12 +232,10 @@ class FlashcardViewModel @Inject constructor(private val dao: NEETDao) : ViewMod
         viewModelScope.launch {
             _ui.update { it.copy(isLoading = true) }
 
-            // Load all progress once
             val allProgress = dao.getAllFlashcardProgress().first()
             progressCache.clear()
             allProgress.forEach { p -> progressCache[p.cardId] = p }
 
-            // Build full card pool from selected sources
             val today = LocalDate.now().toString()
             val pool = mutableListOf<FlashcardCard>()
 
@@ -241,11 +272,9 @@ class FlashcardViewModel @Inject constructor(private val dao: NEETDao) : ViewMod
                 }
             }
 
-            // Subject filter
             val filtered = if (cfg.subjectFilter == "ALL") pool
                            else pool.filter { it.subject.uppercase() == cfg.subjectFilter }
 
-            // Sort: overdue/due first (by dueDate), then weak (low easeFactor), then new
             val sorted = filtered.sortedWith(
                 compareByDescending<FlashcardCard> {
                     val due = it.progress?.dueDate
@@ -254,7 +283,6 @@ class FlashcardViewModel @Inject constructor(private val dao: NEETDao) : ViewMod
                  .thenBy { it.progress?.totalReviews ?: Int.MAX_VALUE }
             )
 
-            // Filter due-only
             val sessionCards = when (cfg.source) {
                 FlashcardSource.DUE_ONLY -> sorted.filter { card ->
                     card.progress?.dueDate?.let { it.isNotEmpty() && it <= today } ?: false
@@ -280,25 +308,39 @@ class FlashcardViewModel @Inject constructor(private val dao: NEETDao) : ViewMod
 
             cardStartMs = System.currentTimeMillis()
 
+            // Auto-hint if card has been historically hard
+            val firstCardFails = progressCache[firstCard.id]?.let { p ->
+                if (p.totalReviews > 0 && p.correctReviews.toFloat() / p.totalReviews < 0.4f) 1 else 0
+            } ?: 0
+            val autoHint = firstCardFails > 0
+            val autoHintContent = if (autoHint)
+                FlashcardAI.generateHint(firstCard.front, firstCard.back, 0)
+            else ""
+
             _ui.update { it.copy(
-                phase       = FlashcardPhase.REVIEWING,
-                sessionCards = sessionCards,
-                currentIndex = 0,
-                isFlipped    = false,
-                isLoading    = false,
-                mcqOptions   = mcqOptions,
-                mcqSelected  = null,
-                typeInput    = "",
-                typeChecked  = false,
-                typeCorrect  = null,
-                hintVisible  = false,
-                hintLevel    = 0,
-                hintContent  = "",
-                memoryHookVisible = false,
-                memoryHook   = "",
-                sessionResults = emptyList(),
-                sessionStartTime = System.currentTimeMillis(),
-                nextDueCount = dueNextCount
+                phase              = FlashcardPhase.REVIEWING,
+                sessionCards       = sessionCards,
+                currentIndex       = 0,
+                isFlipped          = false,
+                isLoading          = false,
+                mcqOptions         = mcqOptions,
+                mcqSelected        = null,
+                typeInput          = "",
+                typeChecked        = false,
+                typeCorrect        = null,
+                hintVisible        = autoHint,
+                hintLevel          = if (autoHint) 1 else 0,
+                hintContent        = autoHintContent,
+                memoryHookVisible  = false,
+                memoryHook         = "",
+                sessionResults     = emptyList(),
+                sessionStartTime   = System.currentTimeMillis(),
+                nextDueCount       = dueNextCount,
+                requeuedCardIds    = emptySet(),
+                consecutiveFails   = emptyMap(),
+                autoHintTriggered  = autoHint,
+                streakBest         = 0,
+                totalRequeues      = 0
             )}
         }
     }
@@ -319,32 +361,82 @@ class FlashcardViewModel @Inject constructor(private val dao: NEETDao) : ViewMod
         progressCache[card.id] = updatedProgress
         viewModelScope.launch { dao.saveFlashcardProgress(updatedProgress) }
 
-        val result = SessionCardResult(card.id, card.front, quality, ms)
-        val newResults = state.sessionResults + result
+        val result      = SessionCardResult(card.id, card.front, quality, ms)
+        val newResults  = state.sessionResults + result
+
+        // Track consecutive fails per card
+        val newFails = state.consecutiveFails.toMutableMap()
+        if (quality < 2) {
+            newFails[card.id] = (newFails[card.id] ?: 0) + 1
+        } else {
+            newFails.remove(card.id)
+        }
+
+        // ── Card requeueing: insert failed card 3 positions later ─────────────
+        val newCards = state.sessionCards.toMutableList()
+        var newRequeues = state.totalRequeues
+        val newRequeuedIds = state.requeuedCardIds.toMutableSet()
+
+        if (quality < 2 && card.id !in state.requeuedCardIds) {
+            val reinsertIdx = (state.currentIndex + 3).coerceAtMost(newCards.size)
+            newCards.add(reinsertIdx, card)
+            newRequeuedIds.add(card.id)
+            newRequeues++
+        }
+
+        // ── Streak tracking ──────────────────────────────────────────────────
+        val currentStreak = newResults.takeLastWhile { it.quality >= 2 }.size
+        val bestStreak = maxOf(state.streakBest, currentStreak)
+
         val nextIdx = state.currentIndex + 1
 
-        if (nextIdx >= state.sessionCards.size) {
-            // Session done
-            _ui.update { it.copy(phase = FlashcardPhase.RESULTS, sessionResults = newResults) }
+        if (nextIdx >= newCards.size) {
+            _ui.update { it.copy(
+                phase           = FlashcardPhase.RESULTS,
+                sessionResults  = newResults,
+                sessionCards    = newCards,
+                consecutiveFails = newFails,
+                streakBest      = bestStreak,
+                totalRequeues   = newRequeues
+            )}
         } else {
-            val nextCard = state.sessionCards[nextIdx]
+            val nextCard = newCards[nextIdx]
             val mcqOptions = if (state.mode == FlashcardMode.MULTIPLE_CHOICE)
                 FlashcardAI.generateMcqOptions(nextCard.back, fullPoolBacks)
             else emptyList()
+
+            // Auto-hint for the next card if it's been historically hard
+            val nextCardWeakness = progressCache[nextCard.id]?.let { p ->
+                p.totalReviews > 0 && p.correctReviews.toFloat() / p.totalReviews < 0.35f
+            } ?: false
+            // Also auto-hint if this card was just requeued (i.e., the same card coming back)
+            val isRequeue = nextCard.id in newRequeuedIds && quality < 2
+            val shouldAutoHint = nextCardWeakness || isRequeue
+            val autoHintLevel = if (isRequeue) (newFails[nextCard.id] ?: 1).coerceAtMost(3) else 0
+            val autoHintContent = if (shouldAutoHint)
+                FlashcardAI.generateHint(nextCard.front, nextCard.back, autoHintLevel)
+            else ""
+
             cardStartMs = System.currentTimeMillis()
             _ui.update { it.copy(
-                currentIndex = nextIdx,
-                isFlipped    = false,
-                mcqOptions   = mcqOptions,
-                mcqSelected  = null,
-                typeInput    = "",
-                typeChecked  = false,
-                typeCorrect  = null,
-                hintVisible  = false,
-                hintLevel    = 0,
-                hintContent  = "",
+                currentIndex     = nextIdx,
+                sessionCards     = newCards,
+                isFlipped        = false,
+                mcqOptions       = mcqOptions,
+                mcqSelected      = null,
+                typeInput        = "",
+                typeChecked      = false,
+                typeCorrect      = null,
+                hintVisible      = shouldAutoHint,
+                hintLevel        = if (shouldAutoHint) autoHintLevel + 1 else 0,
+                hintContent      = autoHintContent,
                 memoryHookVisible = false,
-                sessionResults = newResults
+                sessionResults   = newResults,
+                consecutiveFails = newFails,
+                requeuedCardIds  = newRequeuedIds,
+                streakBest       = bestStreak,
+                totalRequeues    = newRequeues,
+                autoHintTriggered = shouldAutoHint
             )}
         }
     }
@@ -352,10 +444,9 @@ class FlashcardViewModel @Inject constructor(private val dao: NEETDao) : ViewMod
     // ── MCQ answer ────────────────────────────────────────────────────────────
 
     fun submitMcqAnswer(answer: String) {
-        val card = _ui.value.sessionCards.getOrNull(_ui.value.currentIndex) ?: return
         _ui.update { it.copy(
             mcqSelected = answer,
-            isFlipped   = true   // reveal back after selection
+            isFlipped   = true
         )}
     }
 
@@ -374,7 +465,10 @@ class FlashcardViewModel @Inject constructor(private val dao: NEETDao) : ViewMod
         val state = _ui.value
         val card  = state.sessionCards.getOrNull(state.currentIndex) ?: return
         val level = state.hintLevel
-        val content = FlashcardAI.generateHint(card.front, card.back, level)
+        // Escalate hint level faster if the card has been failed in session
+        val fails = state.consecutiveFails[card.id] ?: 0
+        val effectiveLevel = (level + if (fails >= 2) 1 else 0).coerceAtMost(4)
+        val content = FlashcardAI.generateHint(card.front, card.back, effectiveLevel)
         _ui.update { it.copy(
             hintVisible = true,
             hintContent = content,
@@ -415,13 +509,13 @@ class FlashcardViewModel @Inject constructor(private val dao: NEETDao) : ViewMod
         else rawInterval
         val dueDate = LocalDate.now().plusDays(finalInterval.toLong()).toString()
         return base.copy(
-            easeFactor    = newEF,
-            intervalDays  = finalInterval,
-            repetitions   = newReps,
-            dueDate       = dueDate,
-            totalReviews  = base.totalReviews + 1,
+            easeFactor     = newEF,
+            intervalDays   = finalInterval,
+            repetitions    = newReps,
+            dueDate        = dueDate,
+            totalReviews   = base.totalReviews + 1,
             correctReviews = base.correctReviews + if (quality >= 2) 1 else 0,
-            lastReviewed  = System.currentTimeMillis()
+            lastReviewed   = System.currentTimeMillis()
         )
     }
 }
