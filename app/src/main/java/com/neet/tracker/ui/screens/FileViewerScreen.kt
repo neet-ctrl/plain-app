@@ -265,13 +265,6 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var showAnnotThumbs    by remember { mutableStateOf(false) }
     // Tool-switch hint bar — appears for 2.5 s after any tool change
     var toolHintVisible    by remember { mutableStateOf(false) }
-    LaunchedEffect(annotationTool, linePointerEnabled) {
-        if (annotationMode) {
-            toolHintVisible = true
-            delay(2500)
-            toolHintVisible = false
-        }
-    }
     // Per-tool annotation settings
     var annotStraightLine          by remember { mutableStateOf(false) }
     var annotLineType              by remember { mutableIntStateOf(0) }   // 0=solid 1=dotted 2=dashed
@@ -291,6 +284,13 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     val annoScope           = rememberCoroutineScope()
     var annotationMode      by remember { mutableStateOf(false) }
     var annotationTool      by remember { mutableStateOf(AnnotationTool.PEN) }
+    LaunchedEffect(annotationTool, linePointerEnabled) {
+        if (annotationMode) {
+            toolHintVisible = true
+            delay(2500)
+            toolHintVisible = false
+        }
+    }
     var annotationColorArgb by remember { mutableIntStateOf(android.graphics.Color.RED) }
     var annotationWidthDp   by remember { mutableFloatStateOf(6f) }
     var allPageStrokes      by remember { mutableStateOf<Map<Int, List<AnnotationStroke>>>(emptyMap()) }
