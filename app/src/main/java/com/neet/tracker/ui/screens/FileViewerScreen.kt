@@ -128,6 +128,43 @@ private val LINE_POINTER_COLORS = listOf(
     android.graphics.Color.parseColor("#FF4081"),
 )
 
+// Extended colour palette shown inside tool bottom-sheets (matches reference PDF annotator)
+private val SHEET_COLORS_ARGB = listOf(
+    android.graphics.Color.BLACK,
+    android.graphics.Color.RED,
+    android.graphics.Color.parseColor("#FF9800"),
+    android.graphics.Color.parseColor("#FFEB3B"),
+    android.graphics.Color.parseColor("#4CAF50"),
+    android.graphics.Color.CYAN,
+    android.graphics.Color.parseColor("#2196F3"),
+    android.graphics.Color.parseColor("#9C27B0"),
+    android.graphics.Color.parseColor("#9E9E9E"),
+    android.graphics.Color.WHITE,
+)
+
+// Pen widths shown as visual preview strokes in bottom-sheet
+private val SHEET_PEN_WIDTHS = listOf(1f, 2f, 4f, 6f, 10f, 16f)
+
+// Sidebar tool descriptor: (AnnotationTool?, icon, label)
+private val SIDEBAR_TOOLS = listOf(
+    Triple<AnnotationTool?, androidx.compose.ui.graphics.vector.ImageVector, String>(
+        AnnotationTool.PEN,         androidx.compose.material.icons.Icons.Default.Edit,           "Pen"),
+    Triple<AnnotationTool?, androidx.compose.ui.graphics.vector.ImageVector, String>(
+        AnnotationTool.HIGHLIGHTER, androidx.compose.material.icons.Icons.Default.Brush,          "Hilite"),
+    Triple<AnnotationTool?, androidx.compose.ui.graphics.vector.ImageVector, String>(
+        AnnotationTool.ERASER,      androidx.compose.material.icons.Icons.Default.AutoFixHigh,    "Erase"),
+    Triple<AnnotationTool?, androidx.compose.ui.graphics.vector.ImageVector, String>(
+        AnnotationTool.ARROW,       androidx.compose.material.icons.Icons.Default.ArrowForward,   "Arrow"),
+    Triple<AnnotationTool?, androidx.compose.ui.graphics.vector.ImageVector, String>(
+        AnnotationTool.STAMP,       androidx.compose.material.icons.Icons.Default.EmojiEmotions,  "Stamp"),
+    Triple<AnnotationTool?, androidx.compose.ui.graphics.vector.ImageVector, String>(
+        null,                       androidx.compose.material.icons.Icons.Default.RadioButtonChecked, "Laser"),
+    Triple<AnnotationTool?, androidx.compose.ui.graphics.vector.ImageVector, String>(
+        AnnotationTool.TEXT,        androidx.compose.material.icons.Icons.Default.TextFields,     "Text"),
+    Triple<AnnotationTool?, androidx.compose.ui.graphics.vector.ImageVector, String>(
+        AnnotationTool.IMAGE,       androidx.compose.material.icons.Icons.Default.Image,          "Image"),
+)
+
 // ─── Universal File Viewer ─────────────────────────────────────────────────────
 
 @Composable
@@ -213,13 +250,25 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var isHorizontalScroll by remember { mutableStateOf(false) }
     var zoomEnabled        by remember { mutableStateOf(false) }
 
-    // ── Annotation fullscreen + floating toolbar ────────────────────────────────
-    var annotFullScreen      by remember { mutableStateOf(false) }
-    var annotToolbarExpanded by remember { mutableStateOf(true) }
-    var annotToolbarOffsetX  by remember { mutableFloatStateOf(16f) }
-    var annotToolbarOffsetY  by remember { mutableFloatStateOf(300f) }
-    var annotToolbarWidthDp  by remember { mutableFloatStateOf(240f) }
-    var annotZoomEnabled     by remember { mutableStateOf(false) }
+    // ── Annotation fullscreen + sidebar ───────────────────────────────────────
+    var annotFullScreen    by remember { mutableStateOf(false) }
+    var annotZoomEnabled   by remember { mutableStateOf(false) }
+    // Sidebar state — draggable anywhere, flippable vertical↔horizontal
+    var sidebarIsVertical  by remember { mutableStateOf(true) }
+    var sidebarOffsetX     by remember { mutableFloatStateOf(0f) }
+    var sidebarOffsetY     by remember { mutableFloatStateOf(240f) }
+    var showToolSheet      by remember { mutableStateOf(false) }
+    var showLaserSheet     by remember { mutableStateOf(false) }
+    // Per-tool annotation settings
+    var annotStraightLine          by remember { mutableStateOf(false) }
+    var annotLineType              by remember { mutableIntStateOf(0) }   // 0=solid 1=dotted 2=dashed
+    var annotInkOpacity            by remember { mutableFloatStateOf(1f) }
+    var annotEraserWidthDp         by remember { mutableFloatStateOf(10f) }
+    var annotEraserPartial         by remember { mutableStateOf(true) }
+    var annotEraserErasesPen       by remember { mutableStateOf(true) }
+    var annotEraserErasesHigh      by remember { mutableStateOf(true) }
+    var annotAutoDeselect          by remember { mutableStateOf(false) }
+    var recentAnnotColors          by remember { mutableStateOf<List<Int>>(emptyList()) }
 
     // ── Laser Pointer ─────────────────────────────────────────────────────────
     var linePointerEnabled   by remember { mutableStateOf(false) }
@@ -447,12 +496,15 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                                 if (annotationMode) {
                                     scale = 1f; panOffset = Offset.Zero
                                     focusMode = false; notesExpanded = false; showThumbs = false
-                                    annotFullScreen = true
-                                    annotToolbarExpanded = true
+                                    annotFullScreen  = true
                                     annotZoomEnabled = false
+                                    showToolSheet    = false
+                                    showLaserSheet   = false
                                 } else {
-                                    annotFullScreen = false
+                                    annotFullScreen  = false
                                     annotZoomEnabled = false
+                                    showToolSheet    = false
+                                    showLaserSheet   = false
                                 }
                             }) {
                                 Box(
@@ -862,27 +914,17 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             }
         }
 
-        // ── Floating annotation toolbar (fullscreen draw mode) ─────────────────
+        // ── Annotation UI: header + sidebar + tool sheets ─────────────────────
         if (annotationMode && pdfPages.isNotEmpty()) {
-            FloatingAnnotToolbar(
-                expanded         = annotToolbarExpanded,
-                offsetX          = annotToolbarOffsetX,
-                offsetY          = annotToolbarOffsetY,
-                onDrag           = { dx, dy ->
-                    annotToolbarOffsetX = (annotToolbarOffsetX + dx).coerceAtLeast(0f)
-                    annotToolbarOffsetY = (annotToolbarOffsetY + dy).coerceAtLeast(0f)
-                },
-                onToggleExpanded = { annotToolbarExpanded = !annotToolbarExpanded },
-                tool             = annotationTool,
-                colorArgb        = annotationColorArgb,
-                widthDp          = annotationWidthDp,
-                canUndo          = annoUndoStack.isNotEmpty(),
-                canRedo          = annoRedoStack.isNotEmpty(),
-                zoomEnabled      = annotZoomEnabled,
-                onToolChange     = { annotationTool = it; if (it == AnnotationTool.TEXT || it == AnnotationTool.IMAGE || it == AnnotationTool.STAMP) annotZoomEnabled = false },
-                onColorChange    = { annotationColorArgb = it },
-                onWidthChange    = { annotationWidthDp = it },
-                onUndo = {
+
+            // ── Top header: Undo / Redo / Delete / Zoom / Done ─────────────────
+            AnnotTopHeader(
+                modifier       = Modifier.align(Alignment.TopStart),
+                canUndo        = annoUndoStack.isNotEmpty(),
+                canRedo        = annoRedoStack.isNotEmpty(),
+                zoomEnabled    = annotZoomEnabled,
+                solutionUri    = solutionUri,
+                onUndo         = {
                     annoUndoStack.lastOrNull()?.let { snap ->
                         annoRedoStack  = annoRedoStack + allPageStrokes
                         allPageStrokes = snap
@@ -890,7 +932,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                         annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
                     }
                 },
-                onRedo = {
+                onRedo         = {
                     annoRedoStack.lastOrNull()?.let { snap ->
                         annoUndoStack  = (annoUndoStack + allPageStrokes).takeLast(50)
                         allPageStrokes = snap
@@ -898,7 +940,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                         annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
                     }
                 },
-                onClearPage = {
+                onClearPage    = {
                     if ((allPageStrokes[currentPage] ?: emptyList()).isNotEmpty()) {
                         annoUndoStack  = (annoUndoStack + allPageStrokes).takeLast(50)
                         annoRedoStack  = emptyList()
@@ -906,37 +948,108 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                         annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
                     }
                 },
-                onZoomToggle = { annotZoomEnabled = !annotZoomEnabled },
-                solutionUri = solutionUri,
+                onZoomToggle   = { annotZoomEnabled = !annotZoomEnabled },
                 onOpenSolution = { showSolutionWindow = true },
-                linePointerEnabled   = linePointerEnabled,
-                linePointerColorArgb = linePointerColorArgb,
-                onLinePointerToggle      = { linePointerEnabled = !linePointerEnabled },
-                onLinePointerColorChange = { linePointerColorArgb = it },
-                onDone = {
-                    annotationMode  = false
-                    annotFullScreen = false
-                    annotZoomEnabled = false
+                onDone         = {
+                    annotationMode     = false
+                    annotFullScreen    = false
+                    annotZoomEnabled   = false
                     linePointerEnabled = false
+                    showToolSheet      = false
+                    showLaserSheet     = false
                     annoScope.launch {
                         AnnotationManager.save(context, fileUri, allPageStrokes)
                         AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes)
                         AnnotationManager.saveStamps(context, fileUri, allPageStamps)
                     }
                 },
-                selectedStampEmoji  = selectedStampEmoji,
-                stampPickerExpanded = stampPickerExpanded,
-                onStampSelect = { emoji ->
-                    selectedStampEmoji  = emoji
-                    annotationTool      = AnnotationTool.STAMP
-                    annotZoomEnabled    = false
-                },
-                onStampPickerToggle = { stampPickerExpanded = !stampPickerExpanded },
-                toolbarWidthDp  = annotToolbarWidthDp,
-                onResize = { deltaDp ->
-                    annotToolbarWidthDp = (annotToolbarWidthDp + deltaDp).coerceIn(200f, 380f)
-                }
             )
+
+            // ── Draggable tool sidebar (vertical ↔ horizontal, free position) ──
+            AnnotSidebar(
+                isVertical         = sidebarIsVertical,
+                offsetX            = sidebarOffsetX,
+                offsetY            = sidebarOffsetY,
+                tool               = annotationTool,
+                linePointerEnabled = linePointerEnabled,
+                onDrag             = { dx, dy ->
+                    sidebarOffsetX = (sidebarOffsetX + dx).coerceAtLeast(0f)
+                    sidebarOffsetY = (sidebarOffsetY + dy).coerceAtLeast(0f)
+                },
+                onFlip             = { sidebarIsVertical = !sidebarIsVertical },
+                onToolSelect       = { t ->
+                    annotationTool = t
+                    if (t == AnnotationTool.TEXT || t == AnnotationTool.IMAGE || t == AnnotationTool.STAMP) annotZoomEnabled = false
+                    showToolSheet  = true
+                    showLaserSheet = false
+                },
+                onLaserTap         = {
+                    showLaserSheet = true
+                    showToolSheet  = false
+                },
+            )
+
+            // ── Per-tool settings bottom sheet ─────────────────────────────────
+            if (showToolSheet) {
+                AnnotToolSheet(
+                    tool                    = annotationTool,
+                    colorArgb               = annotationColorArgb,
+                    widthDp                 = annotationWidthDp,
+                    straightLine            = annotStraightLine,
+                    lineType                = annotLineType,
+                    inkOpacity              = annotInkOpacity,
+                    eraserWidthDp           = annotEraserWidthDp,
+                    eraserPartial           = annotEraserPartial,
+                    eraserErasesPen         = annotEraserErasesPen,
+                    eraserErasesHigh        = annotEraserErasesHigh,
+                    autoDeselect            = annotAutoDeselect,
+                    recentColors            = recentAnnotColors,
+                    selectedStampEmoji      = selectedStampEmoji,
+                    stampPickerExpanded     = stampPickerExpanded,
+                    onColorChange           = { argb ->
+                        annotationColorArgb = argb
+                        recentAnnotColors   = (listOf(argb) + recentAnnotColors.filter { it != argb }).take(5)
+                    },
+                    onWidthChange           = { annotationWidthDp = it },
+                    onStraightLineChange    = { annotStraightLine = it },
+                    onLineTypeChange        = { annotLineType = it },
+                    onInkOpacityChange      = { annotInkOpacity = it },
+                    onEraserWidthChange     = { annotEraserWidthDp = it },
+                    onEraserPartialChange   = { annotEraserPartial = it },
+                    onEraserErasesPenChange = { annotEraserErasesPen = it },
+                    onEraserErasesHighChange = { annotEraserErasesHigh = it },
+                    onAutoDeselectChange    = { annotAutoDeselect = it },
+                    onStampSelect           = { emoji ->
+                        selectedStampEmoji = emoji
+                        annotationTool     = AnnotationTool.STAMP
+                        annotZoomEnabled   = false
+                    },
+                    onStampPickerToggle     = { stampPickerExpanded = !stampPickerExpanded },
+                    onDeleteAnnot           = {
+                        if ((allPageStrokes[currentPage] ?: emptyList()).isNotEmpty()) {
+                            annoUndoStack  = (annoUndoStack + allPageStrokes).takeLast(50)
+                            annoRedoStack  = emptyList()
+                            allPageStrokes = allPageStrokes + (currentPage to emptyList())
+                            annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                        }
+                    },
+                    onImageGallery  = { pendingImageTapPos = 0.5f to 0.5f; imagePicker.launch("image/*"); showToolSheet = false },
+                    onImageFiles    = { pendingImageTapPos = 0.5f to 0.5f; imagePicker.launch("image/*"); showToolSheet = false },
+                    onImageCamera   = { pendingImageTapPos = 0.5f to 0.5f; imagePicker.launch("image/*"); showToolSheet = false },
+                    onClose         = { showToolSheet = false },
+                )
+            }
+
+            // ── Laser pointer settings sheet ────────────────────────────────────
+            if (showLaserSheet) {
+                LaserSheet(
+                    linePointerEnabled = linePointerEnabled,
+                    colorArgb          = linePointerColorArgb,
+                    onToggle           = { linePointerEnabled = !linePointerEnabled },
+                    onColorChange      = { linePointerColorArgb = it },
+                    onClose            = { showLaserSheet = false },
+                )
+            }
         }
 
         // ── Laser Pointer Overlay ─────────────────────────────────────────────
@@ -2112,717 +2225,629 @@ private fun ImageBoxItem(
     }
 }
 
-// ─── Floating Annotation Toolbar (draggable, collapsible) ─────────────────────
+// ─── NEW ANNOTATION UI ────────────────────────────────────────────────────────
+// Replaces the old floating draggable panel with:
+//   1. AnnotTopHeader  – fixed top bar with Undo/Redo/Clear/Zoom/Done
+//   2. AnnotSidebar    – draggable tool sidebar (vertical↔horizontal flip)
+//   3. AnnotToolSheet  – per-tool bottom-sheet with all settings
+//   4. LaserSheet      – laser-pointer toggle + color picker sheet
+// ──────────────────────────────────────────────────────────────────────────────
 
+// ─── 1. Top Header ─────────────────────────────────────────────────────────────
 @Composable
-private fun FloatingAnnotToolbar(
-    expanded: Boolean,
-    offsetX: Float,
-    offsetY: Float,
-    onDrag: (Float, Float) -> Unit,
-    onToggleExpanded: () -> Unit,
-    tool: AnnotationTool,
-    colorArgb: Int,
-    widthDp: Float,
+private fun AnnotTopHeader(
+    modifier: Modifier = Modifier,
     canUndo: Boolean,
     canRedo: Boolean,
     zoomEnabled: Boolean,
-    onToolChange: (AnnotationTool) -> Unit,
-    onColorChange: (Int) -> Unit,
-    onWidthChange: (Float) -> Unit,
+    solutionUri: String,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onClearPage: () -> Unit,
     onZoomToggle: () -> Unit,
-    solutionUri: String = "",
-    onOpenSolution: () -> Unit = {},
-    linePointerEnabled: Boolean = false,
-    linePointerColorArgb: Int = android.graphics.Color.parseColor("#FF1744"),
-    onLinePointerToggle: () -> Unit = {},
-    onLinePointerColorChange: (Int) -> Unit = {},
-    selectedStampEmoji: String? = null,
-    stampPickerExpanded: Boolean = false,
-    onStampSelect: (String) -> Unit = {},
-    onStampPickerToggle: () -> Unit = {},
-    toolbarWidthDp: Float = 240f,
-    onResize: (Float) -> Unit = {},
+    onOpenSolution: () -> Unit,
     onDone: () -> Unit,
 ) {
-    val density = LocalDensity.current
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(8.dp, spotColor = Color.Black.copy(0.3f))
+            .background(Color(0xF00E1A2A))
+            .padding(horizontal = 8.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        // Undo
+        IconButton(onClick = onUndo, enabled = canUndo, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Default.Undo, null,
+                tint = if (canUndo) NeonCyan else Color.White.copy(0.2f),
+                modifier = Modifier.size(18.dp))
+        }
+        // Redo
+        IconButton(onClick = onRedo, enabled = canRedo, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Default.Redo, null,
+                tint = if (canRedo) NeonCyan else Color.White.copy(0.2f),
+                modifier = Modifier.size(18.dp))
+        }
+        // Divider
+        Box(modifier = Modifier.width(0.5.dp).height(20.dp).background(Color.White.copy(0.18f)))
+        // Clear / Delete
+        IconButton(onClick = onClearPage, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Default.DeleteSweep, null, tint = NeonRed.copy(0.8f), modifier = Modifier.size(18.dp))
+        }
+        // Zoom toggle
+        val zb = if (zoomEnabled) NeonCyan.copy(0.22f) else Color.Transparent
+        IconButton(onClick = onZoomToggle, modifier = Modifier.size(36.dp)
+            .background(zb, RoundedCornerShape(8.dp))) {
+            Icon(Icons.Default.ZoomIn, null,
+                tint = if (zoomEnabled) NeonCyan else Color.White.copy(0.5f),
+                modifier = Modifier.size(18.dp))
+        }
+        // Solution
+        if (solutionUri.isNotBlank()) {
+            IconButton(onClick = onOpenSolution, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.PictureAsPdf, null, tint = NeonGold.copy(0.85f), modifier = Modifier.size(18.dp))
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        // Done button
+        Box(
+            modifier = Modifier
+                .shadow(6.dp, RoundedCornerShape(10.dp), spotColor = NeonGreen.copy(0.4f))
+                .background(NeonGreen.copy(0.22f), RoundedCornerShape(10.dp))
+                .border(1.dp, NeonGreen.copy(0.7f), RoundedCornerShape(10.dp))
+                .clickable(onClick = onDone)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(Icons.Default.Check, null, tint = NeonGreen, modifier = Modifier.size(14.dp))
+                Text("Done", style = MaterialTheme.typography.labelMedium, color = NeonGreen, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+// ─── 2. Sidebar tool button ─────────────────────────────────────────────────────
+@Composable
+private fun SidebarToolButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    accentColor: Color,
+    onClick: () -> Unit,
+) {
     Box(
         modifier = Modifier
-            .offset { IntOffset(offsetX.toInt(), offsetY.toInt()) }
+            .size(44.dp)
+            .background(
+                if (selected) accentColor.copy(0.15f) else Color.Transparent,
+                RoundedCornerShape(10.dp)
+            )
+            .border(
+                if (selected) 1.5.dp else 0.dp,
+                if (selected) accentColor.copy(0.75f) else Color.Transparent,
+                RoundedCornerShape(10.dp)
+            )
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
     ) {
-        if (!expanded) {
-            // ── Collapsed: floating pencil bubble ──────────────────────────────
+        Icon(icon, null,
+            tint = if (selected) accentColor else Color(0xFF555555),
+            modifier = Modifier.size(22.dp))
+    }
+}
+
+// ─── 3. Sidebar ────────────────────────────────────────────────────────────────
+@Composable
+private fun AnnotSidebar(
+    isVertical: Boolean,
+    offsetX: Float,
+    offsetY: Float,
+    tool: AnnotationTool,
+    linePointerEnabled: Boolean,
+    onDrag: (Float, Float) -> Unit,
+    onFlip: () -> Unit,
+    onToolSelect: (AnnotationTool) -> Unit,
+    onLaserTap: () -> Unit,
+) {
+    Box(modifier = Modifier.offset { IntOffset(offsetX.toInt(), offsetY.toInt()) }) {
+        val panelMod = Modifier
+            .shadow(14.dp, RoundedCornerShape(14.dp), spotColor = Color.Black.copy(0.25f))
+            .background(Color.White.copy(0.97f), RoundedCornerShape(14.dp))
+            .border(0.5.dp, Color.Black.copy(0.07f), RoundedCornerShape(14.dp))
+            .padding(4.dp)
+
+        @Composable
+        fun buttons() {
+            // ── Drag handle ──────────────────────────────────────────────────
             Box(
                 modifier = Modifier
-                    .size(52.dp)
-                    .shadow(14.dp, CircleShape, spotColor = NeonOrange.copy(0.55f))
-                    .background(
-                        Brush.radialGradient(listOf(NeonOrange.copy(0.38f), Color(0xFF0B1020))),
-                        CircleShape
-                    )
-                    .border(1.5.dp, NeonOrange.copy(0.85f), CircleShape)
+                    .size(44.dp)
                     .pointerInput(Unit) {
-                        detectDragGestures { _, dragAmount -> onDrag(dragAmount.x, dragAmount.y) }
-                    }
-                    .clickable { onToggleExpanded() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Edit, null, tint = NeonOrange, modifier = Modifier.size(22.dp))
-            }
-        } else {
-            // ── Expanded: full floating panel ──────────────────────────────────
-            Box {
-            Column(
-                modifier = Modifier
-                    .width(toolbarWidthDp.coerceIn(200f, 380f).dp)
-                    .shadow(22.dp, RoundedCornerShape(18.dp), spotColor = NeonOrange.copy(0.45f))
-                    .background(
-                        Brush.verticalGradient(listOf(Color(0xFF0E1A2A), Color(0xFF070F1C))),
-                        RoundedCornerShape(18.dp)
-                    )
-                    .border(1.dp, NeonOrange.copy(0.55f), RoundedCornerShape(18.dp))
-                    .clip(RoundedCornerShape(18.dp))
-            ) {
-                // ── Drag handle + title + collapse ─────────────────────────────
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .pointerInput(Unit) {
-                            detectDragGestures { _, dragAmount -> onDrag(dragAmount.x, dragAmount.y) }
-                        }
-                        .background(NeonOrange.copy(0.08f))
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(Icons.Default.DragHandle, null,
-                        tint = Color.White.copy(0.35f), modifier = Modifier.size(16.dp))
-                    Icon(Icons.Default.Edit, null,
-                        tint = NeonOrange.copy(0.9f), modifier = Modifier.size(13.dp))
-                    Text("Draw Tools", style = MaterialTheme.typography.labelMedium,
-                        color = NeonOrange, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f))
-                    IconButton(onClick = onToggleExpanded, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.ExpandLess, null,
-                            tint = Color.White.copy(0.5f), modifier = Modifier.size(16.dp))
-                    }
-                }
-
-                Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(NeonOrange.copy(0.3f)))
-
-                Column(
-                    modifier = Modifier.padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(9.dp)
-                ) {
-                    // ── Row 1: Tool buttons ────────────────────────────────────
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf(
-                            Triple(AnnotationTool.PEN,         Icons.Default.Edit,  "Pen"),
-                            Triple(AnnotationTool.HIGHLIGHTER, Icons.Default.Brush, "High."),
-                            Triple(AnnotationTool.ERASER,      Icons.Default.Close, "Erase"),
-                        ).forEach { (t, icon, label) ->
-                            val sel = tool == t
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .background(if (sel) NeonOrange.copy(0.28f) else Color.White.copy(0.05f), RoundedCornerShape(10.dp))
-                                    .border(if (sel) 1.dp else 0.5.dp, if (sel) NeonOrange.copy(0.85f) else Color.White.copy(0.15f), RoundedCornerShape(10.dp))
-                                    .clickable { onToolChange(t) }
-                                    .padding(horizontal = 6.dp, vertical = 7.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Icon(icon, null,
-                                        tint = if (sel) NeonOrange else Color.White.copy(0.5f),
-                                        modifier = Modifier.size(15.dp))
-                                    Text(label,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 9.sp,
-                                        color = if (sel) NeonOrange else Color.White.copy(0.4f),
-                                        fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
-                                }
-                            }
-                        }
-                    }
-
-                    // ── Row 2: Arrow + Text + Image tools ─────────────────────
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf(
-                            Triple(AnnotationTool.ARROW, Icons.Default.ArrowForward, "Arrow"),
-                            Triple(AnnotationTool.TEXT,  Icons.Default.TextFields,   "Text"),
-                            Triple(AnnotationTool.IMAGE, Icons.Default.Image,        "Image"),
-                        ).forEach { (t, icon, label) ->
-                            val sel = tool == t
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .background(if (sel) NeonCyan.copy(0.28f) else Color.White.copy(0.05f), RoundedCornerShape(10.dp))
-                                    .border(if (sel) 1.dp else 0.5.dp, if (sel) NeonCyan.copy(0.85f) else Color.White.copy(0.15f), RoundedCornerShape(10.dp))
-                                    .clickable { onToolChange(t) }
-                                    .padding(horizontal = 6.dp, vertical = 7.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Icon(icon, null,
-                                        tint = if (sel) NeonCyan else Color.White.copy(0.5f),
-                                        modifier = Modifier.size(15.dp))
-                                    Text(label,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 9.sp,
-                                        color = if (sel) NeonCyan else Color.White.copy(0.4f),
-                                        fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
-                                }
-                            }
-                        }
-                    }
-
-                    // ── Row 3: Color chips ─────────────────────────────────────
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        ANNOT_COLORS_ARGB.forEach { argb ->
-                            val sel = argb == colorArgb
-                            Box(
-                                modifier = Modifier
-                                    .size(if (sel) 27.dp else 21.dp)
-                                    .shadow(if (sel) 5.dp else 0.dp, CircleShape, spotColor = Color(argb).copy(0.65f))
-                                    .border(if (sel) 2.dp else 0.5.dp, if (sel) Color.White else Color.White.copy(0.2f), CircleShape)
-                                    .clip(CircleShape)
-                                    .background(Color(argb))
-                                    .clickable { onColorChange(argb) }
-                            )
-                        }
-                    }
-
-                    // ── Row 3: Stroke widths ───────────────────────────────────
-                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        ANNOT_WIDTHS.forEach { (w, label) ->
-                            val sel = widthDp == w
-                            Box(
-                                modifier = Modifier
-                                    .size(30.dp)
-                                    .background(if (sel) NeonOrange.copy(0.22f) else Color.White.copy(0.05f), RoundedCornerShape(8.dp))
-                                    .border(if (sel) 1.dp else 0.5.dp, if (sel) NeonOrange.copy(0.75f) else Color.White.copy(0.1f), RoundedCornerShape(8.dp))
-                                    .clickable { onWidthChange(w) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(label, style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 9.sp,
-                                    color = if (sel) NeonOrange else Color.White.copy(0.45f),
-                                    fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
-                            }
-                        }
-                    }
-
-                    // ── Laser Pointer section ──────────────────────────────────
-                    Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color.White.copy(0.12f)))
-
-                    val lpColor = Color(linePointerColorArgb)
-                    val lpGlow by animateFloatAsState(if (linePointerEnabled) 1f else 0f, tween(300), label = "lp_glow")
-
-                    // Toggle row
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .shadow(if (linePointerEnabled) 10.dp else 0.dp, RoundedCornerShape(11.dp),
-                                spotColor = lpColor.copy(0.6f * lpGlow))
-                            .background(
-                                if (linePointerEnabled)
-                                    Brush.horizontalGradient(listOf(lpColor.copy(0.18f), lpColor.copy(0.07f)))
-                                else
-                                    Brush.horizontalGradient(listOf(Color.White.copy(0.04f), Color.White.copy(0.02f))),
-                                RoundedCornerShape(11.dp)
-                            )
-                            .border(
-                                width  = if (linePointerEnabled) 1.dp else 0.5.dp,
-                                color  = if (linePointerEnabled) lpColor.copy(0.75f) else Color.White.copy(0.12f),
-                                shape  = RoundedCornerShape(11.dp)
-                            )
-                            .padding(horizontal = 10.dp, vertical = 7.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(7.dp)
-                        ) {
-                            // Laser dot icon — glowing circle with outer ring
-                            Canvas(modifier = Modifier.size(18.dp)) {
-                                val cx = size.width / 2f
-                                val cy = size.height / 2f
-                                val dotColor = if (linePointerEnabled) lpColor else Color.White.copy(0.3f)
-                                drawCircle(color = dotColor.copy(alpha = 0.22f), radius = 8.dp.toPx(), center = Offset(cx, cy))
-                                drawCircle(color = dotColor.copy(alpha = 0.55f), radius = 4.5.dp.toPx(), center = Offset(cx, cy))
-                                drawCircle(color = dotColor.copy(alpha = 1f),    radius = 2.2.dp.toPx(), center = Offset(cx, cy))
-                                drawCircle(color = Color.White.copy(alpha = if (linePointerEnabled) 0.9f else 0.4f), radius = 0.9.dp.toPx(), center = Offset(cx, cy))
-                            }
-
-                            Text(
-                                "Laser Pointer",
-                                style      = MaterialTheme.typography.labelMedium,
-                                color      = if (linePointerEnabled) Color.White else Color.White.copy(0.55f),
-                                fontWeight = if (linePointerEnabled) FontWeight.Bold else FontWeight.Normal,
-                                modifier   = Modifier.weight(1f)
-                            )
-
-                            Switch(
-                                checked  = linePointerEnabled,
-                                onCheckedChange = { onLinePointerToggle() },
-                                modifier = Modifier.height(24.dp).width(44.dp),
-                                colors   = SwitchDefaults.colors(
-                                    checkedThumbColor   = lpColor,
-                                    checkedTrackColor   = lpColor.copy(0.38f),
-                                    checkedBorderColor  = lpColor.copy(0.7f),
-                                    uncheckedThumbColor = Color.White.copy(0.4f),
-                                    uncheckedTrackColor = Color.White.copy(0.08f),
-                                    uncheckedBorderColor= Color.White.copy(0.18f)
-                                )
-                            )
-                        }
-                    }
-
-                    // Color chips for Line Pointer (revealed when enabled)
-                    AnimatedVisibility(
-                        visible = linePointerEnabled,
-                        enter   = expandVertically(tween(220)) + fadeIn(tween(220)),
-                        exit    = shrinkVertically(tween(180)) + fadeOut(tween(180))
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            LINE_POINTER_COLORS.forEach { argb ->
-                                val sel  = argb == linePointerColorArgb
-                                val c    = Color(argb)
-                                val inf  = rememberInfiniteTransition(label = "lp_chip_$argb")
-                                val glow by inf.animateFloat(
-                                    initialValue    = 0.5f,
-                                    targetValue     = 1f,
-                                    animationSpec   = infiniteRepeatable(tween(700, easing = EaseInOutSine), RepeatMode.Reverse),
-                                    label           = "lp_chip_glow_$argb"
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .size(if (sel) 27.dp else 21.dp)
-                                        .shadow(
-                                            if (sel) (12.dp * glow) else 0.dp,
-                                            CircleShape,
-                                            spotColor = c.copy(if (sel) 0.9f * glow else 0f)
-                                        )
-                                        .border(
-                                            if (sel) 2.5.dp else 0.5.dp,
-                                            if (sel) Color.White else Color.White.copy(0.25f),
-                                            CircleShape
-                                        )
-                                        .clip(CircleShape)
-                                        .background(c)
-                                        .clickable { onLinePointerColorChange(argb) }
-                                )
-                            }
-                        }
-                    }
-
-                    // ── Solution opener (shown only when a solution file exists) ─
-                    if (solutionUri.isNotBlank()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .shadow(6.dp, RoundedCornerShape(11.dp), spotColor = NeonGold.copy(0.4f))
-                                .background(
-                                    Brush.horizontalGradient(listOf(NeonGold.copy(0.22f), NeonGold.copy(0.08f))),
-                                    RoundedCornerShape(11.dp)
-                                )
-                                .border(1.dp, NeonGold.copy(0.65f), RoundedCornerShape(11.dp))
-                                .clickable { onOpenSolution() }
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(7.dp)
-                            ) {
-                                Icon(Icons.Default.PictureAsPdf, null,
-                                    tint = NeonGold, modifier = Modifier.size(14.dp))
-                                Text("View Solution",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = NeonGold, fontWeight = FontWeight.ExtraBold)
-                                Spacer(Modifier.weight(1f))
-                                Icon(Icons.Default.OpenInNew, null,
-                                    tint = NeonGold.copy(0.6f), modifier = Modifier.size(11.dp))
-                            }
-                        }
-                    }
-
-                    Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(NeonOrange.copy(0.18f)))
-
-                    // ── Stamp Picker (collapsible) ──────────────────────────────
-                    val stampActive = tool == AnnotationTool.STAMP
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .shadow(if (stampActive) 4.dp else 0.dp, RoundedCornerShape(9.dp), spotColor = NeonGold.copy(0.4f))
-                            .background(
-                                if (stampActive) NeonGold.copy(0.18f) else Color.White.copy(0.05f),
-                                RoundedCornerShape(9.dp)
-                            )
-                            .border(
-                                if (stampActive) 1.dp else 0.5.dp,
-                                if (stampActive) NeonGold.copy(0.75f) else Color.White.copy(0.15f),
-                                RoundedCornerShape(9.dp)
-                            )
-                            .clickable { onStampPickerToggle() }
-                            .padding(horizontal = 8.dp, vertical = 6.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("🔖", fontSize = 13.sp)
-                                Text(
-                                    text = if (selectedStampEmoji != null && stampActive) "Stamp: $selectedStampEmoji" else "Stamps",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (stampActive) NeonGold else Color.White.copy(0.6f),
-                                    fontWeight = if (stampActive) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 10.sp
-                                )
-                                if (selectedStampEmoji != null) {
-                                    Text(
-                                        selectedStampEmoji!!,
-                                        fontSize = 13.sp,
-                                        modifier = Modifier
-                                            .background(NeonGold.copy(0.15f), RoundedCornerShape(4.dp))
-                                            .padding(horizontal = 3.dp, vertical = 1.dp)
-                                    )
-                                }
-                            }
-                            Icon(
-                                if (stampPickerExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                null,
-                                tint = if (stampActive) NeonGold.copy(0.8f) else Color.White.copy(0.4f),
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                    }
-                    AnimatedVisibility(
-                        visible = stampPickerExpanded,
-                        enter   = expandVertically(tween(200)) + fadeIn(tween(200)),
-                        exit    = shrinkVertically(tween(160)) + fadeOut(tween(160))
-                    ) {
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(9),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 172.dp),
-                            contentPadding = PaddingValues(top = 4.dp, bottom = 2.dp),
-                            horizontalArrangement = Arrangement.spacedBy(3.dp),
-                            verticalArrangement   = Arrangement.spacedBy(3.dp)
-                        ) {
-                            items(NEET_STAMPS) { emoji ->
-                                val sel = selectedStampEmoji == emoji && stampActive
-                                Box(
-                                    modifier = Modifier
-                                        .aspectRatio(1f)
-                                        .shadow(if (sel) 4.dp else 0.dp, RoundedCornerShape(6.dp), spotColor = NeonGold.copy(0.5f))
-                                        .background(
-                                            if (sel) NeonGold.copy(0.3f) else Color.White.copy(0.05f),
-                                            RoundedCornerShape(6.dp)
-                                        )
-                                        .border(
-                                            if (sel) 1.5.dp else 0.5.dp,
-                                            if (sel) NeonGold.copy(0.9f) else Color.White.copy(0.12f),
-                                            RoundedCornerShape(6.dp)
-                                        )
-                                        .clickable { onStampSelect(emoji) },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(emoji, fontSize = 15.sp, textAlign = TextAlign.Center)
-                                }
-                            }
-                        }
-                    }
-
-                    Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(NeonOrange.copy(0.12f)))
-
-                    // ── Row 4: Actions ─────────────────────────────────────────
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        IconButton(onClick = onUndo, enabled = canUndo, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Undo, null,
-                                tint = if (canUndo) NeonCyan else Color.White.copy(0.2f),
-                                modifier = Modifier.size(16.dp))
-                        }
-                        IconButton(onClick = onRedo, enabled = canRedo, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Redo, null,
-                                tint = if (canRedo) NeonCyan else Color.White.copy(0.2f),
-                                modifier = Modifier.size(16.dp))
-                        }
-                        IconButton(onClick = onClearPage, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.DeleteSweep, null,
-                                tint = NeonRed.copy(0.7f), modifier = Modifier.size(16.dp))
-                        }
-
-                        Spacer(Modifier.weight(1f))
-
-                        // Zoom toggle
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .shadow(if (zoomEnabled) 6.dp else 0.dp, RoundedCornerShape(8.dp), spotColor = NeonCyan.copy(0.4f))
-                                .background(if (zoomEnabled) NeonCyan.copy(0.25f) else Color.White.copy(0.06f), RoundedCornerShape(8.dp))
-                                .border(1.dp, if (zoomEnabled) NeonCyan.copy(0.8f) else Color.White.copy(0.15f), RoundedCornerShape(8.dp))
-                                .clickable(onClick = onZoomToggle),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.ZoomIn, null,
-                                tint = if (zoomEnabled) NeonCyan else Color.White.copy(0.45f),
-                                modifier = Modifier.size(16.dp))
-                        }
-
-                        // Done
-                        Box(
-                            modifier = Modifier
-                                .shadow(8.dp, RoundedCornerShape(9.dp), spotColor = NeonGreen.copy(0.4f))
-                                .background(NeonGreen.copy(0.2f), RoundedCornerShape(9.dp))
-                                .border(1.dp, NeonGreen.copy(0.7f), RoundedCornerShape(9.dp))
-                                .clickable(onClick = onDone)
-                                .padding(horizontal = 12.dp, vertical = 7.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Icon(Icons.Default.Check, null, tint = NeonGreen, modifier = Modifier.size(13.dp))
-                                Text("Done", style = MaterialTheme.typography.labelSmall,
-                                    color = NeonGreen, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-
-                    // Zoom mode hint
-                    if (zoomEnabled) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth()
-                                .background(NeonCyan.copy(0.1f), RoundedCornerShape(8.dp))
-                                .border(0.5.dp, NeonCyan.copy(0.4f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 8.dp, vertical = 5.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Icon(Icons.Default.ZoomIn, null, tint = NeonCyan, modifier = Modifier.size(11.dp))
-                                Text("1 finger draws  ·  2 fingers zoom",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 9.sp, color = NeonCyan.copy(0.9f))
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ── Resize handle (bottom-right corner) ───────────────────────────
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .offset(x = 6.dp, y = 6.dp)
-                    .size(30.dp)
-                    .shadow(8.dp, RoundedCornerShape(8.dp), spotColor = NeonOrange.copy(0.55f))
-                    .background(Color(0xFF0E1A2A), RoundedCornerShape(8.dp))
-                    .border(1.5.dp, NeonOrange.copy(0.7f), RoundedCornerShape(8.dp))
-                    .pointerInput(Unit) {
-                        detectDragGestures { _, dragAmount ->
-                            onResize(with(density) { dragAmount.x.toDp().value })
-                        }
+                        detectDragGestures { _, drag -> onDrag(drag.x, drag.y) }
                     },
                 contentAlignment = Alignment.Center
             ) {
-                Canvas(modifier = Modifier.size(16.dp)) {
-                    val c = NeonOrange.copy(0.85f)
-                    val sw = 2.dp.toPx()
-                    repeat(3) { i ->
-                        val t = (i + 1f) / 3f
-                        drawLine(
-                            c,
-                            Offset(size.width * t, size.height),
-                            Offset(size.width, size.height * t),
-                            strokeWidth = sw,
-                            cap = StrokeCap.Round
-                        )
-                    }
-                }
+                Icon(Icons.Default.DragHandle, null,
+                    tint = Color(0xFFAAAAAA), modifier = Modifier.size(18.dp))
             }
-            } // close wrapper Box
+            // ── Flip orientation ─────────────────────────────────────────────
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clickable { onFlip() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.ScreenRotation, null,
+                    tint = Color(0xFFAAAAAA), modifier = Modifier.size(18.dp))
+            }
+            // ── Divider ──────────────────────────────────────────────────────
+            if (isVertical) {
+                Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp).height(0.5.dp).background(Color.Black.copy(0.1f)))
+            } else {
+                Box(modifier = Modifier.fillMaxHeight().padding(vertical = 6.dp).width(0.5.dp).background(Color.Black.copy(0.1f)))
+            }
+            // ── Tool buttons ─────────────────────────────────────────────────
+            SIDEBAR_TOOLS.forEach { (t, icon, _) ->
+                val sel = if (t == null) linePointerEnabled else tool == t
+                val accent = when (t) {
+                    AnnotationTool.HIGHLIGHTER -> Color(0xFFFF6F00)
+                    AnnotationTool.ERASER      -> Color(0xFFE53935)
+                    AnnotationTool.TEXT        -> Color(0xFF00ACC1)
+                    AnnotationTool.IMAGE       -> Color(0xFF7C4DFF)
+                    AnnotationTool.STAMP       -> Color(0xFFFF8F00)
+                    null                       -> Color(0xFFFF1744)  // laser
+                    else                       -> Color(0xFF1565C0)  // pen/arrow
+                }
+                SidebarToolButton(
+                    icon        = icon,
+                    selected    = sel,
+                    accentColor = accent,
+                    onClick     = { if (t == null) onLaserTap() else onToolSelect(t) }
+                )
+            }
+        }
+
+        if (isVertical) {
+            Column(modifier = panelMod,
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp)) { buttons() }
+        } else {
+            Row(modifier = panelMod,
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)) { buttons() }
         }
     }
 }
 
-// ─── PDF Annotation Toolbar ────────────────────────────────────────────────────
+// ─── 4. Shared helpers inside sheets ───────────────────────────────────────────
 
 @Composable
-private fun PdfAnnotationToolbar(
+private fun SheetColorRow(
+    colors: List<Int>,
+    selectedArgb: Int,
+    onSelect: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        colors.forEach { argb ->
+            val sel = argb == selectedArgb
+            Box(
+                modifier = Modifier
+                    .size(if (sel) 30.dp else 24.dp)
+                    .shadow(if (sel) 6.dp else 0.dp, CircleShape, spotColor = Color(argb).copy(0.6f))
+                    .border(if (sel) 2.5.dp else 0.8.dp,
+                        if (sel) Color.Black.copy(0.6f) else Color.Black.copy(0.15f), CircleShape)
+                    .clip(CircleShape)
+                    .background(Color(argb))
+                    .clickable { onSelect(argb) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SheetSliderRow(
+    label: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    displayText: String,
+    onValueChange: (Float) -> Unit,
+    onDecrement: () -> Unit,
+    onIncrement: () -> Unit,
+) {
+    Text(label, style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp), color = Color.Black.copy(0.55f))
+    Spacer(Modifier.height(4.dp))
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        IconButton(onClick = onDecrement, modifier = Modifier.size(32.dp)) {
+            Text("—", color = Color.Black.copy(0.7f), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        }
+        Slider(modifier = Modifier.weight(1f), value = value, onValueChange = onValueChange, valueRange = valueRange,
+            colors = SliderDefaults.colors(thumbColor = Color(0xFF1E88E5), activeTrackColor = Color(0xFF1E88E5), inactiveTrackColor = Color.Black.copy(0.12f)))
+        Text(displayText, style = MaterialTheme.typography.labelMedium, color = Color.Black.copy(0.75f), fontWeight = FontWeight.Bold, modifier = Modifier.widthIn(min = 44.dp), textAlign = TextAlign.End)
+        IconButton(onClick = onIncrement, modifier = Modifier.size(32.dp)) {
+            Text("+", color = Color.Black.copy(0.7f), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun SheetToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector? = null) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        if (icon != null) Icon(icon, null, tint = Color.Black.copy(0.45f), modifier = Modifier.size(16.dp).padding(end = 4.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = Color.Black.copy(0.75f), modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF1E88E5),
+                uncheckedThumbColor = Color.White, uncheckedTrackColor = Color.Black.copy(0.2f)))
+    }
+}
+
+// ─── 5. Bottom-sheet for each tool ─────────────────────────────────────────────
+
+@Composable
+private fun AnnotToolSheet(
     tool: AnnotationTool,
     colorArgb: Int,
     widthDp: Float,
-    canUndo: Boolean,
-    canRedo: Boolean,
-    onToolChange: (AnnotationTool) -> Unit,
+    straightLine: Boolean,
+    lineType: Int,
+    inkOpacity: Float,
+    eraserWidthDp: Float,
+    eraserPartial: Boolean,
+    eraserErasesPen: Boolean,
+    eraserErasesHigh: Boolean,
+    autoDeselect: Boolean,
+    recentColors: List<Int>,
+    selectedStampEmoji: String?,
+    stampPickerExpanded: Boolean,
     onColorChange: (Int) -> Unit,
     onWidthChange: (Float) -> Unit,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
-    onClearPage: () -> Unit,
-    onDone: () -> Unit,
+    onStraightLineChange: (Boolean) -> Unit,
+    onLineTypeChange: (Int) -> Unit,
+    onInkOpacityChange: (Float) -> Unit,
+    onEraserWidthChange: (Float) -> Unit,
+    onEraserPartialChange: (Boolean) -> Unit,
+    onEraserErasesPenChange: (Boolean) -> Unit,
+    onEraserErasesHighChange: (Boolean) -> Unit,
+    onAutoDeselectChange: (Boolean) -> Unit,
+    onStampSelect: (String) -> Unit,
+    onStampPickerToggle: () -> Unit,
+    onDeleteAnnot: () -> Unit,
+    onImageGallery: () -> Unit,
+    onImageFiles: () -> Unit,
+    onImageCamera: () -> Unit,
+    onClose: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(listOf(Color(0xFF0B1020), Color(0xFF070D1A))),
-            )
-            .border(BorderStroke(1.dp, NeonOrange.copy(0.45f)))
-            .padding(vertical = 8.dp)
-    ) {
-        // ── Row 1: Tools  ·  Undo/Redo  ·  Clear  ·  Done ────────────────────
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Scrim
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(0.4f))
+            .clickable(indication = null, interactionSource = interactionSource) { onClose() })
+        // Sheet panel
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .shadow(20.dp, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp), spotColor = Color.Black.copy(0.3f))
+                .background(Color.White, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                .clickable(indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) {}
         ) {
-            listOf(
-                Triple(AnnotationTool.PEN,         Icons.Default.Edit,    "Pen"),
-                Triple(AnnotationTool.HIGHLIGHTER, Icons.Default.Brush,   "High."),
-                Triple(AnnotationTool.ERASER,      Icons.Default.Close,   "Erase"),
-            ).forEach { (t, icon, label) ->
-                val sel = tool == t
-                Box(
-                    modifier = Modifier
-                        .background(if (sel) NeonOrange.copy(0.25f) else Color.White.copy(0.05f), RoundedCornerShape(10.dp))
-                        .border(if (sel) 1.dp else 0.5.dp, if (sel) NeonOrange.copy(0.85f) else Color.White.copy(0.15f), RoundedCornerShape(10.dp))
-                        .clickable { onToolChange(t) }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Icon(icon, null, tint = if (sel) NeonOrange else Color.White.copy(0.5f), modifier = Modifier.size(15.dp))
-                        Text(label, style = MaterialTheme.typography.labelSmall, fontSize = 9.sp,
-                            color = if (sel) NeonOrange else Color.White.copy(0.4f),
-                            fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
-                    }
+            // Drag pill
+            Box(modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.size(width = 36.dp, height = 3.5.dp).background(Color(0xFFDDDDDD), CircleShape))
+            }
+            // Scrollable content
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                when (tool) {
+                    AnnotationTool.PEN         -> PenSheetContent(colorArgb, widthDp, straightLine, lineType, recentColors, onColorChange, onWidthChange, onStraightLineChange, onLineTypeChange, onDeleteAnnot)
+                    AnnotationTool.HIGHLIGHTER -> HighlighterSheetContent(colorArgb, widthDp, straightLine, inkOpacity, recentColors, onColorChange, onWidthChange, onStraightLineChange, onInkOpacityChange, onDeleteAnnot)
+                    AnnotationTool.ERASER      -> EraserSheetContent(eraserWidthDp, eraserPartial, eraserErasesPen, eraserErasesHigh, autoDeselect, onEraserWidthChange, onEraserPartialChange, onEraserErasesPenChange, onEraserErasesHighChange, onAutoDeselectChange, onDeleteAnnot)
+                    AnnotationTool.ARROW       -> ArrowSheetContent(colorArgb, widthDp, recentColors, onColorChange, onWidthChange, onDeleteAnnot)
+                    AnnotationTool.STAMP       -> StampSheetContent(selectedStampEmoji, stampPickerExpanded, onStampSelect, onStampPickerToggle)
+                    AnnotationTool.TEXT        -> TextSheetContent(colorArgb, recentColors, onColorChange)
+                    AnnotationTool.IMAGE       -> ImageSheetContent(onImageGallery, onImageFiles, onImageCamera)
                 }
             }
-
-            Spacer(Modifier.weight(1f))
-
-            // Undo
-            IconButton(onClick = onUndo, enabled = canUndo, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.Undo, null, tint = if (canUndo) NeonCyan else Color.White.copy(0.2f), modifier = Modifier.size(18.dp))
-            }
-            // Redo
-            IconButton(onClick = onRedo, enabled = canRedo, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.Redo, null, tint = if (canRedo) NeonCyan else Color.White.copy(0.2f), modifier = Modifier.size(18.dp))
-            }
-            // Clear page
-            IconButton(onClick = onClearPage, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.DeleteSweep, null, tint = NeonRed.copy(0.65f), modifier = Modifier.size(18.dp))
-            }
-            // Done
-            Box(
-                modifier = Modifier
-                    .background(NeonGreen.copy(0.18f), RoundedCornerShape(10.dp))
-                    .border(1.dp, NeonGreen.copy(0.65f), RoundedCornerShape(10.dp))
-                    .clickable(onClick = onDone)
-                    .padding(horizontal = 12.dp, vertical = 7.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Default.Check, null, tint = NeonGreen, modifier = Modifier.size(14.dp))
-                    Text("Done", style = MaterialTheme.typography.labelMedium, color = NeonGreen, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
-        // ── Row 1b: Arrow + Text tools ────────────────────────────────────────
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            listOf(
-                Triple(AnnotationTool.ARROW, Icons.Default.ArrowForward, "Arrow"),
-                Triple(AnnotationTool.TEXT,  Icons.Default.TextFields,   "Text"),
-            ).forEach { (t, icon, label) ->
-                val sel = tool == t
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(if (sel) NeonCyan.copy(0.25f) else Color.White.copy(0.05f), RoundedCornerShape(10.dp))
-                        .border(if (sel) 1.dp else 0.5.dp, if (sel) NeonCyan.copy(0.85f) else Color.White.copy(0.15f), RoundedCornerShape(10.dp))
-                        .clickable { onToolChange(t) }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Icon(icon, null, tint = if (sel) NeonCyan else Color.White.copy(0.5f), modifier = Modifier.size(15.dp))
-                        Text(label, style = MaterialTheme.typography.labelSmall, fontSize = 9.sp,
-                            color = if (sel) NeonCyan else Color.White.copy(0.4f),
-                            fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(7.dp))
-        Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(NeonOrange.copy(0.2f)))
-        Spacer(Modifier.height(7.dp))
-
-        // ── Row 2: Color chips  ·  Width buttons ──────────────────────────────
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-            ANNOT_COLORS_ARGB.forEach { argb ->
-                val sel = argb == colorArgb
-                Box(
-                    modifier = Modifier
-                        .size(if (sel) 30.dp else 24.dp)
-                        .shadow(if (sel) 6.dp else 0.dp, CircleShape, spotColor = Color(argb).copy(0.6f))
-                        .border(if (sel) 2.5.dp else 0.8.dp, if (sel) Color.White else Color.White.copy(0.2f), CircleShape)
-                        .clip(CircleShape)
-                        .background(Color(argb))
-                        .clickable { onColorChange(argb) }
-                )
-            }
-
-            Spacer(Modifier.weight(1f))
-
-            ANNOT_WIDTHS.forEach { (w, label) ->
-                val sel = widthDp == w
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .background(if (sel) NeonOrange.copy(0.22f) else Color.White.copy(0.05f), RoundedCornerShape(8.dp))
-                        .border(if (sel) 1.dp else 0.5.dp, if (sel) NeonOrange.copy(0.75f) else Color.White.copy(0.1f), RoundedCornerShape(8.dp))
-                        .clickable { onWidthChange(w) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(label, style = MaterialTheme.typography.labelSmall, fontSize = 9.sp,
-                        color = if (sel) NeonOrange else Color.White.copy(0.45f),
-                        fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
-                }
+            // Close button
+            Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color.Black.copy(0.08f)))
+            TextButton(onClick = onClose, modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                Text("Close", color = Color.Black.copy(0.5f), fontWeight = FontWeight.Medium)
             }
         }
     }
 }
+
+// ─── Pen sheet ─────────────────────────────────────────────────────────────────
+@Composable
+private fun PenSheetContent(
+    colorArgb: Int, widthDp: Float, straightLine: Boolean, lineType: Int,
+    recentColors: List<Int>,
+    onColorChange: (Int) -> Unit, onWidthChange: (Float) -> Unit,
+    onStraightLineChange: (Boolean) -> Unit, onLineTypeChange: (Int) -> Unit,
+    onDeleteAnnot: () -> Unit,
+) {
+    Text("Pen", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.Black.copy(0.8f))
+    // Width preview strokes
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+        SHEET_PEN_WIDTHS.forEach { w ->
+            val sel = kotlin.math.abs(widthDp - w) < 0.5f
+            Box(modifier = Modifier.weight(1f).height(48.dp)
+                .background(if (sel) Color(0xFF1E88E5).copy(0.1f) else Color.Black.copy(0.04f), RoundedCornerShape(8.dp))
+                .border(if (sel) 1.5.dp else 0.5.dp, if (sel) Color(0xFF1E88E5) else Color.Black.copy(0.12f), RoundedCornerShape(8.dp))
+                .clickable { onWidthChange(w) }, contentAlignment = Alignment.Center) {
+                Canvas(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp).height(w.coerceAtLeast(1f).dp)) {
+                    drawLine(Color.Black.copy(0.7f), Offset(0f, size.height / 2f), Offset(size.width, size.height / 2f),
+                        strokeWidth = w.dp.toPx().coerceAtLeast(1f), cap = StrokeCap.Round)
+                }
+            }
+        }
+    }
+    SheetSliderRow("Pen thickness", widthDp, 1f..30f, "${String.format("%.1f", widthDp)}px",
+        { onWidthChange(it) }, { onWidthChange((widthDp - 0.5f).coerceAtLeast(1f)) }, { onWidthChange((widthDp + 0.5f).coerceAtMost(30f)) })
+    SheetToggleRow("Straight Line", straightLine, onStraightLineChange, Icons.Default.LinearScale)
+    // Line type
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Line Type", style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp), color = Color.Black.copy(0.55f))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(0 to "———", 1 to "- - -", 2 to "· · ·").forEach { (idx, label) ->
+                val sel = lineType == idx
+                Box(modifier = Modifier
+                    .border(if (sel) 1.5.dp else 0.5.dp, if (sel) Color(0xFF1E88E5) else Color.Black.copy(0.2f), RoundedCornerShape(8.dp))
+                    .background(if (sel) Color(0xFF1E88E5).copy(0.1f) else Color.Transparent, RoundedCornerShape(8.dp))
+                    .clickable { onLineTypeChange(idx) }.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Text(label, fontSize = 12.sp, color = if (sel) Color(0xFF1E88E5) else Color.Black.copy(0.6f), fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
+                }
+            }
+        }
+    }
+    Text("Basic colors", style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp), color = Color.Black.copy(0.55f))
+    SheetColorRow(SHEET_COLORS_ARGB, colorArgb, onColorChange)
+    if (recentColors.isNotEmpty()) {
+        Text("Recent colors", style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp), color = Color.Black.copy(0.55f))
+        SheetColorRow(recentColors, colorArgb, onColorChange)
+    }
+    // Delete button
+    Box(modifier = Modifier.fillMaxWidth().border(1.dp, NeonRed.copy(0.55f), RoundedCornerShape(12.dp))
+        .clickable { onDeleteAnnot() }.padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Default.Delete, null, tint = NeonRed, modifier = Modifier.size(18.dp))
+            Text("Delete", color = NeonRed, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+// ─── Highlighter sheet ─────────────────────────────────────────────────────────
+@Composable
+private fun HighlighterSheetContent(
+    colorArgb: Int, widthDp: Float, straightLine: Boolean, inkOpacity: Float,
+    recentColors: List<Int>,
+    onColorChange: (Int) -> Unit, onWidthChange: (Float) -> Unit,
+    onStraightLineChange: (Boolean) -> Unit, onInkOpacityChange: (Float) -> Unit,
+    onDeleteAnnot: () -> Unit,
+) {
+    Text("Highlighter", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.Black.copy(0.8f))
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+        SHEET_PEN_WIDTHS.forEach { w ->
+            val sel = kotlin.math.abs(widthDp - w) < 0.5f
+            Box(modifier = Modifier.weight(1f).height(48.dp)
+                .background(if (sel) Color(0xFFFF6F00).copy(0.1f) else Color.Black.copy(0.04f), RoundedCornerShape(8.dp))
+                .border(if (sel) 1.5.dp else 0.5.dp, if (sel) Color(0xFFFF6F00) else Color.Black.copy(0.12f), RoundedCornerShape(8.dp))
+                .clickable { onWidthChange(w) }, contentAlignment = Alignment.Center) {
+                Canvas(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).height((w * 1.5f).coerceAtLeast(4f).dp)) {
+                    drawRect(Color(colorArgb).copy(alpha = inkOpacity * 0.65f),
+                        size = androidx.compose.ui.geometry.Size(size.width, size.height))
+                }
+            }
+        }
+    }
+    SheetSliderRow("Pen thickness", widthDp, 1f..30f, "${String.format("%.1f", widthDp)}px",
+        { onWidthChange(it) }, { onWidthChange((widthDp - 0.5f).coerceAtLeast(1f)) }, { onWidthChange((widthDp + 0.5f).coerceAtMost(30f)) })
+    SheetSliderRow("Ink opacity", inkOpacity, 0.05f..1f, "${(inkOpacity * 100).toInt()}%",
+        { onInkOpacityChange(it) }, { onInkOpacityChange((inkOpacity - 0.05f).coerceAtLeast(0.05f)) }, { onInkOpacityChange((inkOpacity + 0.05f).coerceAtMost(1f)) })
+    SheetToggleRow("Straight Line", straightLine, onStraightLineChange, Icons.Default.LinearScale)
+    Text("Basic colors", style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp), color = Color.Black.copy(0.55f))
+    SheetColorRow(SHEET_COLORS_ARGB, colorArgb, onColorChange)
+    if (recentColors.isNotEmpty()) {
+        Text("Recent colors", style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp), color = Color.Black.copy(0.55f))
+        SheetColorRow(recentColors, colorArgb, onColorChange)
+    }
+    Box(modifier = Modifier.fillMaxWidth().border(1.dp, NeonRed.copy(0.55f), RoundedCornerShape(12.dp))
+        .clickable { onDeleteAnnot() }.padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Default.Delete, null, tint = NeonRed, modifier = Modifier.size(18.dp))
+            Text("Delete", color = NeonRed, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+// ─── Eraser sheet ──────────────────────────────────────────────────────────────
+@Composable
+private fun EraserSheetContent(
+    eraserWidthDp: Float, eraserPartial: Boolean,
+    eraserErasesPen: Boolean, eraserErasesHigh: Boolean, autoDeselect: Boolean,
+    onEraserWidthChange: (Float) -> Unit, onEraserPartialChange: (Boolean) -> Unit,
+    onEraserErasesPenChange: (Boolean) -> Unit, onEraserErasesHighChange: (Boolean) -> Unit,
+    onAutoDeselectChange: (Boolean) -> Unit, onDeleteAnnot: () -> Unit,
+) {
+    Text("Eraser", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.Black.copy(0.8f))
+    SheetSliderRow("Eraser thickness", eraserWidthDp, 2f..60f, "${String.format("%.1f", eraserWidthDp)}px",
+        { onEraserWidthChange(it) }, { onEraserWidthChange((eraserWidthDp - 1f).coerceAtLeast(2f)) }, { onEraserWidthChange((eraserWidthDp + 1f).coerceAtMost(60f)) })
+    // Stroke eraser / Partial eraser toggle
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        listOf(false to "Stroke eraser", true to "Partial eraser").forEach { (isPartial, label) ->
+            val sel = eraserPartial == isPartial
+            Box(modifier = Modifier.weight(1f)
+                .background(if (sel) Color(0xFF1E88E5) else Color.Black.copy(0.05f), RoundedCornerShape(10.dp))
+                .border(0.5.dp, if (sel) Color(0xFF1E88E5) else Color.Black.copy(0.15f), RoundedCornerShape(10.dp))
+                .clickable { onEraserPartialChange(isPartial) }.padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center) {
+                Text(label, color = if (sel) Color.White else Color.Black.copy(0.65f), fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp)
+            }
+        }
+    }
+    // Clear page
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Clear Page", style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp), color = Color.Black.copy(0.55f))
+        Box(modifier = Modifier.fillMaxWidth()
+            .border(1.dp, Color.Black.copy(0.15f), RoundedCornerShape(10.dp))
+            .clickable { onDeleteAnnot() }.padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
+            Text("Document Page", color = Color.Black.copy(0.65f), fontWeight = FontWeight.Medium)
+        }
+    }
+    Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color.Black.copy(0.08f)))
+    SheetToggleRow("Pen", eraserErasesPen, onEraserErasesPenChange)
+    SheetToggleRow("HighLighter", eraserErasesHigh, onEraserErasesHighChange)
+    SheetToggleRow("Auto-Deselect", autoDeselect, onAutoDeselectChange)
+}
+
+// ─── Arrow sheet ───────────────────────────────────────────────────────────────
+@Composable
+private fun ArrowSheetContent(
+    colorArgb: Int, widthDp: Float, recentColors: List<Int>,
+    onColorChange: (Int) -> Unit, onWidthChange: (Float) -> Unit,
+    onDeleteAnnot: () -> Unit,
+) {
+    Text("Arrow", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.Black.copy(0.8f))
+    SheetSliderRow("Pen thickness", widthDp, 1f..20f, "${String.format("%.1f", widthDp)}px",
+        { onWidthChange(it) }, { onWidthChange((widthDp - 0.5f).coerceAtLeast(1f)) }, { onWidthChange((widthDp + 0.5f).coerceAtMost(20f)) })
+    Text("Basic colors", style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp), color = Color.Black.copy(0.55f))
+    SheetColorRow(SHEET_COLORS_ARGB, colorArgb, onColorChange)
+    if (recentColors.isNotEmpty()) {
+        Text("Recent colors", style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp), color = Color.Black.copy(0.55f))
+        SheetColorRow(recentColors, colorArgb, onColorChange)
+    }
+    Box(modifier = Modifier.fillMaxWidth().border(1.dp, NeonRed.copy(0.55f), RoundedCornerShape(12.dp))
+        .clickable { onDeleteAnnot() }.padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Default.Delete, null, tint = NeonRed, modifier = Modifier.size(18.dp))
+            Text("Delete", color = NeonRed, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+// ─── Stamp sheet ───────────────────────────────────────────────────────────────
+@Composable
+private fun StampSheetContent(
+    selectedStampEmoji: String?, stampPickerExpanded: Boolean,
+    onStampSelect: (String) -> Unit, onStampPickerToggle: () -> Unit,
+) {
+    Text("Stamps", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.Black.copy(0.8f))
+    if (selectedStampEmoji != null) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Selected:", style = MaterialTheme.typography.labelMedium, color = Color.Black.copy(0.55f))
+            Text(selectedStampEmoji, fontSize = 28.sp)
+        }
+    }
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(9),
+        modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp),
+        contentPadding = PaddingValues(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        items(NEET_STAMPS) { emoji ->
+            val sel = selectedStampEmoji == emoji
+            Box(modifier = Modifier.aspectRatio(1f)
+                .background(if (sel) Color(0xFF1E88E5).copy(0.15f) else Color.Black.copy(0.04f), RoundedCornerShape(8.dp))
+                .border(if (sel) 1.5.dp else 0.5.dp, if (sel) Color(0xFF1E88E5) else Color.Black.copy(0.1f), RoundedCornerShape(8.dp))
+                .clickable { onStampSelect(emoji) }, contentAlignment = Alignment.Center) {
+                Text(emoji, fontSize = 18.sp, textAlign = TextAlign.Center)
+            }
+        }
+    }
+}
+
+// ─── Text sheet ────────────────────────────────────────────────────────────────
+@Composable
+private fun TextSheetContent(
+    colorArgb: Int, recentColors: List<Int>, onColorChange: (Int) -> Unit,
+) {
+    Text("Text", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.Black.copy(0.8f))
+    Text("Tap anywhere on the PDF to place a text box.", style = MaterialTheme.typography.bodySmall, color = Color.Black.copy(0.5f))
+    Text("Text color", style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp), color = Color.Black.copy(0.55f))
+    SheetColorRow(SHEET_COLORS_ARGB, colorArgb, onColorChange)
+    if (recentColors.isNotEmpty()) {
+        Text("Recent colors", style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp), color = Color.Black.copy(0.55f))
+        SheetColorRow(recentColors, colorArgb, onColorChange)
+    }
+}
+
+// ─── Image sheet ───────────────────────────────────────────────────────────────
+@Composable
+private fun ImageSheetContent(
+    onImageGallery: () -> Unit,
+    onImageFiles: () -> Unit,
+    onImageCamera: () -> Unit,
+) {
+    Text("Insert Image", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.Black.copy(0.8f))
+    listOf(
+        Triple(Icons.Default.Image,       "Gallery",       onImageGallery),
+        Triple(Icons.Default.Folder,      "Files",         onImageFiles),
+        Triple(Icons.Default.CameraAlt,   "Take a photo",  onImageCamera),
+    ).forEach { (icon, label, action) ->
+        Row(modifier = Modifier.fillMaxWidth()
+            .clickable { action() }
+            .padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Icon(icon, null, tint = Color(0xFF1E88E5), modifier = Modifier.size(22.dp))
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = Color.Black.copy(0.8f))
+        }
+        Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color.Black.copy(0.07f)))
+    }
+}
+
+// ─── 6. Laser pointer sheet ─────────────────────────────────────────────────────
+@Composable
+private fun LaserSheet(
+    linePointerEnabled: Boolean,
+    colorArgb: Int,
+    onToggle: () -> Unit,
+    onColorChange: (Int) -> Unit,
+    onClose: () -> Unit,
+) {
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(0.35f))
+            .clickable(indication = null, interactionSource = interactionSource) { onClose() })
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .shadow(16.dp, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                .background(Color.White, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                .clickable(indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) {}
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.size(width = 36.dp, height = 3.5.dp).background(Color(0xFFDDDDDD), CircleShape))
+            }
+            // Toggle row
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Line pointer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                    color = Color.Black.copy(0.8f), modifier = Modifier.weight(1f))
+                Switch(checked = linePointerEnabled, onCheckedChange = { onToggle() },
+                    colors = SwitchDefaults.colors(checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFF1E88E5), uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color.Black.copy(0.2f)))
+            }
+            // Color chips
+            Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color.Black.copy(0.08f)))
+            SheetColorRow(LINE_POINTER_COLORS.map { it }, colorArgb, onColorChange)
+            // Close
+            TextButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
+                Text("Close", color = Color.Black.copy(0.5f), fontWeight = FontWeight.Medium)
+            }
+        }
+    }
+}
+
 
 // ─── Page Navigation Bar ──────────────────────────────────────────────────────
 
