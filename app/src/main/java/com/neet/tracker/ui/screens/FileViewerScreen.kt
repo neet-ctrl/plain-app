@@ -1210,150 +1210,165 @@ private fun UvPdfPage(
         val imageHeightPx = imageWidthPx * aspect
         val imageHeightDp = with(density) { imageHeightPx.toDp() }
 
-        // PDF page bitmap
-        Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = null,
+        // ── Single zoomable layer: PDF bitmap + ALL annotation layers ──────────
+        // Everything inside this Box transforms together so annotations always
+        // stay attached to the page when the user pinches/pans — exactly like
+        // a real PDF annotator (GoodNotes, Adobe, etc.).
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .shadow(12.dp, RoundedCornerShape(8.dp), spotColor = NeonCyan.copy(0.15f))
-                .clip(RoundedCornerShape(8.dp))
+                .height(imageHeightDp)
                 .graphicsLayer {
-                    scaleX = scale; scaleY = scale
-                    translationX = panOffset.x; translationY = panOffset.y
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = panOffset.x
+                    translationY = panOffset.y
+                    transformOrigin = TransformOrigin.Center
                 }
-        )
+        ) {
+            // PDF page bitmap (no separate graphicsLayer — transform is on the parent Box)
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(12.dp, RoundedCornerShape(8.dp), spotColor = NeonCyan.copy(0.15f))
+                    .clip(RoundedCornerShape(8.dp))
+            )
 
-        // Read-only stroke display when not in annotation mode
-        if (!annotationMode && pageStrokes.isNotEmpty()) {
-            Canvas(
-                modifier = Modifier.fillMaxWidth().height(imageHeightDp).clip(RoundedCornerShape(8.dp))
-            ) {
-                for (stroke in pageStrokes) {
-                    if (stroke.points.size < 2) continue
-                    val swPx = with(density) { stroke.widthDp.dp.toPx() }
-                    val path = Path()
-                    stroke.points.forEachIndexed { idx, (px, py) ->
-                        val sx = px * imageWidthPx; val sy = py * imageHeightPx
-                        if (idx == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
-                    }
-                    drawPath(path, Color(stroke.colorArgb),
-                        style = DrawStyle(width = swPx, cap = StrokeCap.Round, join = StrokeJoin.Round))
-                    if (stroke.tool == "arrow" && stroke.points.size >= 2) {
-                        val tipPt  = stroke.points.last()
-                        val prevPt = stroke.points[(stroke.points.lastIndex - 1).coerceAtLeast(0)]
-                        val tipX   = tipPt.first  * imageWidthPx
-                        val tipY   = tipPt.second * imageHeightPx
-                        val angle  = atan2(tipY - prevPt.second * imageHeightPx, tipX - prevPt.first * imageWidthPx)
-                        val aLen   = swPx * 4.5f
-                        val wing   = kotlin.math.PI.toFloat() * 0.72f
-                        val arrowPath = Path().apply {
-                            moveTo(tipX, tipY)
-                            lineTo(tipX + aLen * cos(angle + wing), tipY + aLen * sin(angle + wing))
-                            lineTo(tipX + aLen * cos(angle - wing), tipY + aLen * sin(angle - wing))
-                            close()
+            // Read-only stroke display when not in annotation mode
+            if (!annotationMode && pageStrokes.isNotEmpty()) {
+                Canvas(
+                    modifier = Modifier.fillMaxWidth().height(imageHeightDp).clip(RoundedCornerShape(8.dp))
+                ) {
+                    for (stroke in pageStrokes) {
+                        if (stroke.points.size < 2) continue
+                        val swPx = with(density) { stroke.widthDp.dp.toPx() }
+                        val path = Path()
+                        stroke.points.forEachIndexed { idx, (px, py) ->
+                            val sx = px * imageWidthPx; val sy = py * imageHeightPx
+                            if (idx == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
                         }
-                        drawPath(arrowPath, Color(stroke.colorArgb))
+                        drawPath(path, Color(stroke.colorArgb),
+                            style = DrawStyle(width = swPx, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                        if (stroke.tool == "arrow" && stroke.points.size >= 2) {
+                            val tipPt  = stroke.points.last()
+                            val prevPt = stroke.points[(stroke.points.lastIndex - 1).coerceAtLeast(0)]
+                            val tipX   = tipPt.first  * imageWidthPx
+                            val tipY   = tipPt.second * imageHeightPx
+                            val angle  = atan2(tipY - prevPt.second * imageHeightPx, tipX - prevPt.first * imageWidthPx)
+                            val aLen   = swPx * 4.5f
+                            val wing   = kotlin.math.PI.toFloat() * 0.72f
+                            val arrowPath = Path().apply {
+                                moveTo(tipX, tipY)
+                                lineTo(tipX + aLen * cos(angle + wing), tipY + aLen * sin(angle + wing))
+                                lineTo(tipX + aLen * cos(angle - wing), tipY + aLen * sin(angle - wing))
+                                close()
+                            }
+                            drawPath(arrowPath, Color(stroke.colorArgb))
+                        }
                     }
                 }
             }
-        }
 
-        // Interactive annotation overlay (annotation mode only)
-        if (annotationMode) {
-            PdfAnnotationOverlay(
-                modifier            = Modifier.fillMaxWidth().height(imageHeightDp).clip(RoundedCornerShape(8.dp)),
-                imageWidthPx        = imageWidthPx,
-                imageHeightPx       = imageHeightPx,
-                strokes             = pageStrokes,
-                tool                = annotationTool,
-                colorArgb           = annotationColorArgb,
-                strokeWidthDp       = annotationWidthDp,
-                annotZoomEnabled    = annotZoomEnabled,
-                onZoomTransform     = onTransform,
-                onTextBoxPlace      = onTextBoxPlace,
-                onStrokeCommit      = onStrokeCommit,
-                onEraseGestureStart = onEraseGestureStart,
-                onStrokesErase      = onStrokesErase,
-                onPrev              = onPrev,
-                onNext              = onNext,
-                onImageTap          = onImageTap,
-                onStampPlace        = onStampPlace,
-            )
-        }
+            // Interactive annotation overlay (annotation mode only).
+            // Annotation mode always resets scale to 1f so the drawing coordinate
+            // space matches the page coordinate space perfectly.
+            if (annotationMode) {
+                PdfAnnotationOverlay(
+                    modifier            = Modifier.fillMaxWidth().height(imageHeightDp).clip(RoundedCornerShape(8.dp)),
+                    imageWidthPx        = imageWidthPx,
+                    imageHeightPx       = imageHeightPx,
+                    strokes             = pageStrokes,
+                    tool                = annotationTool,
+                    colorArgb           = annotationColorArgb,
+                    strokeWidthDp       = annotationWidthDp,
+                    annotZoomEnabled    = annotZoomEnabled,
+                    onZoomTransform     = onTransform,
+                    onTextBoxPlace      = onTextBoxPlace,
+                    onStrokeCommit      = onStrokeCommit,
+                    onEraseGestureStart = onEraseGestureStart,
+                    onStrokesErase      = onStrokesErase,
+                    onPrev              = onPrev,
+                    onNext              = onNext,
+                    onImageTap          = onImageTap,
+                    onStampPlace        = onStampPlace,
+                )
+            }
 
-        // Image overlay composables (visible in both read and annotation mode)
-        if (pageImageBoxes.isNotEmpty()) {
-            ImageOverlayLayer(
-                imageBoxes    = pageImageBoxes,
-                imageWidthPx  = imageWidthPx,
-                imageHeightPx = imageHeightPx,
-                annotationMode = annotationMode,
-                onUpdate      = onImageBoxUpdate,
-                onDelete      = onImageBoxDelete,
-            )
-        }
+            // Image overlay composables (visible in both read and annotation mode)
+            if (pageImageBoxes.isNotEmpty()) {
+                ImageOverlayLayer(
+                    imageBoxes    = pageImageBoxes,
+                    imageWidthPx  = imageWidthPx,
+                    imageHeightPx = imageHeightPx,
+                    annotationMode = annotationMode,
+                    onUpdate      = onImageBoxUpdate,
+                    onDelete      = onImageBoxDelete,
+                )
+            }
 
-        // Stamp overlay composables (visible in both read and annotation mode)
-        if (pageStamps.isNotEmpty()) {
-            StampOverlayLayer(
-                stamps        = pageStamps,
-                imageWidthPx  = imageWidthPx,
-                imageHeightPx = imageHeightPx,
-                annotationMode = annotationMode,
-                onDelete      = onStampDelete,
-            )
-        }
+            // Stamp overlay composables (visible in both read and annotation mode)
+            if (pageStamps.isNotEmpty()) {
+                StampOverlayLayer(
+                    stamps        = pageStamps,
+                    imageWidthPx  = imageWidthPx,
+                    imageHeightPx = imageHeightPx,
+                    annotationMode = annotationMode,
+                    onDelete      = onStampDelete,
+                )
+            }
 
-        // Text box composable overlays (visible in both read and annotation mode)
-        if (pageTextBoxes.isNotEmpty()) {
-            Box(modifier = Modifier.fillMaxWidth().height(imageHeightDp)) {
-                pageTextBoxes.forEach { tb ->
-                    val xDp = with(density) { (tb.xNorm * imageWidthPx).toDp() }
-                    val yDp = with(density) { (tb.yNorm * imageHeightPx).toDp() }
-                    Box(
-                        modifier = Modifier
-                            .offset(xDp, yDp)
-                            .shadow(8.dp, RoundedCornerShape(8.dp), spotColor = Color(tb.colorArgb).copy(0.2f))
-                            .background(
-                                if (tb.bgArgb == 0) Color.Transparent else Color(tb.bgArgb),
-                                RoundedCornerShape(8.dp)
-                            )
-                            .then(
-                                if (tb.hasBorder) Modifier.border(1.dp, Color(tb.colorArgb).copy(0.75f), RoundedCornerShape(8.dp))
-                                else Modifier
-                            )
-                            .padding(horizontal = 7.dp, vertical = 5.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text       = tb.text,
-                                color      = Color(tb.colorArgb),
-                                fontSize   = tb.fontSizeSp.sp,
-                                fontWeight = if (tb.isBold) FontWeight.Bold else FontWeight.Normal,
-                                fontStyle  = if (tb.isItalic) FontStyle.Italic else FontStyle.Normal,
-                                lineHeight = (tb.fontSizeSp * 1.35f).sp
-                            )
-                            if (annotationMode) {
-                                Spacer(Modifier.width(3.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .size(17.dp)
-                                        .background(NeonRed.copy(0.88f), CircleShape)
-                                        .border(1.dp, NeonRed, CircleShape)
-                                        .clickable { onTextBoxDelete(tb.id) },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(10.dp))
+            // Text box composable overlays (visible in both read and annotation mode)
+            if (pageTextBoxes.isNotEmpty()) {
+                Box(modifier = Modifier.fillMaxWidth().height(imageHeightDp)) {
+                    pageTextBoxes.forEach { tb ->
+                        val xDp = with(density) { (tb.xNorm * imageWidthPx).toDp() }
+                        val yDp = with(density) { (tb.yNorm * imageHeightPx).toDp() }
+                        Box(
+                            modifier = Modifier
+                                .offset(xDp, yDp)
+                                .shadow(8.dp, RoundedCornerShape(8.dp), spotColor = Color(tb.colorArgb).copy(0.2f))
+                                .background(
+                                    if (tb.bgArgb == 0) Color.Transparent else Color(tb.bgArgb),
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .then(
+                                    if (tb.hasBorder) Modifier.border(1.dp, Color(tb.colorArgb).copy(0.75f), RoundedCornerShape(8.dp))
+                                    else Modifier
+                                )
+                                .padding(horizontal = 7.dp, vertical = 5.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text       = tb.text,
+                                    color      = Color(tb.colorArgb),
+                                    fontSize   = tb.fontSizeSp.sp,
+                                    fontWeight = if (tb.isBold) FontWeight.Bold else FontWeight.Normal,
+                                    fontStyle  = if (tb.isItalic) FontStyle.Italic else FontStyle.Normal,
+                                    lineHeight = (tb.fontSizeSp * 1.35f).sp
+                                )
+                                if (annotationMode) {
+                                    Spacer(Modifier.width(3.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(17.dp)
+                                            .background(NeonRed.copy(0.88f), CircleShape)
+                                            .border(1.dp, NeonRed, CircleShape)
+                                            .clickable { onTextBoxDelete(tb.id) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(10.dp))
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-        }
+        } // end zoomable layer
 
-        // Hints
+        // Hints (outside the zoomable Box — UI chrome stays at fixed screen position)
         if (!annotationMode) {
             if (scale == 1f) {
                 val hintIcon = when {
