@@ -914,6 +914,11 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             }
         }
 
+        // ── Laser Pointer Overlay — rendered BELOW sidebar/header so UI stays tappable ──
+        if (linePointerEnabled && pdfPages.isNotEmpty()) {
+            LinePointerOverlay(colorArgb = linePointerColorArgb)
+        }
+
         // ── Annotation UI: header + sidebar + tool sheets ─────────────────────
         if (annotationMode && pdfPages.isNotEmpty()) {
 
@@ -1052,10 +1057,6 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             }
         }
 
-        // ── Laser Pointer Overlay ─────────────────────────────────────────────
-        if (linePointerEnabled && pdfPages.isNotEmpty()) {
-            LinePointerOverlay(colorArgb = linePointerColorArgb)
-        }
         if (showSolutionWindow && solutionUri.isNotBlank()) {
             FloatingSolutionViewer(
                 solutionUri = solutionUri,
@@ -1862,30 +1863,45 @@ private fun PdfAnnotationOverlay(
 }
 
 // ─── Laser Pointer Overlay ─────────────────────────────────────────────────────
-// A full-screen transparent overlay that renders a bright glowing laser dot that
-// follows the user's finger and leaves a short fading trail — exactly like a real
-// laser pointer in PDF presentation software (PDF Annotator, GoodNotes, etc.).
-// The trail is fully temporary: it fades away ~1.2 s after the user stops drawing.
+// Behaviour:
+//   • While the finger is moving  → trail stays fully opaque (no per-dot fading).
+//   • After the finger lifts      → trail stays fully visible for 4 seconds.
+//   • After 4 seconds of no input → trail fades out over 0.8 s, then clears.
+//   • The overlay does NOT block touches on the sidebar/header above it
+//     because it is placed lower in the Box z-order than those UI elements.
 
 private data class LaserDot(val x: Float, val y: Float, val timeMs: Long)
 
 @Composable
 private fun LinePointerOverlay(colorArgb: Int) {
-    val color         = Color(colorArgb)
-    val trailMs       = 1200L
+    val color        = Color(colorArgb)
+    val inactivityMs = 4_000L   // wait this long after last stroke before fading
+    val fadeMs       = 800L     // duration of the fade-out animation
 
-    var dots by remember { mutableStateOf<List<LaserDot>>(emptyList()) }
+    var dots           by remember { mutableStateOf<List<LaserDot>>(emptyList()) }
+    var lastDrawTimeMs by remember { mutableLongStateOf(0L) }
 
-    // Frame-driven clock so the trail fades smoothly at ~60 fps without any delay().
+    // Frame-driven clock — drives recomposition at ~60 fps for smooth fade.
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) { withFrameMillis { t -> nowMs = t } }
     }
 
-    // Trim expired trail points on every frame — this drives recomposition
-    val visibleDots = remember(nowMs, dots) {
-        val cutoff = nowMs - trailMs
-        dots.filter { it.timeMs >= cutoff }
+    // Global alpha: 1f while drawing / within 4s of last stroke; then fade out.
+    val idleMs      = if (lastDrawTimeMs == 0L) 0L
+                      else (nowMs - lastDrawTimeMs).coerceAtLeast(0L)
+    val globalAlpha = when {
+        lastDrawTimeMs == 0L           -> 0f
+        idleMs < inactivityMs          -> 1f   // still active — no fading at all
+        idleMs < inactivityMs + fadeMs ->       // fading out
+            1f - (idleMs - inactivityMs).toFloat() / fadeMs
+        else                           -> 0f   // fully faded
+    }
+
+    // Once fully faded, wipe the dot list so memory is freed.
+    if (globalAlpha <= 0f && dots.isNotEmpty()) {
+        dots           = emptyList()
+        lastDrawTimeMs = 0L
     }
 
     Canvas(
@@ -1894,48 +1910,47 @@ private fun LinePointerOverlay(colorArgb: Int) {
             .pointerInput(colorArgb) {
                 detectDragGestures(
                     onDragStart = { offset ->
-                        dots = listOf(LaserDot(offset.x, offset.y, System.currentTimeMillis()))
+                        val t          = System.currentTimeMillis()
+                        lastDrawTimeMs = t
+                        dots           = listOf(LaserDot(offset.x, offset.y, t))
                     },
                     onDrag = { change, _ ->
-                        val t      = System.currentTimeMillis()
-                        val cutoff = t - trailMs
-                        dots = (dots.filter { it.timeMs >= cutoff } +
-                                LaserDot(change.position.x, change.position.y, t))
-                            .takeLast(300)
+                        val t          = System.currentTimeMillis()
+                        lastDrawTimeMs = t
+                        // Cap at 500 points so we never accumulate forever
+                        dots = (dots + LaserDot(change.position.x, change.position.y, t))
+                            .takeLast(500)
                     },
-                    onDragEnd    = { /* trail fades naturally via the frame clock */ },
+                    onDragEnd    = { /* lastDrawTimeMs already set; 4 s countdown begins */ },
                     onDragCancel = {}
                 )
             }
     ) {
-        if (visibleDots.isEmpty()) return@Canvas
+        if (dots.isEmpty() || globalAlpha <= 0f) return@Canvas
 
-        // ── Fading trail ────────────────────────────────────────────────────
-        for (i in 1 until visibleDots.size) {
-            val prev  = visibleDots[i - 1]
-            val curr  = visibleDots[i]
-            val age   = nowMs - curr.timeMs
-            val alpha = (1f - age.toFloat() / trailMs).coerceIn(0f, 1f)
+        // ── Trail — full opacity while drawing, global fade after inactivity ─
+        for (i in 1 until dots.size) {
+            val prev = dots[i - 1]
+            val curr = dots[i]
+            // Skip large time gaps (e.g. between separate strokes)
+            if (curr.timeMs - prev.timeMs > 300L) continue
             drawLine(
-                color       = color.copy(alpha = alpha * 0.88f),
+                color       = color.copy(alpha = 0.88f * globalAlpha),
                 start       = Offset(prev.x, prev.y),
                 end         = Offset(curr.x, curr.y),
-                strokeWidth = (7.dp.toPx() * alpha).coerceAtLeast(1f),
+                strokeWidth = 7.dp.toPx(),
                 cap         = StrokeCap.Round
             )
         }
 
-        // ── Glowing dot at the current (newest) tip ─────────────────────────
-        val tip      = visibleDots.last()
-        val tipAge   = nowMs - tip.timeMs
-        val tipAlpha = (1f - tipAge.toFloat() / trailMs).coerceIn(0f, 1f)
-        val cx       = tip.x
-        val cy       = tip.y
-
-        drawCircle(color = color.copy(alpha = 0.18f * tipAlpha), radius = 30.dp.toPx(), center = Offset(cx, cy))
-        drawCircle(color = color.copy(alpha = 0.40f * tipAlpha), radius = 16.dp.toPx(), center = Offset(cx, cy))
-        drawCircle(color = color.copy(alpha = 0.90f * tipAlpha), radius =  7.dp.toPx(), center = Offset(cx, cy))
-        drawCircle(color = Color.White.copy(alpha = 0.95f * tipAlpha), radius = 2.8.dp.toPx(), center = Offset(cx, cy))
+        // ── Glowing dot at the newest tip ───────────────────────────────────
+        val tip = dots.last()
+        val cx  = tip.x
+        val cy  = tip.y
+        drawCircle(color = color.copy(alpha = 0.18f * globalAlpha), radius = 30.dp.toPx(), center = Offset(cx, cy))
+        drawCircle(color = color.copy(alpha = 0.40f * globalAlpha), radius = 16.dp.toPx(), center = Offset(cx, cy))
+        drawCircle(color = color.copy(alpha = 0.90f * globalAlpha), radius =  7.dp.toPx(), center = Offset(cx, cy))
+        drawCircle(color = Color.White.copy(alpha = 0.95f * globalAlpha), radius = 2.8.dp.toPx(), center = Offset(cx, cy))
     }
 }
 
