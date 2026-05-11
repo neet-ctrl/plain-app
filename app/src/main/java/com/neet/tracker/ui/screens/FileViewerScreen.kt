@@ -695,6 +695,22 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     annotationColorArgb = annotationColorArgb,
                     annotationWidthDp   = annotationWidthDp,
                     annotZoomEnabled    = annotZoomEnabled,
+                    inkOpacity          = annotInkOpacity,
+                    straightLine        = annotStraightLine,
+                    annotLineType       = annotLineType,
+                    eraserWidthDp       = annotEraserWidthDp,
+                    eraserPartial       = annotEraserPartial,
+                    eraserErasesPen     = annotEraserErasesPen,
+                    eraserErasesHigh    = annotEraserErasesHigh,
+                    onPartialErase      = { toRemove, toAdd ->
+                        annoUndoStack  = (annoUndoStack + allPageStrokes).takeLast(50)
+                        annoRedoStack  = emptyList()
+                        val current    = allPageStrokes[currentPage] ?: emptyList()
+                        val removedSet = toRemove.toSet()
+                        val updated    = current.filter { it !in removedSet } + toAdd
+                        allPageStrokes = allPageStrokes + (currentPage to updated)
+                        annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                    },
                     pageStrokes         = allPageStrokes[currentPage] ?: emptyList(),
                     onStrokeCommit = { stroke ->
                         annoUndoStack  = (annoUndoStack + allPageStrokes).takeLast(50)
@@ -716,7 +732,10 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                         annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
                     },
                     pageTextBoxes   = allPageTextBoxes[currentPage] ?: emptyList(),
-                    onTextBoxPlace  = { xNorm, yNorm -> pendingTextPos = Pair(xNorm, yNorm) },
+                    onTextBoxPlace  = { xNorm, yNorm ->
+                        pendingTextPos = Pair(xNorm, yNorm)
+                        if (annotAutoDeselect) { annotationTool = AnnotationTool.PEN; showToolSheet = false }
+                    },
                     onTextBoxDelete = { id ->
                         val cur = allPageTextBoxes[currentPage] ?: emptyList()
                         val upd = cur.filter { it.id != id }
@@ -727,6 +746,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     onImageTap      = { xNorm, yNorm ->
                         pendingImageTapPos = Pair(xNorm, yNorm)
                         imagePicker.launch("image/*")
+                        if (annotAutoDeselect) { annotationTool = AnnotationTool.PEN; showToolSheet = false }
                     },
                     onImageBoxUpdate = { updatedBox ->
                         val cur = allPageImageBoxes[currentPage] ?: emptyList()
@@ -748,6 +768,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                             allPageStamps = allPageStamps + (currentPage to cur + st)
                             annoScope.launch { AnnotationManager.saveStamps(context, fileUri, allPageStamps) }
                         }
+                        if (annotAutoDeselect) { annotationTool = AnnotationTool.PEN; showToolSheet = false }
                     },
                     onStampDelete  = { id ->
                         val cur = allPageStamps[currentPage] ?: emptyList()
@@ -1304,6 +1325,14 @@ private fun UvPdfPage(
     onStrokeCommit: (AnnotationStroke) -> Unit = {},
     onEraseGestureStart: () -> Unit = {},
     onStrokesErase: (List<AnnotationStroke>) -> Unit = {},
+    inkOpacity: Float = 1f,
+    straightLine: Boolean = false,
+    annotLineType: Int = 0,
+    eraserWidthDp: Float = 26f,
+    eraserPartial: Boolean = false,
+    eraserErasesPen: Boolean = true,
+    eraserErasesHigh: Boolean = true,
+    onPartialErase: (List<AnnotationStroke>, List<AnnotationStroke>) -> Unit = { _, _ -> },
     pageTextBoxes: List<AnnotationTextBox> = emptyList(),
     onTextBoxPlace: (Float, Float) -> Unit = { _, _ -> },
     onTextBoxDelete: (String) -> Unit = {},
@@ -1442,6 +1471,15 @@ private fun UvPdfPage(
                     onStrokeCommit      = onStrokeCommit,
                     onEraseGestureStart = onEraseGestureStart,
                     onStrokesErase      = onStrokesErase,
+                    isHorizontalScroll  = isHorizontalScroll,
+                    inkOpacity          = inkOpacity,
+                    straightLine        = straightLine,
+                    annotLineType       = annotLineType,
+                    eraserWidthDp       = eraserWidthDp,
+                    eraserPartial       = eraserPartial,
+                    eraserErasesPen     = eraserErasesPen,
+                    eraserErasesHigh    = eraserErasesHigh,
+                    onPartialErase      = onPartialErase,
                     onPrev              = onPrev,
                     onNext              = onNext,
                     onImageTap          = onImageTap,
@@ -1599,6 +1637,28 @@ private fun UvPdfPage(
 
 // ─── PDF Annotation Overlay ────────────────────────────────────────────────────
 
+private fun partialEraseSegments(
+    stroke: AnnotationStroke,
+    normX: Float, normY: Float,
+    eraserRadiusPx: Float,
+    imgW: Float, imgH: Float
+): List<AnnotationStroke> {
+    val segs = mutableListOf<List<Pair<Float, Float>>>()
+    var seg  = mutableListOf<Pair<Float, Float>>()
+    for ((px, py) in stroke.points) {
+        val dx = (px - normX) * imgW
+        val dy = (py - normY) * imgH
+        if (sqrt(dx * dx + dy * dy) > eraserRadiusPx) {
+            seg.add(px to py)
+        } else {
+            if (seg.size >= 2) segs.add(seg.toList())
+            seg = mutableListOf()
+        }
+    }
+    if (seg.size >= 2) segs.add(seg.toList())
+    return segs.map { stroke.copy(points = it) }
+}
+
 @Composable
 private fun PdfAnnotationOverlay(
     modifier: Modifier,
@@ -1614,6 +1674,15 @@ private fun PdfAnnotationOverlay(
     onStrokeCommit: (AnnotationStroke) -> Unit,
     onEraseGestureStart: () -> Unit,
     onStrokesErase: (List<AnnotationStroke>) -> Unit,
+    isHorizontalScroll: Boolean = false,
+    inkOpacity: Float = 1f,
+    straightLine: Boolean = false,
+    annotLineType: Int = 0,
+    eraserWidthDp: Float = 26f,
+    eraserPartial: Boolean = false,
+    eraserErasesPen: Boolean = true,
+    eraserErasesHigh: Boolean = true,
+    onPartialErase: (List<AnnotationStroke>, List<AnnotationStroke>) -> Unit = { _, _ -> },
     onPrev: () -> Unit = {},
     onNext: () -> Unit = {},
     onImageTap: (Float, Float) -> Unit = { _, _ -> },
@@ -1621,7 +1690,7 @@ private fun PdfAnnotationOverlay(
 ) {
     val density = LocalDensity.current
     val strokeWidthPx  = with(density) { strokeWidthDp.dp.toPx() }
-    val eraserRadiusPx = with(density) { 26.dp.toPx() }
+    val eraserRadiusPx = with(density) { eraserWidthDp.dp.toPx() }
 
     val liveStrokes = remember { mutableStateListOf<AnnotationStroke>() }
     SideEffect { liveStrokes.clear(); liveStrokes.addAll(strokes) }
@@ -1631,7 +1700,7 @@ private fun PdfAnnotationOverlay(
 
     Canvas(
         modifier = modifier
-            .pointerInput(tool, colorArgb, strokeWidthDp, annotZoomEnabled) {
+            .pointerInput(tool, colorArgb, strokeWidthDp, annotZoomEnabled, inkOpacity, straightLine, annotLineType, eraserWidthDp, eraserPartial, eraserErasesPen, eraserErasesHigh, isHorizontalScroll) {
                 if (annotZoomEnabled) {
                     // ── Simultaneous zoom (2-finger) + draw (1-finger) ──────────
                     awaitPointerEventScope {
@@ -1646,13 +1715,15 @@ private fun PdfAnnotationOverlay(
                                 pressed.isEmpty() -> {
                                     // All fingers up — commit any in-progress stroke
                                     if (drawPoints.size >= 2 && tool != AnnotationTool.ERASER) {
-                                        val isH = tool == AnnotationTool.HIGHLIGHTER
-                                        val fc  = Color(colorArgb).copy(alpha = if (isH) 0.38f else 1f)
+                                        val isH  = tool == AnnotationTool.HIGHLIGHTER
+                                        val fc   = Color(colorArgb).copy(alpha = if (isH) inkOpacity * 0.38f else inkOpacity)
+                                        val pts  = if (straightLine) listOf(drawPoints.first(), drawPoints.last()) else drawPoints.toList()
                                         onStrokeCommit(AnnotationStroke(
-                                            points    = drawPoints.toList(),
+                                            points    = pts,
                                             colorArgb = fc.toArgb(),
                                             widthDp   = strokeWidthDp * if (isH) 3.5f else 1f,
-                                            tool      = when (tool) { AnnotationTool.ARROW -> "arrow"; AnnotationTool.HIGHLIGHTER -> "highlight"; else -> "pen" }
+                                            tool      = when (tool) { AnnotationTool.ARROW -> "arrow"; AnnotationTool.HIGHLIGHTER -> "highlight"; else -> "pen" },
+                                            lineType  = annotLineType
                                         ))
                                     }
                                     drawPoints.clear()
@@ -1666,9 +1737,10 @@ private fun PdfAnnotationOverlay(
                                 pressed.size >= 2 -> {
                                     // Two-finger zoom/pan — commit partial stroke first
                                     if (drawPoints.size >= 2 && tool != AnnotationTool.ERASER) {
-                                        val isH = tool == AnnotationTool.HIGHLIGHTER
-                                        val fc  = Color(colorArgb).copy(alpha = if (isH) 0.38f else 1f)
-                                        onStrokeCommit(AnnotationStroke(drawPoints.toList(), fc.toArgb(), strokeWidthDp * if (isH) 3.5f else 1f, when (tool) { AnnotationTool.ARROW -> "arrow"; AnnotationTool.HIGHLIGHTER -> "highlight"; else -> "pen" }))
+                                        val isH  = tool == AnnotationTool.HIGHLIGHTER
+                                        val fc   = Color(colorArgb).copy(alpha = if (isH) inkOpacity * 0.38f else inkOpacity)
+                                        val pts  = if (straightLine) listOf(drawPoints.first(), drawPoints.last()) else drawPoints.toList()
+                                        onStrokeCommit(AnnotationStroke(pts, fc.toArgb(), strokeWidthDp * if (isH) 3.5f else 1f, when (tool) { AnnotationTool.ARROW -> "arrow"; AnnotationTool.HIGHLIGHTER -> "highlight"; else -> "pen" }, annotLineType))
                                         drawPoints.clear(); currentPoints = emptyList()
                                     }
                                     val p1  = pressed[0].position
@@ -1697,7 +1769,8 @@ private fun PdfAnnotationOverlay(
                                         if (tool == AnnotationTool.ERASER) {
                                             eraserPos = Pair(nx, ny)
                                             val hit = liveStrokes.filter { s ->
-                                                s.points.any { (px, py) ->
+                                                val toolOk = if (s.tool == "highlight") eraserErasesHigh else eraserErasesPen
+                                                toolOk && s.points.any { (px, py) ->
                                                     val ex = (px - nx) * imageWidthPx
                                                     val ey = (py - ny) * imageHeightPx
                                                     sqrt(ex * ex + ey * ey) < eraserRadiusPx
@@ -1705,7 +1778,12 @@ private fun PdfAnnotationOverlay(
                                             }
                                             if (hit.isNotEmpty()) {
                                                 if (!eraseStarted) { onEraseGestureStart(); eraseStarted = true }
-                                                onStrokesErase(hit)
+                                                if (eraserPartial) {
+                                                    val toAdd = hit.flatMap { s -> partialEraseSegments(s, nx, ny, eraserRadiusPx, imageWidthPx, imageHeightPx) }
+                                                    onPartialErase(hit, toAdd)
+                                                } else {
+                                                    onStrokesErase(hit)
+                                                }
                                             }
                                         } else {
                                             drawPoints.add(Pair(nx, ny))
@@ -1760,17 +1838,19 @@ private fun PdfAnnotationOverlay(
                                                 }
                                             }
                                         } else if (tool != AnnotationTool.ERASER && drawPoints.size >= 2) {
-                                            val isH = tool == AnnotationTool.HIGHLIGHTER
-                                            val fc  = Color(colorArgb).copy(alpha = if (isH) 0.38f else 1f)
+                                            val isH  = tool == AnnotationTool.HIGHLIGHTER
+                                            val fc   = Color(colorArgb).copy(alpha = if (isH) inkOpacity * 0.38f else inkOpacity)
+                                            val pts  = if (straightLine) listOf(drawPoints.first(), drawPoints.last()) else drawPoints.toList()
                                             onStrokeCommit(AnnotationStroke(
-                                                points    = drawPoints.toList(),
+                                                points    = pts,
                                                 colorArgb = fc.toArgb(),
                                                 widthDp   = strokeWidthDp * if (isH) 3.5f else 1f,
                                                 tool      = when (tool) {
                                                     AnnotationTool.ARROW       -> "arrow"
                                                     AnnotationTool.HIGHLIGHTER -> "highlight"
                                                     else                       -> "pen"
-                                                }
+                                                },
+                                                lineType  = annotLineType
                                             ))
                                         }
                                         drawPoints.clear()
@@ -1806,7 +1886,8 @@ private fun PdfAnnotationOverlay(
                                             if (tool == AnnotationTool.ERASER) {
                                                 eraserPos = Pair(nx, ny)
                                                 val hit = liveStrokes.filter { s ->
-                                                    s.points.any { (px, py) ->
+                                                    val toolOk = if (s.tool == "highlight") eraserErasesHigh else eraserErasesPen
+                                                    toolOk && s.points.any { (px, py) ->
                                                         val ex = (px - nx) * imageWidthPx
                                                         val ey = (py - ny) * imageHeightPx
                                                         sqrt(ex * ex + ey * ey) < eraserRadiusPx
@@ -1814,7 +1895,12 @@ private fun PdfAnnotationOverlay(
                                                 }
                                                 if (hit.isNotEmpty()) {
                                                     if (!eraseStarted) { onEraseGestureStart(); eraseStarted = true }
-                                                    onStrokesErase(hit)
+                                                    if (eraserPartial) {
+                                                        val toAdd = hit.flatMap { s -> partialEraseSegments(s, nx, ny, eraserRadiusPx, imageWidthPx, imageHeightPx) }
+                                                        onPartialErase(hit, toAdd)
+                                                    } else {
+                                                        onStrokesErase(hit)
+                                                    }
                                                 }
                                             } else {
                                                 if (!c.previousPressed) {
@@ -1844,8 +1930,13 @@ private fun PdfAnnotationOverlay(
                 val sx = px * imageWidthPx; val sy = py * imageHeightPx
                 if (idx == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
             }
+            val pathEffect = when (stroke.lineType) {
+                1 -> PathEffect.dashPathEffect(floatArrayOf(swPx, swPx * 2f))
+                2 -> PathEffect.dashPathEffect(floatArrayOf(swPx * 4f, swPx * 2f))
+                else -> null
+            }
             drawPath(path, Color(stroke.colorArgb),
-                style = DrawStyle(width = swPx, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                style = DrawStyle(width = swPx, cap = StrokeCap.Round, join = StrokeJoin.Round, pathEffect = pathEffect))
             // Filled arrowhead for arrow strokes
             if (stroke.tool == "arrow" && stroke.points.size >= 2) {
                 val tipPt  = stroke.points.last()
@@ -1868,19 +1959,25 @@ private fun PdfAnnotationOverlay(
         // Draw the in-progress stroke in real-time
         if (currentPoints.size >= 2) {
             val isHighlight = tool == AnnotationTool.HIGHLIGHTER
-            val liveColor   = Color(colorArgb).copy(alpha = if (isHighlight) 0.38f else 1f)
+            val liveColor   = Color(colorArgb).copy(alpha = if (isHighlight) inkOpacity * 0.38f else inkOpacity)
             val liveWidth   = strokeWidthPx * if (isHighlight) 3.5f else 1f
+            val livePoints  = if (straightLine && currentPoints.size >= 2) listOf(currentPoints.first(), currentPoints.last()) else currentPoints
+            val liveEffect  = when (annotLineType) {
+                1 -> PathEffect.dashPathEffect(floatArrayOf(liveWidth, liveWidth * 2f))
+                2 -> PathEffect.dashPathEffect(floatArrayOf(liveWidth * 4f, liveWidth * 2f))
+                else -> null
+            }
             val path = Path()
-            currentPoints.forEachIndexed { idx, (px, py) ->
+            livePoints.forEachIndexed { idx, (px, py) ->
                 val sx = px * imageWidthPx; val sy = py * imageHeightPx
                 if (idx == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
             }
             drawPath(path, liveColor,
-                style = DrawStyle(width = liveWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                style = DrawStyle(width = liveWidth, cap = StrokeCap.Round, join = StrokeJoin.Round, pathEffect = liveEffect))
             // Live arrowhead preview
-            if (tool == AnnotationTool.ARROW && currentPoints.size >= 2) {
-                val tipPt  = currentPoints.last()
-                val prevPt = currentPoints[currentPoints.lastIndex - 1]
+            if (tool == AnnotationTool.ARROW && livePoints.size >= 2) {
+                val tipPt  = livePoints.last()
+                val prevPt = livePoints[livePoints.lastIndex - 1]
                 val tipX   = tipPt.first  * imageWidthPx
                 val tipY   = tipPt.second * imageHeightPx
                 val angle  = atan2(tipY - prevPt.second * imageHeightPx, tipX - prevPt.first * imageWidthPx)

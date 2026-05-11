@@ -15,7 +15,8 @@ data class AnnotationStroke(
     val points: List<Pair<Float, Float>>,
     val colorArgb: Int,
     val widthDp: Float,
-    val tool: String
+    val tool: String,
+    val lineType: Int = 0
 )
 
 data class AnnotationTextBox(
@@ -99,7 +100,8 @@ object AnnotationManager {
                             points    = points,
                             colorArgb = s.getInt("c"),
                             widthDp   = s.getDouble("w").toFloat(),
-                            tool      = s.getString("t")
+                            tool      = s.getString("t"),
+                            lineType  = s.optInt("lt", 0)
                         )
                     }
                     result[pageIdx] = list
@@ -123,6 +125,7 @@ object AnnotationManager {
                         s.put("c", stroke.colorArgb)
                         s.put("w", stroke.widthDp.toDouble())
                         s.put("t", stroke.tool)
+                        s.put("lt", stroke.lineType)
                         arr.put(s)
                     }
                     root.put(pageIdx.toString(), arr)
