@@ -2246,42 +2246,39 @@ private fun PdfAnnotationOverlay(
 }
 
 // ─── Laser Pointer Overlay ─────────────────────────────────────────────────────
-// Behaviour:
-//   • While the finger is moving  → trail stays fully opaque (no per-dot fading).
-//   • After the finger lifts      → trail stays fully visible for 4 seconds.
-//   • After 4 seconds of no input → trail fades out over 0.8 s, then clears.
-//   • The overlay does NOT block touches on the sidebar/header above it
-//     because it is placed lower in the Box z-order than those UI elements.
+// True laser pointer rendering:
+//   • While drawing      → comet tail: only last ~280 ms shown, per-segment alpha fade
+//   • After finger lifts → full trail stays visible for 4 s, then fades over 0.8 s
+//   • Trail uses 3-layer glow: outer blur + mid blur + bright core (BlurMaskFilter)
+//   • Path is smoothed with quadratic bezier segments (no jagged lineTo)
+//   • Laser head is a separate 4-layer glowing circle (ambient → bright → core → white hotspot)
 
 private data class LaserDot(val x: Float, val y: Float, val timeMs: Long)
 
 @Composable
 private fun LinePointerOverlay(colorArgb: Int) {
-    val color        = Color(colorArgb)
-    val inactivityMs = 4_000L   // wait this long after last stroke before fading
-    val fadeMs       = 800L     // duration of the fade-out animation
+    val inactivityMs  = 4_000L
+    val fadeMs        = 800L
+    val cometMs       = 280L   // trail visible behind finger while actively drawing
 
     var dots           by remember { mutableStateOf<List<LaserDot>>(emptyList()) }
     var lastDrawTimeMs by remember { mutableLongStateOf(0L) }
+    var isDrawing      by remember { mutableStateOf(false) }
 
-    // Frame-driven clock — drives recomposition at ~60 fps for smooth fade.
+    // Frame clock — drives smooth per-frame fade recompositions
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) { withFrameMillis { nowMs = System.currentTimeMillis() } }
     }
 
-    // Global alpha: 1f while drawing / within 4s of last stroke; then fade out.
-    val idleMs      = if (lastDrawTimeMs == 0L) 0L
-                      else (nowMs - lastDrawTimeMs).coerceAtLeast(0L)
+    val idleMs      = if (lastDrawTimeMs == 0L) 0L else (nowMs - lastDrawTimeMs).coerceAtLeast(0L)
     val globalAlpha = when {
         lastDrawTimeMs == 0L           -> 0f
-        idleMs < inactivityMs          -> 1f   // still active — no fading at all
-        idleMs < inactivityMs + fadeMs ->       // fading out
-            1f - (idleMs - inactivityMs).toFloat() / fadeMs
-        else                           -> 0f   // fully faded
+        idleMs < inactivityMs          -> 1f
+        idleMs < inactivityMs + fadeMs -> 1f - (idleMs - inactivityMs).toFloat() / fadeMs
+        else                           -> 0f
     }
 
-    // Once fully faded, wipe the dot list — must be in a side-effect, never during composition.
     LaunchedEffect(globalAlpha) {
         if (globalAlpha <= 0f && dots.isNotEmpty()) {
             dots           = emptyList()
@@ -2289,53 +2286,136 @@ private fun LinePointerOverlay(colorArgb: Int) {
         }
     }
 
+    // Extract ARGB channels once for nativeCanvas paint reuse
+    val cr = android.graphics.Color.red(colorArgb)
+    val cg = android.graphics.Color.green(colorArgb)
+    val cb = android.graphics.Color.blue(colorArgb)
+
     Canvas(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(colorArgb) {
                 detectDragGestures(
                     onDragStart = { offset ->
-                        val t          = System.currentTimeMillis()
+                        val t = System.currentTimeMillis()
                         lastDrawTimeMs = t
-                        dots           = listOf(LaserDot(offset.x, offset.y, t))
+                        isDrawing = true
+                        dots = listOf(LaserDot(offset.x, offset.y, t))
                     },
                     onDrag = { change, _ ->
-                        val t          = System.currentTimeMillis()
+                        val t = System.currentTimeMillis()
                         lastDrawTimeMs = t
-                        // Cap at 500 points so we never accumulate forever
                         dots = (dots + LaserDot(change.position.x, change.position.y, t))
-                            .takeLast(500)
+                            .takeLast(600)
                     },
-                    onDragEnd    = { /* lastDrawTimeMs already set; 4 s countdown begins */ },
-                    onDragCancel = {}
+                    onDragEnd    = { isDrawing = false },
+                    onDragCancel = { isDrawing = false }
                 )
             }
     ) {
         if (dots.isEmpty() || globalAlpha <= 0f) return@Canvas
 
-        // ── Trail — full opacity while drawing, global fade after inactivity ─
-        for (i in 1 until dots.size) {
-            val prev = dots[i - 1]
-            val curr = dots[i]
-            // Skip large time gaps (e.g. between separate strokes)
-            if (curr.timeMs - prev.timeMs > 300L) continue
-            drawLine(
-                color       = color.copy(alpha = 0.88f * globalAlpha),
-                start       = Offset(prev.x, prev.y),
-                end         = Offset(curr.x, curr.y),
-                strokeWidth = 7.dp.toPx(),
-                cap         = StrokeCap.Round
-            )
+        val nc = drawContext.canvas.nativeCanvas
+
+        // ── Choose which dots to show for the trail ──────────────────────────
+        // While finger is moving: show only the comet tail (last cometMs worth of points).
+        // After lift: show the entire recorded trail.
+        val trailDots: List<LaserDot> = if (isDrawing) {
+            val cutoff = nowMs - cometMs
+            val recent = dots.filter { it.timeMs >= cutoff }
+            if (recent.size >= 2) recent else dots.takeLast(2)
+        } else {
+            dots
         }
 
-        // ── Glowing dot at the newest tip ───────────────────────────────────
+        // ── Build a smooth quadratic-bezier path from trail dots ─────────────
+        fun buildPath(pts: List<LaserDot>): android.graphics.Path {
+            val p = android.graphics.Path()
+            if (pts.size < 2) return p
+            p.moveTo(pts[0].x, pts[0].y)
+            for (i in 1 until pts.size) {
+                val prev = pts[i - 1]
+                val curr = pts[i]
+                if (curr.timeMs - prev.timeMs > 200L) {
+                    // Gap between strokes — lift pen and restart
+                    p.moveTo(curr.x, curr.y)
+                    continue
+                }
+                // Midpoint quadratic bezier → smooth, anti-aliased curves
+                val mx = (prev.x + curr.x) / 2f
+                val my = (prev.y + curr.y) / 2f
+                p.quadTo(prev.x, prev.y, mx, my)
+            }
+            return p
+        }
+
+        val trailPath = buildPath(trailDots)
+
+        // Helper to build a native paint for trail glow layers
+        fun trailPaint(
+            strokeWidthPx: Float,
+            blurPx: Float,
+            alpha: Float
+        ) = android.graphics.Paint().apply {
+            isAntiAlias  = true
+            isDither     = true
+            style        = android.graphics.Paint.Style.STROKE
+            strokeCap    = android.graphics.Paint.Cap.ROUND
+            strokeJoin   = android.graphics.Paint.Join.ROUND
+            strokeWidth  = strokeWidthPx
+            color        = android.graphics.Color.argb(
+                (alpha * globalAlpha * 255f).toInt().coerceIn(0, 255), cr, cg, cb
+            )
+            if (blurPx > 0f)
+                maskFilter = android.graphics.BlurMaskFilter(blurPx, android.graphics.BlurMaskFilter.Blur.NORMAL)
+        }
+
+        // Layer 1 — Outer soft glow (wide, heavily blurred, very transparent)
+        nc.drawPath(trailPath, trailPaint(
+            strokeWidthPx = 28.dp.toPx(),
+            blurPx        = 20.dp.toPx(),
+            alpha         = 0.18f
+        ))
+
+        // Layer 2 — Mid glow (medium width, medium blur)
+        nc.drawPath(trailPath, trailPaint(
+            strokeWidthPx = 12.dp.toPx(),
+            blurPx        =  8.dp.toPx(),
+            alpha         = 0.42f
+        ))
+
+        // Layer 3 — Bright inner core (thin, crisp, high opacity)
+        nc.drawPath(trailPath, trailPaint(
+            strokeWidthPx =  3.dp.toPx(),
+            blurPx        =  0f,
+            alpha         = 0.94f
+        ))
+
+        // ── Laser head — 4-layer glowing circle at the newest tip ────────────
         val tip = dots.last()
         val cx  = tip.x
         val cy  = tip.y
-        drawCircle(color = color.copy(alpha = 0.18f * globalAlpha), radius = 30.dp.toPx(), center = Offset(cx, cy))
-        drawCircle(color = color.copy(alpha = 0.40f * globalAlpha), radius = 16.dp.toPx(), center = Offset(cx, cy))
-        drawCircle(color = color.copy(alpha = 0.90f * globalAlpha), radius =  7.dp.toPx(), center = Offset(cx, cy))
-        drawCircle(color = Color.White.copy(alpha = 0.95f * globalAlpha), radius = 2.8.dp.toPx(), center = Offset(cx, cy))
+
+        fun headPaint(blurPx: Float, alpha: Float, white: Boolean = false) =
+            android.graphics.Paint().apply {
+                isAntiAlias = true
+                style       = android.graphics.Paint.Style.FILL
+                color       = if (white)
+                    android.graphics.Color.argb((alpha * globalAlpha * 255f).toInt().coerceIn(0, 255), 255, 255, 255)
+                else
+                    android.graphics.Color.argb((alpha * globalAlpha * 255f).toInt().coerceIn(0, 255), cr, cg, cb)
+                if (blurPx > 0f)
+                    maskFilter = android.graphics.BlurMaskFilter(blurPx, android.graphics.BlurMaskFilter.Blur.NORMAL)
+            }
+
+        // Ambient outer glow
+        nc.drawCircle(cx, cy, 30.dp.toPx(), headPaint(blurPx = 26.dp.toPx(), alpha = 0.13f))
+        // Mid glow ring
+        nc.drawCircle(cx, cy, 14.dp.toPx(), headPaint(blurPx = 10.dp.toPx(), alpha = 0.55f))
+        // Bright colored core
+        nc.drawCircle(cx, cy,  6.dp.toPx(), headPaint(blurPx =  0f,          alpha = 0.95f))
+        // White hotspot center
+        nc.drawCircle(cx, cy,  2.5.dp.toPx(), headPaint(blurPx = 0f, alpha = 0.98f, white = true))
     }
 }
 
