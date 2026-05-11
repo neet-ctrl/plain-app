@@ -299,11 +299,15 @@ fun HomeScreen(
                     contentPadding = PaddingValues(bottom = 100.dp)
                 ) {
                     itemsIndexed(filtered) { index, card ->
-                        val delay = index * 45
-                        var visible by remember { mutableStateOf(false) }
+                        // Only stagger the first 6 cards (initial viewport).
+                        // Cards that enter via scrolling show instantly (delay = 0).
+                        val delay = if (index < 6) index * 45L else 0L
+                        var visible by remember { mutableStateOf(delay == 0L) }
                         LaunchedEffect(Unit) {
-                            kotlinx.coroutines.delay(delay.toLong())
-                            visible = true
+                            if (delay > 0L) {
+                                kotlinx.coroutines.delay(delay)
+                                visible = true
+                            }
                         }
                         AnimatedVisibility(
                             visible = visible,
