@@ -1188,6 +1188,13 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 mainCurrentPage = currentPage,
                 isSwapped       = isSwapped,
                 onSwap          = {
+                    // Save all annotations before swapping so nothing is lost
+                    annoScope.launch {
+                        AnnotationManager.save(context, fileUri, allPageStrokes)
+                        AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes)
+                        AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes)
+                        AnnotationManager.saveStamps(context, fileUri, allPageStamps)
+                    }
                     val floatPage = solWindowPage.coerceIn(0, (solutionPages.lastIndex).coerceAtLeast(0))
                     val mainPage  = currentPage.coerceIn(0, (pdfPages.lastIndex).coerceAtLeast(0))
                     if (!isSwapped) {
