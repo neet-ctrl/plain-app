@@ -341,6 +341,60 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             }
         }
     }
+    val imageFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { pickedUri ->
+        pickedUri?.let { uri ->
+            pendingImageTapPos?.let { (xNorm, yNorm) ->
+                annoScope.launch {
+                    val path = AnnotationManager.copyImageToStorage(context, uri)
+                    if (path.isNotBlank()) {
+                        val iW = 0.45f; val iH = 0.35f
+                        val newBox = AnnotationImageBox(
+                            xNorm     = (xNorm - iW / 2).coerceIn(0f, (1f - iW).coerceAtLeast(0f)),
+                            yNorm     = (yNorm - iH / 2).coerceIn(0f, (1f - iH).coerceAtLeast(0f)),
+                            wNorm     = iW,
+                            hNorm     = iH,
+                            imagePath = path
+                        )
+                        val cur = allPageImageBoxes[currentPage] ?: emptyList()
+                        allPageImageBoxes = allPageImageBoxes + (currentPage to cur + newBox)
+                        AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes)
+                    }
+                    pendingImageTapPos = null
+                }
+            }
+        }
+    }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
+        bitmap?.let {
+            pendingImageTapPos?.let { (xNorm, yNorm) ->
+                annoScope.launch {
+                    val dir = File(context.filesDir, "annotation_images")
+                    if (!dir.exists()) dir.mkdirs()
+                    val dest = File(dir, "${UUID.randomUUID()}.jpg")
+                    withContext(Dispatchers.IO) {
+                        dest.outputStream().use { out ->
+                            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, out)
+                        }
+                    }
+                    val path = dest.absolutePath
+                    if (path.isNotBlank()) {
+                        val iW = 0.45f; val iH = 0.35f
+                        val newBox = AnnotationImageBox(
+                            xNorm     = (xNorm - iW / 2).coerceIn(0f, (1f - iW).coerceAtLeast(0f)),
+                            yNorm     = (yNorm - iH / 2).coerceIn(0f, (1f - iH).coerceAtLeast(0f)),
+                            wNorm     = iW,
+                            hNorm     = iH,
+                            imagePath = path
+                        )
+                        val cur = allPageImageBoxes[currentPage] ?: emptyList()
+                        allPageImageBoxes = allPageImageBoxes + (currentPage to cur + newBox)
+                        AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes)
+                    }
+                    pendingImageTapPos = null
+                }
+            }
+        }
+    }
 
     // ── Notes ──────────────────────────────────────────────────────────────────
     var notesText by remember(noteKey) { mutableStateOf(prefs.getString(noteKey, "") ?: "") }
@@ -1149,8 +1203,8 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                         }
                     },
                     onImageGallery  = { pendingImageTapPos = 0.5f to 0.5f; imagePicker.launch("image/*"); showToolSheet = false },
-                    onImageFiles    = { pendingImageTapPos = 0.5f to 0.5f; imagePicker.launch("image/*"); showToolSheet = false },
-                    onImageCamera   = { pendingImageTapPos = 0.5f to 0.5f; imagePicker.launch("image/*"); showToolSheet = false },
+                    onImageFiles    = { pendingImageTapPos = 0.5f to 0.5f; imageFilePicker.launch(arrayOf("image/*", "image/png", "image/jpeg", "image/webp", "image/gif")); showToolSheet = false },
+                    onImageCamera   = { pendingImageTapPos = 0.5f to 0.5f; cameraLauncher.launch(null); showToolSheet = false },
                     onClose         = { showToolSheet = false },
                 )
             }
