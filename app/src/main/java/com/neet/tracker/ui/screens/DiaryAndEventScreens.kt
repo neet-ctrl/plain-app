@@ -636,7 +636,18 @@ fun DateEventCard(
                                     }
                                     alarmTime = cal.timeInMillis
                                     alarmLabel = name.ifBlank { "Event $index" }
-                                    AlarmScheduler.scheduleAlarm(context, event.id.hashCode(), cal.timeInMillis, "NEET Event Reminder", alarmLabel.ifBlank { "Scheduled event coming up!" })
+                                    AlarmScheduler.scheduleAlarm(
+                                        context, event.id.hashCode(), cal.timeInMillis,
+                                        "⏰ ${event.name.ifBlank { "NEET Event" }}",
+                                        buildString {
+                                            if (event.detail.isNotBlank()) appendLine("📋 ${event.detail}")
+                                            if (event.location.isNotBlank()) appendLine("📍 ${event.location}")
+                                            if (event.timeRange.isNotBlank()) appendLine("🕐 ${event.timeRange}")
+                                            if (event.remark.isNotBlank()) append("💬 ${event.remark}")
+                                        }.trim().ifBlank { alarmLabel.ifBlank { "Scheduled event coming up!" } },
+                                        eventId   = event.id,
+                                        eventType = "DateEvent"
+                                    )
                                     onUpdate(event.copy(alarmTime = cal.timeInMillis, alarmLabel = alarmLabel))
                                 }, now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), false).show()
                             }, modifier = Modifier.size(32.dp)) {
@@ -802,7 +813,16 @@ fun AddDateEventDialog(date: String, onSave: (DateEvent) -> Unit, onDismiss: () 
                                 alarmTime = alarmTime, alarmLabel = name
                             )
                             if (alarmTime > 0L) {
-                                AlarmScheduler.scheduleAlarm(context, newEvent.id.hashCode(), alarmTime, "NEET Event Reminder", name)
+                                AlarmScheduler.scheduleAlarm(
+                                    context, newEvent.id.hashCode(), alarmTime,
+                                    "⏰ ${name.ifBlank { "NEET Event" }}",
+                                    buildString {
+                                        if (detail.isNotBlank()) appendLine("📋 $detail")
+                                        if (timeRange.isNotBlank()) appendLine("🕐 $timeRange")
+                                    }.trim().ifBlank { name },
+                                    eventId   = newEvent.id,
+                                    eventType = "DateEvent"
+                                )
                             }
                             onSave(newEvent)
                         }

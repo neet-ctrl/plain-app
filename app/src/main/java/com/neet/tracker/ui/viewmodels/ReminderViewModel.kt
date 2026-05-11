@@ -48,10 +48,10 @@ class ReminderViewModel @Inject constructor(
             )
             persistAlarm(
                 SavedAlarm(
-                    id = reminder.id.hashCode(),
+                    id              = reminder.id.hashCode(),
                     triggerAtMillis = reminder.triggerAtMillis,
-                    title = reminder.title,
-                    message = reminder.message
+                    title           = reminder.title,
+                    message         = reminder.message
                 )
             )
         }

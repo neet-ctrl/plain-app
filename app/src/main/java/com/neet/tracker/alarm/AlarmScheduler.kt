@@ -13,13 +13,17 @@ object AlarmScheduler {
         alarmId: Int,
         triggerAtMillis: Long,
         title: String,
-        message: String
+        message: String,
+        eventId: String = "",
+        eventType: String = ""
     ) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(context, AlarmReceiver::class.java).apply {
-            putExtra(AlarmReceiver.EXTRA_ID, alarmId)
-            putExtra(AlarmReceiver.EXTRA_TITLE, title)
-            putExtra(AlarmReceiver.EXTRA_MESSAGE, message)
+            putExtra(AlarmReceiver.EXTRA_ID,         alarmId)
+            putExtra(AlarmReceiver.EXTRA_TITLE,      title)
+            putExtra(AlarmReceiver.EXTRA_MESSAGE,    message)
+            putExtra(AlarmReceiver.EXTRA_EVENT_ID,   eventId)
+            putExtra(AlarmReceiver.EXTRA_EVENT_TYPE, eventType)
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context, alarmId, intent,
@@ -28,18 +32,12 @@ object AlarmScheduler {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (alarmManager.canScheduleExactAlarms()) {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent
-                )
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
             } else {
-                alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent
-                )
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
             }
         } else {
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent
-            )
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
         }
     }
 

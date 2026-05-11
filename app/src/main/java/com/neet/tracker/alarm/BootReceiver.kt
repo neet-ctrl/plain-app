@@ -26,7 +26,9 @@ class BootReceiver : BroadcastReceiver() {
                     alarm.id,
                     alarm.triggerAtMillis,
                     alarm.title,
-                    alarm.message
+                    alarm.message,
+                    alarm.eventId,
+                    alarm.eventType
                 )
             }
         }
@@ -37,5 +39,7 @@ data class SavedAlarm(
     val id: Int = 0,
     val triggerAtMillis: Long = 0L,
     val title: String = "",
-    val message: String = ""
+    val message: String = "",
+    val eventId: String = "",
+    val eventType: String = ""
 )

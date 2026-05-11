@@ -3,11 +3,15 @@ package com.neet.tracker.navigation
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.neet.tracker.alarm.NotificationNavEvent
 import com.neet.tracker.ui.screens.*
 import java.net.URLDecoder
 
@@ -15,6 +19,17 @@ import java.net.URLDecoder
 @Composable
 fun NEETNavHost() {
     val navController = rememberNavController()
+
+    // When a notification "Open Card" action is tapped, navigate to Universal Calendar
+    val pendingEvent by NotificationNavEvent.pendingEvent.collectAsState()
+    LaunchedEffect(pendingEvent) {
+        if (pendingEvent != null) {
+            navController.navigate(Routes.UNIVERSAL_CALENDAR) {
+                launchSingleTop = true
+                popUpTo(Routes.HOME) { inclusive = false }
+            }
+        }
+    }
 
     NavHost(
         navController = navController,

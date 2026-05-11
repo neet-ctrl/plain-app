@@ -332,7 +332,17 @@ fun PlannerEventCard(event: PlannerEvent, index: Int, accentColor: Color, onUpda
                                     }
                                     alarmTime = cal.timeInMillis
                                     alarmLabel = name.ifBlank { "Event $index" }
-                                    AlarmScheduler.scheduleAlarm(context, event.id.hashCode(), cal.timeInMillis, "NEET Reminder", alarmLabel.ifBlank { "Time for your scheduled event!" })
+                                    AlarmScheduler.scheduleAlarm(
+                                        context, event.id.hashCode(), cal.timeInMillis,
+                                        "⏰ ${name.ifBlank { "NEET Study Event" }}",
+                                        buildString {
+                                            if (notes.isNotBlank()) appendLine("📝 $notes")
+                                            if (timing.isNotBlank()) appendLine("🕐 $timing")
+                                            if (remark.isNotBlank()) append("💬 $remark")
+                                        }.trim().ifBlank { "Your scheduled study session is starting soon!" },
+                                        eventId   = event.id,
+                                        eventType = "PlannerEvent"
+                                    )
                                 }, now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), false).show()
                             }, modifier = Modifier.size(32.dp)) {
                                 Icon(Icons.Default.AddAlarm, null, tint = NeonGold, modifier = Modifier.size(18.dp))

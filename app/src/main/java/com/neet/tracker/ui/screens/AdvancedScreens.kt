@@ -89,6 +89,29 @@ fun UniversalCalendarScreen(navController: NavController) {
 
     var calendarDetail by remember { mutableStateOf<CalendarDetail?>(null) }
 
+    // Auto-open event detail when notification "Open Card" is tapped
+    val pendingNotifEvent by com.neet.tracker.alarm.NotificationNavEvent.pendingEvent.collectAsState()
+    LaunchedEffect(pendingNotifEvent, dateEvents, plannerEntries) {
+        val (eId, eType) = pendingNotifEvent ?: return@LaunchedEffect
+        when (eType) {
+            "DateEvent" -> {
+                val event = dateEvents.find { it.id == eId }
+                if (event != null) {
+                    calendarDetail = CalendarDetail.EventDetail(event)
+                    com.neet.tracker.alarm.NotificationNavEvent.consume()
+                }
+            }
+            "PlannerEvent" -> {
+                val entry = plannerEntries.find { e -> e.events.any { it.id == eId } }
+                val event = entry?.events?.find { it.id == eId }
+                if (event != null && entry != null) {
+                    calendarDetail = CalendarDetail.PlannerDetail(event, entry.id)
+                    com.neet.tracker.alarm.NotificationNavEvent.consume()
+                }
+            }
+        }
+    }
+
     SpaceBackground {
         Column(modifier = Modifier.fillMaxSize()) {
             NEETTopBar(title = "Universe Calendar", breadcrumb = "Home", onBack = { navController.popBackStack() })

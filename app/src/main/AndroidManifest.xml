@@ -37,6 +37,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.NEETTracker"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -53,6 +54,16 @@
                 <action android:name="com.neet.tracker.ALARM_TRIGGER" />
             </intent-filter>
         </receiver>
+
+        <!-- Snooze action receiver -->
+        <receiver
+            android:name=".alarm.SnoozeReceiver"
+            android:exported="false" />
+
+        <!-- Dismiss action receiver -->
+        <receiver
+            android:name=".alarm.DismissReceiver"
+            android:exported="false" />
 
         <!-- Boot receiver to reschedule alarms after device restart -->
         <receiver
