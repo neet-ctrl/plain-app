@@ -419,6 +419,77 @@ data class NeetSequencePdf(
     val uploadedAt: Long = System.currentTimeMillis()
 )
 
+// ─── Error Notebook Enums ─────────────────────────────────────────────────────
+
+enum class ErrorType {
+    CONCEPT_MISTAKE, SILLY_MISTAKE, CALCULATION_ERROR, NOT_ATTEMPTED,
+    TIME_PRESSURE, FORMULA_FORGOT, MISREAD, OVERCONFIDENCE
+}
+
+enum class ErrorSource {
+    TEST_PAPER, PYQ_CHAPTERWISE, PYQ_YEARWISE, SAMPLE_PAPER,
+    PW_TEST, BOOK, LECTURE, SELF_STUDY
+}
+
+enum class ErrorStatus { PENDING, UNDERSTOOD, MASTERED }
+
+// ─── Error Notebook Entity ────────────────────────────────────────────────────
+
+@Entity(tableName = "error_entries")
+@TypeConverters(Converters::class)
+data class ErrorEntry(
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val questionNo: String = "",
+    val description: String = "",
+    val errorType: ErrorType = ErrorType.CONCEPT_MISTAKE,
+    val subject: Subject = Subject.GENERAL,
+    val chapter: String = "",
+    val sourceType: ErrorSource = ErrorSource.SELF_STUDY,
+    val sourceName: String = "",
+    val myAnswer: String = "",
+    val correctAnswer: String = "",
+    val explanation: String = "",
+    val status: ErrorStatus = ErrorStatus.PENDING,
+    val tags: List<String> = emptyList(),
+    val imageUri: String = "",
+    val revisionCount: Int = 0,
+    val lastRevised: Long = 0L,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+// ─── Revision Scheduler Enums ─────────────────────────────────────────────────
+
+enum class RevisionType {
+    NEET_CHAPTER, NOTEBOOK_CHAPTER, PYQ_CHAPTER, PYQ_YEAR,
+    TEST_PAPER, SAMPLE_PAPER, PW_TEST, BOOK, LECTURE, TOPIC, CUSTOM
+}
+
+enum class RevisionPriority { LOW, MEDIUM, HIGH, CRITICAL }
+enum class RevisionStatus { PENDING, DONE, SKIPPED }
+
+// ─── Revision Scheduler Entity ────────────────────────────────────────────────
+
+@Entity(tableName = "revision_items")
+@TypeConverters(Converters::class)
+data class RevisionItem(
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val title: String = "",
+    val subject: Subject = Subject.GENERAL,
+    val type: RevisionType = RevisionType.CUSTOM,
+    val sourceName: String = "",
+    val sourceId: String = "",
+    val scheduledDate: String = "",
+    val revisionNumber: Int = 1,
+    val priority: RevisionPriority = RevisionPriority.MEDIUM,
+    val status: RevisionStatus = RevisionStatus.PENDING,
+    val notes: String = "",
+    val isSpacedRepetition: Boolean = false,
+    val intervalDays: Int = 1,
+    val nextRevisionDate: String = "",
+    val completedAt: Long = 0L,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
 // ─── Reminder Entity ──────────────────────────────────────────────────────────
 
 @Entity(tableName = "reminders")

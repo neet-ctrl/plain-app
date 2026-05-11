@@ -52,6 +52,10 @@ object Routes {
     const val SUBJECT_SHORT_NOTES = "subject_short_notes"
     const val LACK_POINTS = "lack_points"
 
+    // Error Notebook & Revision Scheduler
+    const val ERROR_NOTEBOOK      = "error_notebook"
+    const val REVISION_SCHEDULER  = "revision_scheduler"
+
     // File Viewer
     const val FILE_VIEWER = "file_viewer/{encodedUri}/{title}?solutionUri={solutionUri}"
 

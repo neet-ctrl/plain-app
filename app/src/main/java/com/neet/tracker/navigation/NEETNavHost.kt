@@ -191,6 +191,10 @@ fun NEETNavHost() {
         composable(Routes.SUBJECT_SHORT_NOTES) { SubjectShortNotesScreen(navController) }
         composable(Routes.LACK_POINTS) { LackPointsScreen(navController) }
 
+        // Error Notebook & Revision Scheduler
+        composable(Routes.ERROR_NOTEBOOK)     { ErrorNotebookScreen(navController) }
+        composable(Routes.REVISION_SCHEDULER) { RevisionSchedulerScreen(navController) }
+
         composable(
             Routes.FILE_VIEWER,
             arguments = listOf(

@@ -210,6 +210,48 @@ interface NEETDao {
     @Query("UPDATE reminders SET isActive=:active WHERE id=:id")
     suspend fun setReminderActive(id: String, active: Boolean)
 
+    // ── Error Notebook ────────────────────────────────────────────────────────
+    @Query("SELECT * FROM error_entries ORDER BY createdAt DESC")
+    fun getErrorEntries(): Flow<List<ErrorEntry>>
+    @Query("SELECT * FROM error_entries WHERE subject=:subject ORDER BY createdAt DESC")
+    fun getErrorsBySubject(subject: String): Flow<List<ErrorEntry>>
+    @Query("SELECT * FROM error_entries WHERE status=:status ORDER BY createdAt DESC")
+    fun getErrorsByStatus(status: String): Flow<List<ErrorEntry>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveErrorEntry(e: ErrorEntry)
+    @Delete suspend fun deleteErrorEntry(e: ErrorEntry)
+    @Query("UPDATE error_entries SET status=:status WHERE id=:id")
+    suspend fun updateErrorStatus(id: String, status: String)
+    @Query("UPDATE error_entries SET revisionCount=revisionCount+1, lastRevised=:time WHERE id=:id")
+    suspend fun markErrorRevised(id: String, time: Long)
+    @Query("SELECT COUNT(*) FROM error_entries") fun countErrors(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM error_entries WHERE status='PENDING'") fun countPendingErrors(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM error_entries WHERE status='UNDERSTOOD'") fun countUnderstoodErrors(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM error_entries WHERE status='MASTERED'") fun countMasteredErrors(): Flow<Int>
+
+    // ── Revision Scheduler ────────────────────────────────────────────────────
+    @Query("SELECT * FROM revision_items ORDER BY scheduledDate ASC")
+    fun getRevisionItems(): Flow<List<RevisionItem>>
+    @Query("SELECT * FROM revision_items WHERE scheduledDate=:date AND status='PENDING' ORDER BY priority DESC")
+    fun getRevisionsByDate(date: String): Flow<List<RevisionItem>>
+    @Query("SELECT * FROM revision_items WHERE scheduledDate<:date AND status='PENDING' ORDER BY scheduledDate ASC")
+    fun getOverdueRevisions(date: String): Flow<List<RevisionItem>>
+    @Query("SELECT * FROM revision_items WHERE scheduledDate>=:start AND scheduledDate<=:end ORDER BY scheduledDate ASC, priority DESC")
+    fun getRevisionsBetween(start: String, end: String): Flow<List<RevisionItem>>
+    @Query("SELECT * FROM revision_items WHERE status='DONE' ORDER BY completedAt DESC")
+    fun getDoneRevisions(): Flow<List<RevisionItem>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveRevisionItem(r: RevisionItem)
+    @Delete suspend fun deleteRevisionItem(r: RevisionItem)
+    @Query("UPDATE revision_items SET status=:status, completedAt=:time WHERE id=:id")
+    suspend fun updateRevisionStatus(id: String, status: String, time: Long)
+    @Query("UPDATE revision_items SET scheduledDate=:date, status='PENDING' WHERE id=:id")
+    suspend fun rescheduleRevision(id: String, date: String)
+    @Query("SELECT COUNT(*) FROM revision_items WHERE scheduledDate=:date AND status='PENDING'")
+    fun countTodayRevisions(date: String): Flow<Int>
+    @Query("SELECT COUNT(*) FROM revision_items WHERE scheduledDate<:date AND status='PENDING'")
+    fun countOverdueRevisions(date: String): Flow<Int>
+
     // ── Calendar aggregation ──────────────────────────────────────────────────
     @Query("SELECT date FROM day_planner")
     fun getAllDayPlannerDates(): Flow<List<String>>

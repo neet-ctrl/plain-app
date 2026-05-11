@@ -235,6 +235,8 @@ fun HomeScreen(
         MainCard("NEET Sequence",      Icons.Default.Timeline,          Routes.NEET_SEQUENCE,       NeonPurple, "Chapter study sequence"),
         MainCard("Subject Notes",      Icons.Default.LibraryBooks,      Routes.SUBJECT_SHORT_NOTES, NeonGold,   "Subject-wise PDF notes"),
         MainCard("Lack Points",        Icons.Default.TrendingDown,      Routes.LACK_POINTS,         NeonRed,    "Identify & fix weaknesses"),
+        MainCard("Error Notebook",     Icons.Default.ErrorOutline,      Routes.ERROR_NOTEBOOK,      NeonOrange, "Track & fix mistakes"),
+        MainCard("Revision Scheduler", Icons.Default.AutoGraph,         Routes.REVISION_SCHEDULER,  NeonTeal,   "Spaced revision planner"),
     )
 
     val filtered = mainCards.filter {
@@ -248,7 +250,7 @@ fun HomeScreen(
             HomeHeader(profile = profile, navController = navController)
 
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search 14 modules...")
+                NeatSearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search 16 modules...")
                 Spacer(Modifier.height(10.dp))
 
                 // ─── Universal Reminder Card ─────────────────────────────────
@@ -265,7 +267,7 @@ fun HomeScreen(
 
                 AnimatedVisibility(visible = searchQuery.isBlank()) {
                     Text(
-                        text = "14 Modules · Your NEET Command Center",
+                        text = "16 Modules · Your NEET Command Center",
                         style = MaterialTheme.typography.labelSmall,
                         color = NeonCyan.copy(0.45f),
                         modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
