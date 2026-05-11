@@ -217,6 +217,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var annotToolbarExpanded by remember { mutableStateOf(true) }
     var annotToolbarOffsetX  by remember { mutableFloatStateOf(16f) }
     var annotToolbarOffsetY  by remember { mutableFloatStateOf(300f) }
+    var annotToolbarWidthDp  by remember { mutableFloatStateOf(240f) }
     var annotZoomEnabled     by remember { mutableStateOf(false) }
 
     // ── Line Pointer ───────────────────────────────────────────────────────────
@@ -930,7 +931,11 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     annotationTool      = AnnotationTool.STAMP
                     annotZoomEnabled    = false
                 },
-                onStampPickerToggle = { stampPickerExpanded = !stampPickerExpanded }
+                onStampPickerToggle = { stampPickerExpanded = !stampPickerExpanded },
+                toolbarWidthDp  = annotToolbarWidthDp,
+                onResize = { deltaDp ->
+                    annotToolbarWidthDp = (annotToolbarWidthDp + deltaDp).coerceIn(200f, 380f)
+                }
             )
         }
 
@@ -2131,8 +2136,11 @@ private fun FloatingAnnotToolbar(
     stampPickerExpanded: Boolean = false,
     onStampSelect: (String) -> Unit = {},
     onStampPickerToggle: () -> Unit = {},
+    toolbarWidthDp: Float = 240f,
+    onResize: (Float) -> Unit = {},
     onDone: () -> Unit,
 ) {
+    val density = LocalDensity.current
     Box(
         modifier = Modifier
             .offset { IntOffset(offsetX.toInt(), offsetY.toInt()) }
@@ -2158,10 +2166,10 @@ private fun FloatingAnnotToolbar(
             }
         } else {
             // ── Expanded: full floating panel ──────────────────────────────────
+            Box {
             Column(
                 modifier = Modifier
-                    .width(IntrinsicSize.Max)
-                    .widthIn(min = 210.dp, max = 280.dp)
+                    .width(toolbarWidthDp.coerceIn(200f, 380f).dp)
                     .shadow(22.dp, RoundedCornerShape(18.dp), spotColor = NeonOrange.copy(0.45f))
                     .background(
                         Brush.verticalGradient(listOf(Color(0xFF0E1A2A), Color(0xFF070F1C))),
@@ -2617,6 +2625,39 @@ private fun FloatingAnnotToolbar(
                     }
                 }
             }
+
+            // ── Resize handle (bottom-right corner) ───────────────────────────
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = 6.dp, y = 6.dp)
+                    .size(30.dp)
+                    .shadow(8.dp, RoundedCornerShape(8.dp), spotColor = NeonOrange.copy(0.55f))
+                    .background(Color(0xFF0E1A2A), RoundedCornerShape(8.dp))
+                    .border(1.5.dp, NeonOrange.copy(0.7f), RoundedCornerShape(8.dp))
+                    .pointerInput(Unit) {
+                        detectDragGestures { _, dragAmount ->
+                            onResize(with(density) { dragAmount.x.toDp().value })
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Canvas(modifier = Modifier.size(16.dp)) {
+                    val c = NeonOrange.copy(0.85f)
+                    val sw = 2.dp.toPx()
+                    repeat(3) { i ->
+                        val t = (i + 1f) / 3f
+                        drawLine(
+                            c,
+                            Offset(size.width * t, size.height),
+                            Offset(size.width, size.height * t),
+                            strokeWidth = sw,
+                            cap = StrokeCap.Round
+                        )
+                    }
+                }
+            }
+            } // close wrapper Box
         }
     }
 }
