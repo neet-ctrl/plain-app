@@ -4666,23 +4666,24 @@ private fun FloatingSolutionViewer(
     var windowHeightDp by remember { mutableFloatStateOf(480f) }
 
     // ── Page state ────────────────────────────────────────────────────────────
+    // Separate states so swapping never resets either page position
     val displayPages = if (isSwapped) questionPages else solutionPages
-    var currentPage by remember(isSwapped) {
-        mutableIntStateOf(
-            if (isSwapped) mainCurrentPage.coerceIn(0, (questionPages.lastIndex).coerceAtLeast(0))
-            else solWindowPage.coerceIn(0, (solutionPages.lastIndex).coerceAtLeast(0))
-        )
-    }
+    var solutionPage by remember { mutableIntStateOf(solWindowPage.coerceIn(0, (solutionPages.lastIndex).coerceAtLeast(0))) }
+    var questionPage by remember { mutableIntStateOf(mainCurrentPage.coerceIn(0, (questionPages.lastIndex).coerceAtLeast(0))) }
+    val currentPage = if (isSwapped) questionPage else solutionPage
 
-    // Persist solution window page whenever it changes (only when not swapped)
-    LaunchedEffect(currentPage, isSwapped) {
-        if (!isSwapped) onSolPageChange(currentPage)
-    }
+    // Persist solution page synchronously on every recomposition (SideEffect is
+    // guaranteed to run before the composable can leave composition, unlike LaunchedEffect)
+    SideEffect { onSolPageChange(solutionPage) }
 
-    // Keep currentPage in bounds if displayPages shrinks
-    LaunchedEffect(displayPages.size) {
-        if (displayPages.isNotEmpty() && currentPage > displayPages.lastIndex)
-            currentPage = displayPages.lastIndex
+    // Keep each page in bounds if the page list ever shrinks
+    LaunchedEffect(solutionPages.size) {
+        if (solutionPages.isNotEmpty() && solutionPage > solutionPages.lastIndex)
+            solutionPage = solutionPages.lastIndex
+    }
+    LaunchedEffect(questionPages.size) {
+        if (questionPages.isNotEmpty() && questionPage > questionPages.lastIndex)
+            questionPage = questionPages.lastIndex
     }
 
     // ── Swipe gesture accumulator ─────────────────────────────────────────────
@@ -4857,7 +4858,7 @@ private fun FloatingSolutionViewer(
                                         )
                                         .clip(RoundedCornerShape(6.dp))
                                         .clickable {
-                                            currentPage = index
+                                            if (isSwapped) questionPage = index else solutionPage = index
                                             showThumbs = false
                                         }
                                 ) {
@@ -4913,10 +4914,12 @@ private fun FloatingSolutionViewer(
                                     onVerticalDrag = { _, delta ->
                                         swipeAccum += delta
                                         if (swipeAccum > swipeThreshPx) {
-                                            if (currentPage > 0) currentPage--
+                                            if (isSwapped) { if (questionPage > 0) questionPage-- }
+                                            else           { if (solutionPage > 0) solutionPage-- }
                                             swipeAccum = 0f
                                         } else if (swipeAccum < -swipeThreshPx) {
-                                            if (currentPage < displayPages.lastIndex) currentPage++
+                                            if (isSwapped) { if (questionPage < questionPages.lastIndex) questionPage++ }
+                                            else           { if (solutionPage < solutionPages.lastIndex) solutionPage++ }
                                             swipeAccum = 0f
                                         }
                                     }
@@ -4995,7 +4998,7 @@ private fun FloatingSolutionViewer(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(Color.Black.copy(0.35f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                            .padding(start = 8.dp, end = 40.dp, top = 4.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
@@ -5011,7 +5014,10 @@ private fun FloatingSolutionViewer(
                                     if (currentPage > 0) accentCol.copy(0.4f) else Color.White.copy(0.1f),
                                     RoundedCornerShape(7.dp)
                                 )
-                                .clickable(enabled = currentPage > 0) { currentPage-- },
+                                .clickable(enabled = currentPage > 0) {
+                                    if (isSwapped) { if (questionPage > 0) questionPage-- }
+                                    else           { if (solutionPage > 0) solutionPage-- }
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.Default.ChevronLeft, null,
@@ -5038,7 +5044,10 @@ private fun FloatingSolutionViewer(
                                     if (currentPage < displayPages.lastIndex) accentCol.copy(0.4f) else Color.White.copy(0.1f),
                                     RoundedCornerShape(7.dp)
                                 )
-                                .clickable(enabled = currentPage < displayPages.lastIndex) { currentPage++ },
+                                .clickable(enabled = currentPage < displayPages.lastIndex) {
+                                    if (isSwapped) { if (questionPage < questionPages.lastIndex) questionPage++ }
+                                    else           { if (solutionPage < solutionPages.lastIndex) solutionPage++ }
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.Default.ChevronRight, null,
