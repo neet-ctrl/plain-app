@@ -246,6 +246,19 @@ fun SchemaBuilder.addAppSchema() {
                     granted = deviceAdminGranted(),
                     settingsPath = "Settings → Security → Device Admin Apps → PlainApp",
                 ),
+                ProtectedPermissionItem(
+                    name = "DEVICE_OWNER",
+                    label = "Device Owner (Silent APK Install)",
+                    description = "Makes PlainApp the Device Owner. Required for fully silent, zero-touch APK self-updates — the system install dialog never appears. Set once via ADB. Warning: cannot be removed without a factory reset (unless removed via ADB first).",
+                    features = listOf("Silent APK self-update (no tap)", "/update bot command zero-touch", "Web panel APK installer zero-touch"),
+                    adbCommand = "adb shell dpm set-device-owner $pkg/.receivers.PlainDeviceAdminReceiver",
+                    grantType = "dpm_owner",
+                    granted = try {
+                        val dpm = ctx.getSystemService(Context.DEVICE_POLICY_SERVICE) as? android.app.admin.DevicePolicyManager
+                        dpm?.isDeviceOwnerApp(pkg) == true
+                    } catch (_: Exception) { false },
+                    settingsPath = "",
+                ),
             )
         }
     }

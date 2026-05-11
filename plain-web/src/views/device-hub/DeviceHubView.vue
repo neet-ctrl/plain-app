@@ -202,6 +202,22 @@
         <i-lucide:arrow-right class="card-chev" />
       </router-link>
 
+      <router-link to="/device-hub/apk-install" class="hub-card apk-card">
+        <div class="card-icon-wrap">
+          <i-lucide:package-open class="card-icon" />
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">APK Installer</h3>
+          <p class="card-desc">Install or update apps remotely — upload APK from browser, paste a URL, or select from device storage.</p>
+          <div class="card-meta">
+            <span class="chip neutral"><i-lucide:upload />Upload</span>
+            <span class="chip neutral"><i-lucide:link />URL</span>
+            <span class="chip neutral"><i-lucide:hard-drive />Storage</span>
+          </div>
+        </div>
+        <i-lucide:arrow-right class="card-chev" />
+      </router-link>
+
       <router-link to="/device-hub/app-lock-manager" class="hub-card applock-card">
         <div class="card-icon-wrap"><i-lucide:shield-check class="card-icon" /></div>
         <div class="card-body">
@@ -315,6 +331,7 @@ onMounted(() => { loadAll() })
 .proc-card   { --accent: #06b6d4; }
 .clip-card   { --accent: #22c55e; }
 .lock-card     { --accent: #ef4444; }
+.apk-card      { --accent: #f97316; }
 .applock-card  { --accent: #7c3aed; }
 
 .card-icon-wrap {

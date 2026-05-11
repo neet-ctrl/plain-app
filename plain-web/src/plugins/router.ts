@@ -372,6 +372,11 @@ const router = createRouter({
           meta: { group: 'device_hub' },
         },
         {
+          path: 'device-hub/apk-install',
+          component: () => import('@/views/device-hub/ApkInstallView.vue'),
+          meta: { group: 'device_hub' },
+        },
+        {
           path: 'qr-code',
           component: () => import('@/views/qr-code/QRCodeView.vue'),
           meta: { group: 'qr_code' },

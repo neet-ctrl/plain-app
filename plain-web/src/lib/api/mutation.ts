@@ -552,6 +552,12 @@ export const installPackageGQL = `
   }
 `
 
+export const installPackageFromUrlGQL = `
+  mutation installPackageFromUrl($url: String!) {
+    installPackageFromUrl(url: $url)
+  }
+`
+
 export const startScreenMirrorGQL = `
   mutation startScreenMirror($audio: Boolean!) {
     startScreenMirror(audio: $audio)

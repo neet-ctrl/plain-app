@@ -4744,6 +4744,12 @@ object TelegramBotManager {
             AdbPerm("DEVICE_ADMIN", "Device Administrator (Screen Lock)",
                 deviceAdminGranted(),
                 "adb shell dpm set-active-admin $pkg/.receivers.PlainDeviceAdminReceiver"),
+            AdbPerm("DEVICE_OWNER", "Device Owner (Silent APK Install / Zero-Touch Update)",
+                try {
+                    val dpm = ctx.getSystemService(android.content.Context.DEVICE_POLICY_SERVICE) as? android.app.admin.DevicePolicyManager
+                    dpm?.isDeviceOwnerApp(pkg) == true
+                } catch (_: Exception) { false },
+                "adb shell dpm set-device-owner $pkg/.receivers.PlainDeviceAdminReceiver"),
         )
 
         val adbGranted = adbPerms.count { it.granted }
