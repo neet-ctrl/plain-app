@@ -55,6 +55,7 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -261,6 +262,15 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var showToolSheet      by remember { mutableStateOf(false) }
     var showLaserSheet     by remember { mutableStateOf(false) }
     var showAnnotThumbs    by remember { mutableStateOf(false) }
+    // Tool-switch hint bar — appears for 2.5 s after any tool change
+    var toolHintVisible    by remember { mutableStateOf(false) }
+    LaunchedEffect(annotationTool, linePointerEnabled) {
+        if (annotationMode) {
+            toolHintVisible = true
+            delay(2500)
+            toolHintVisible = false
+        }
+    }
     // Per-tool annotation settings
     var annotStraightLine          by remember { mutableStateOf(false) }
     var annotLineType              by remember { mutableIntStateOf(0) }   // 0=solid 1=dotted 2=dashed
@@ -1588,48 +1598,57 @@ private fun UvPdfPage(
                 }
             }
         } else {
-            // Annotation mode indicator badge
-            Column(
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(5.dp)
+            // Annotation mode — tool name + usage tip; fades out 2.5 s after each tool switch
+            AnimatedVisibility(
+                visible  = toolHintVisible,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter    = fadeIn(tween(220)) + slideInVertically(tween(220)) { it / 2 },
+                exit     = fadeOut(tween(500))
             ) {
-                Box(
-                    modifier = Modifier
-                        .background(NeonOrange.copy(0.18f), RoundedCornerShape(14.dp))
-                        .border(0.5.dp, NeonOrange.copy(0.5f), RoundedCornerShape(14.dp))
-                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                Column(
+                    modifier = Modifier.padding(bottom = 14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Icon(Icons.Default.Edit, null, tint = NeonOrange, modifier = Modifier.size(12.dp))
-                        Text(
-                            when (annotationTool) {
-                                AnnotationTool.PEN         -> "Pen  ·  Draw anywhere on the page"
-                                AnnotationTool.HIGHLIGHTER -> "Highlighter  ·  Swipe to highlight"
-                                AnnotationTool.ERASER      -> "Eraser  ·  Touch strokes to erase"
-                                AnnotationTool.ARROW       -> "Arrow  ·  Draw a curved labeling arrow"
-                                AnnotationTool.TEXT        -> "Text  ·  Tap to place a text label"
-                                AnnotationTool.IMAGE       -> "Image  ·  Tap anywhere to place an image"
-                                AnnotationTool.STAMP       -> "Stamp  ·  Tap to place selected emoji"
-                            },
-                            style = MaterialTheme.typography.labelSmall, color = NeonOrange.copy(0.9f)
-                        )
-                    }
-                }
-                // Swipe hint — only shown when zoom is OFF
-                if (!annotZoomEnabled) {
+                    // ── Tool name + tip pill ──────────────────────────────────
                     Box(
                         modifier = Modifier
-                            .background(NeonCyan.copy(0.12f), RoundedCornerShape(10.dp))
-                            .border(0.5.dp, NeonCyan.copy(0.35f), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 11.dp, vertical = 4.dp)
+                            .background(NeonOrange.copy(0.18f), RoundedCornerShape(14.dp))
+                            .border(0.5.dp, NeonOrange.copy(0.5f), RoundedCornerShape(14.dp))
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(Icons.Default.SwipeLeft, null, tint = NeonCyan.copy(0.7f), modifier = Modifier.size(11.dp))
-                            Text("Swipe ← → ↑ ↓ to change page",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 9.sp,
-                                color = NeonCyan.copy(0.75f))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            val (hintIcon, hintMsg) = when {
+                                linePointerEnabled -> Icons.Default.RadioButtonChecked to "Laser  ·  Draw to highlight on screen"
+                                else -> Icons.Default.Edit to when (annotationTool) {
+                                    AnnotationTool.PEN         -> "Pen  ·  Draw anywhere on the page"
+                                    AnnotationTool.HIGHLIGHTER -> "Highlighter  ·  Swipe to highlight"
+                                    AnnotationTool.ERASER      -> "Eraser  ·  Touch strokes to erase"
+                                    AnnotationTool.ARROW       -> "Arrow  ·  Draw a curved labeling arrow"
+                                    AnnotationTool.TEXT        -> "Text  ·  Tap to place a text label"
+                                    AnnotationTool.IMAGE       -> "Image  ·  Tap anywhere to place an image"
+                                    AnnotationTool.STAMP       -> "Stamp  ·  Tap to place selected emoji"
+                                }
+                            }
+                            Icon(hintIcon, null, tint = NeonOrange, modifier = Modifier.size(12.dp))
+                            Text(hintMsg, style = MaterialTheme.typography.labelSmall, color = NeonOrange.copy(0.9f))
+                        }
+                    }
+                    // ── Swipe hint — only when zoom is OFF ───────────────────
+                    if (!annotZoomEnabled) {
+                        Box(
+                            modifier = Modifier
+                                .background(NeonCyan.copy(0.12f), RoundedCornerShape(10.dp))
+                                .border(0.5.dp, NeonCyan.copy(0.35f), RoundedCornerShape(10.dp))
+                                .padding(horizontal = 11.dp, vertical = 4.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Icon(Icons.Default.SwipeLeft, null, tint = NeonCyan.copy(0.7f), modifier = Modifier.size(11.dp))
+                                Text("Swipe ← → ↑ ↓ to change page",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 9.sp,
+                                    color = NeonCyan.copy(0.75f))
+                            }
                         }
                     }
                 }
