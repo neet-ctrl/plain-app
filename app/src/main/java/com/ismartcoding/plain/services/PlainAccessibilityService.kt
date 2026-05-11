@@ -171,17 +171,18 @@ class PlainAccessibilityService : AccessibilityService() {
         currentForegroundPackage = pkg
         currentForegroundEnteredAt = now
 
-        // Block any system Settings "App info" / app-details screen behind the
-        // PlainApp PIN. Long-press on a launcher icon → "App info" lands here,
-        // and so does Settings → Apps → <any app>. We can't intercept the OS
-        // navigation, but we can immediately overlay the unlock activity and
-        // bounce the user home if they fail or cancel the PIN check.
+        // Block the system Settings "App info" page for OUR OWN package behind
+        // the PlainApp PIN.  We ONLY intercept when the page being shown is for
+        // com.ismartcoding.plain — other apps' App Info pages are left alone.
+        // Long-press on PlainApp's launcher icon → "App info", or
+        // Settings → Apps → PlainApp lands here.
         try {
             if (AppInfoGuard.looksLikeAppInfoScreen(pkg, cls) &&
                 AppInfoGuard.isActive(applicationContext) &&
-                !AppInfoGuard.isRecentlyVerified()
+                !AppInfoGuard.isRecentlyVerified() &&
+                AppInfoGuard.isOwnAppInfoPage(event)
             ) {
-                LogCat.d("PlainAccessibilityService: app-info screen detected ($cls), challenging PIN")
+                LogCat.d("PlainAccessibilityService: own app-info screen detected ($cls), challenging PIN")
                 val intent = Intent(applicationContext, AppInfoUnlockActivity::class.java)
                     .addFlags(
                         Intent.FLAG_ACTIVITY_NEW_TASK

@@ -1,6 +1,7 @@
 package com.ismartcoding.plain.helpers
 
 import android.content.Context
+import android.view.accessibility.AccessibilityEvent
 import com.ismartcoding.plain.MainApp
 import com.ismartcoding.plain.preferences.AppInfoGuardEnabledPreference
 import com.ismartcoding.plain.preferences.AppLockPinPreference
@@ -8,9 +9,12 @@ import kotlinx.coroutines.runBlocking
 
 /**
  * Tracks whether the user has just passed the in-app PIN check that protects
- * any "App info" / application details screen. PlainAccessibilityService
- * detects when the system Settings shows an app-details page and consults
- * this guard before allowing it to remain visible.
+ * PlainApp's own "App info" / application details screen.
+ *
+ * PlainAccessibilityService detects when the system Settings shows an
+ * app-details page and consults this guard before allowing it to remain
+ * visible — but ONLY when the page being shown is for our own package
+ * (com.ismartcoding.plain).  Other apps' App Info pages are never blocked.
  *
  * The verified-window is short on purpose: it is only meant to let the user
  * land on the App info screen they intended to view, not to hand out a
@@ -19,6 +23,9 @@ import kotlinx.coroutines.runBlocking
 object AppInfoGuard {
     private const val VALID_WINDOW_MS = 30_000L
     private const val CACHE_TTL_MS = 5_000L
+
+    /** Package name we protect. */
+    private const val OWN_PACKAGE = "com.ismartcoding.plain"
 
     @Volatile private var verifiedAt: Long = 0L
     @Volatile private var cachedActive: Boolean = false
@@ -89,6 +96,43 @@ object AppInfoGuard {
             cn.contains("appinfoactivity") ||
             cn.contains("appdetailsactivity") ||
             cn.contains("appinfo\$")
+    }
+
+    /**
+     * Returns true when the App Info screen currently on screen is showing
+     * details for OUR OWN package (com.ismartcoding.plain).
+     *
+     * Strategy (two layers for cross-device reliability):
+     *  1. Check event.text list — some Android versions include visible text
+     *     from the window, which can contain the package name string.
+     *  2. Walk the accessibility node tree via findAccessibilityNodeInfosByText
+     *     looking for our exact package name string.  On most Android versions
+     *     (API 26+) the App Info page displays the package name in a "Version"
+     *     or "App details" section.
+     *
+     * If neither layer finds our package name we assume it is someone else's
+     * App Info page and DO NOT intercept.
+     */
+    fun isOwnAppInfoPage(event: AccessibilityEvent): Boolean {
+        // Layer 1: event text list (fast, no Binder call)
+        try {
+            for (i in 0 until event.text.size) {
+                if (event.text[i]?.contains(OWN_PACKAGE) == true) return true
+            }
+        } catch (_: Throwable) {}
+
+        // Layer 2: accessibility node tree search
+        val source = try { event.source } catch (_: Throwable) { null } ?: return false
+        return try {
+            val nodes = source.findAccessibilityNodeInfosByText(OWN_PACKAGE)
+            val found = nodes.isNotEmpty()
+            nodes.forEach { n -> try { n.recycle() } catch (_: Throwable) {} }
+            found
+        } catch (_: Throwable) {
+            false
+        } finally {
+            try { source.recycle() } catch (_: Throwable) {}
+        }
     }
 
     private fun isSettingsLikePackage(pkg: String): Boolean {

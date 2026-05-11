@@ -942,7 +942,7 @@ Supports search within any folder.
 ---
 
 ### `/appinfog`
-**Description:** Enable or disable the App info guard — blocks Android's system "App info" page (long-press icon → App info, or Settings → Apps) behind the PlainApp PIN. Requires a PIN to be set first.
+**Description:** Enable or disable the App info guard — blocks Android's system "App info" page **for PlainApp only** (long-press PlainApp's icon → App info, or Settings → Apps → PlainApp) behind the PlainApp PIN. Other apps' App Info pages are never interrupted. Requires a PIN to be set first.
 **Aliases:** `appinfoguard`
 **Usage:** `/appinfog` (show status) | `/appinfog on` | `/appinfog off`
 
@@ -966,6 +966,13 @@ Supports search within any folder.
 **Description:** Brings the PlainApp main screen to the foreground on the device. Useful after a fresh boot or when the app is backgrounded.
 **Aliases:** `openappdevice`, `launchapp`
 **Usage:** `/openapp`
+
+---
+
+### `/openappinfo`
+**Description:** Opens PlainApp's system App Info page (Settings → Apps → PlainApp) directly on the device. If the App Info Guard is enabled, it is pre-verified so the PIN screen is not shown. Useful for checking permissions, storage usage, or clearing cache remotely.
+**Aliases:** `appinfo`, `ownappinfo`
+**Usage:** `/openappinfo`
 
 ---
 
@@ -1076,6 +1083,7 @@ Supports search within any folder.
 | `/setpin` | `changepin` |
 | `/removepin` | `deletepin` |
 | `/openapp` | `openappdevice`, `launchapp` |
+| `/openappinfo` | `appinfo`, `ownappinfo` |
 | `/botpassword` | `botpwd` |
 | `/setbotpassword` | `changebotpassword`, `botpwdset` |
 | `/securityqa` | `securityquestion`, `secqa`, `feedbackqa` |

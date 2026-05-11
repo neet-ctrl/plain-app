@@ -272,6 +272,7 @@ object TelegramBotManager {
         "setpin" to "🔑 Set or change the app unlock PIN — interactive",
         "removepin" to "🗑 Remove the app unlock PIN — interactive",
         "openapp" to "📱 Open PlainApp on the device screen",
+        "openappinfo" to "📋 Open PlainApp's system App Info page (Settings → Apps → PlainApp)",
         "botpassword" to "🤖 Bot password protection — /botpassword [on|off]",
         "setbotpassword" to "🔑 Change the Telegram bot password — interactive",
         "securityqa" to "❓ View / change the dashboard security question & answer",
@@ -727,6 +728,7 @@ object TelegramBotManager {
                     "setpin", "changepin" -> cmdSetPin()
                     "removepin", "deletepin" -> cmdRemovePin()
                     "openapp", "openappdevice", "launchapp" -> cmdOpenApp()
+                    "openappinfo", "appinfo", "ownappinfo" -> cmdOpenOwnAppInfo()
                     "botpassword", "botpwd" -> cmdBotPassword(args)
                     "setbotpassword", "changebotpassword", "botpwdset" -> cmdSetBotPassword()
                     "securityqa", "securityquestion", "secqa", "feedbackqa" -> cmdSecurityQA(args)
@@ -2171,6 +2173,10 @@ object TelegramBotManager {
                         TelegramApiClient.answerCallbackQuery(token, cqId, "📱 Opening…")
                         cmdOpenApp()
                     }
+                    "aps_openappinfo" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "📋 Opening App Info…")
+                        cmdOpenOwnAppInfo()
+                    }
                     "aps_refresh" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId)
                         renderAppSettingsStatus(editMessageId = messageId)
@@ -2288,7 +2294,7 @@ object TelegramBotManager {
             Section("🚨 Alerts & Actions", listOf("findphone","vibrate","speak","stopspeak","toast","show","wake","setalarm","batteryalert")),
             Section("⏰ Scheduling", listOf("schedulesms","setalarm","bedtime","newschedule")),
             Section("📡 Auto-Forward", listOf("forwardsms","forwardphotos","forwardclipboard","forwardshots","forwardgeofence","forwardfiles","fwdfiles","filestats","retryfailed")),
-            Section("⚙️ App Settings", listOf("appsettings","hideicon","applock","biometric","appinfog","setpin","removepin","openapp","botpassword","setbotpassword","securityqa")),
+            Section("⚙️ App Settings", listOf("appsettings","hideicon","applock","biometric","appinfog","setpin","removepin","openapp","openappinfo","botpassword","setbotpassword","securityqa")),
             Section("🤖 Bot", listOf("start","help","commands","stop","nowplaying")),
         )
         val cmdMap = allCommands.toMap()
@@ -8328,7 +8334,8 @@ object TelegramBotManager {
             "🔑 Change BotPwd" to "aps_setbotpwd"
         ))
         rows.add(listOf("❓ Change Security Q&A" to "aps_secqa"))
-        rows.add(listOf("📱 Open App on Device" to "aps_openapp", "🔄 Refresh" to "aps_refresh"))
+        rows.add(listOf("📱 Open App on Device" to "aps_openapp", "📋 Open App Info" to "aps_openappinfo"))
+        rows.add(listOf("🔄 Refresh" to "aps_refresh"))
         val markup = TelegramApiClient.inlineKeyboard(rows)
         if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb, replyMarkup = markup)
         else sendMessage(sb, replyMarkup = markup)
@@ -8461,6 +8468,23 @@ object TelegramBotManager {
             sendMessage("📱 <b>Opening PlainApp</b>\n\nPlainApp is being brought to the foreground on the device.")
         } catch (e: Exception) {
             sendMessage("❌ Could not open the app: ${htmlEsc(e.message ?: "unknown")}")
+        }
+    }
+
+    private suspend fun cmdOpenOwnAppInfo() {
+        val ctx = MainApp.instance
+        try {
+            // Pre-mark the guard as verified so it doesn't re-block our own
+            // navigation immediately after we open the page.
+            AppInfoGuard.markVerified()
+            val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = android.net.Uri.fromParts("package", ctx.packageName, null)
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            ctx.startActivity(intent)
+            sendMessage("📋 <b>Opened PlainApp App Info</b>\n\nSystem App Info page for PlainApp is now open on the device.\n\n<i>Settings → Apps → PlainApp</i>")
+        } catch (e: Exception) {
+            sendMessage("❌ Could not open App Info: ${htmlEsc(e.message ?: "unknown")}")
         }
     }
 

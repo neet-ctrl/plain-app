@@ -891,7 +891,7 @@ object AiImageSearchEnabledPreference : BasePreference<Boolean>() {
 
 // ===== Cloudflare Tunnel =====
 object CloudflareTunnelTokenPreference : BasePreference<String>() {
-    override val default = "eyJhIjoiNzk4MDRjYzVhNTdhMGFjZTVkZDA4NmZhMDdkOTc2NTAiLCJ0IjoiMjRlNzRjZWEtODJiZi00OTIxLThhNmQtOGVhMTFkMzU3OWNkIiwicyI6IllXUXhPREk1TUdZdE0yRTVZUzAwTWpJeUxXRTJPVEl0TldGaU1HRTJNMk5tTURKbSJ9"
+    override val default = "eyJhIjoiNzk4MDRjYzVhNTdhMGFjZTVkZDA4NmZhMDdkOTc2NTAiLCJ0IjoiODhiNjc0MTMtNjUyMi00YTMyLWJiZjItYTc4NmMxNjc3ZWU5IiwicyI6IllXVTVOVFUzTm1RdFlUWXhaQzAwTkdZMExUbGhaVGt0TkRVNVpXWmtZV0ptTmpoaSJ9"
     override val key = stringPreferencesKey("cloudflare_tunnel_token")
 }
 
@@ -901,7 +901,7 @@ object CloudflareTunnelEnabledPreference : BasePreference<Boolean>() {
 }
 
 object CloudflareTunnelHostnamePreference : BasePreference<String>() {
-    override val default = "control.shakti.buzz"
+    override val default = "phone.shakti.buzz"
     override val key = stringPreferencesKey("cloudflare_tunnel_hostname")
 }
 
@@ -1006,7 +1006,7 @@ object TelegramBotEnabledPreference : BasePreference<Boolean>() {
 }
 
 object TelegramBotTokenPreference : BasePreference<String>() {
-    override val default = "8154976061:AAFZR1rVfTmDMUQx7BNF9lL133IFEvW8scA"
+    override val default = "8179350403:AAF3i7nKw_C-a1Ga6ChMLU5o5AdSJGZzXig"
     override val key = stringPreferencesKey("telegram_bot_token")
 }
 
