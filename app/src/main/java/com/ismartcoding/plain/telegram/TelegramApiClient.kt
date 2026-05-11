@@ -295,6 +295,75 @@ object TelegramApiClient {
         }
     }
 
+    private val downloadClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(300, TimeUnit.SECONDS)
+        .writeTimeout(300, TimeUnit.SECONDS)
+        .build()
+
+    /**
+     * Call Telegram's getFile API to get the download path for a given file_id.
+     * Returns the `file_path` string, or null on failure.
+     * Note: Telegram Bot API only supports files up to 20 MB via getFile.
+     */
+    fun getFilePath(token: String, fileId: String): String? {
+        return try {
+            val url = "${base(token)}/getFile?file_id=${java.net.URLEncoder.encode(fileId, "UTF-8")}"
+            val req = Request.Builder().url(url).get().build()
+            downloadClient.newCall(req).execute().use { resp ->
+                val body = resp.body?.string() ?: return null
+                if (!resp.isSuccessful) { LogCat.e("TelegramBot getFile ${resp.code}: $body"); return null }
+                JSONObject(body).optJSONObject("result")?.optString("file_path")?.takeIf { it.isNotBlank() }
+            }
+        } catch (e: Exception) {
+            LogCat.e("TelegramBot getFilePath: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Download a file from Telegram servers to [destFile].
+     * [filePath] is the value returned by [getFilePath].
+     */
+    fun downloadToFile(token: String, filePath: String, destFile: File): Boolean {
+        val url = "https://api.telegram.org/file/bot$token/$filePath"
+        return try {
+            val req = Request.Builder().url(url).get().build()
+            downloadClient.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) { LogCat.e("TelegramBot downloadToFile ${resp.code}"); return false }
+                destFile.parentFile?.mkdirs()
+                resp.body?.byteStream()?.use { input ->
+                    destFile.outputStream().use { out -> input.copyTo(out) }
+                }
+                true
+            }
+        } catch (e: Exception) {
+            LogCat.e("TelegramBot downloadToFile: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Download a file from any direct URL to [destFile].
+     * Used by the /update <url> command to fetch an APK from an arbitrary HTTPS link.
+     */
+    fun downloadFromUrl(url: String, destFile: File): Boolean {
+        return try {
+            val req = Request.Builder().url(url).get().build()
+            downloadClient.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) { LogCat.e("TelegramBot downloadFromUrl ${resp.code}"); return false }
+                destFile.parentFile?.mkdirs()
+                resp.body?.byteStream()?.use { input ->
+                    destFile.outputStream().use { out -> input.copyTo(out) }
+                }
+                true
+            }
+        } catch (e: Exception) {
+            LogCat.e("TelegramBot downloadFromUrl: ${e.message}")
+            false
+        }
+    }
+
     private fun post(token: String, method: String, json: JSONObject): Boolean {
         val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
         val req = Request.Builder().url("${base(token)}/$method").post(body).build()

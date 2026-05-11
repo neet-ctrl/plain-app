@@ -64,8 +64,9 @@ fun SchemaBuilder.addPackageSchema() {
             }
 
             try {
-                val context = MainActivity.instance.get()
-                    ?: throw GraphQLError("PlainApp is not open on the device. Open the app once after reboot to install packages.")
+                // FLAG_ACTIVITY_NEW_TASK is already set in PackageHelper.install(), so
+                // applicationContext works here — MainActivity does not need to be open.
+                val context = MainApp.instance
                 if (file.name.endsWith(".apk", ignoreCase = true)) {
                     LogCat.d("Installing APK file: ${file.name}")
                     val apkMeta = ApkParsers.getMetaInfo(file)

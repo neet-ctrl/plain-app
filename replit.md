@@ -10,6 +10,32 @@ Open-source Android (Kotlin) app that turns your phone into a self-hosted web co
 
 A GitHub Actions workflow at `.github/workflows/build-apk.yml` auto-builds a debug APK on every push.
 
+## APK self-update via Telegram bot
+
+Update PlainApp on the device remotely — without touching the phone — from the Telegram bot.
+
+Two flows are supported:
+1. **Send APK file directly to the bot chat** — bot detects any incoming `.apk` document, downloads it from Telegram, and triggers installation automatically. No command needed.
+2. **`/update <url>`** — bot downloads the APK from a direct HTTPS URL and triggers installation.
+
+**Install modes:**
+- **System dialog (default)** — the Android install dialog appears on the device screen. One tap on "Install" required. Works on any device with no setup.
+- **Silent / zero-touch** — if the app has been made Device Owner (one-time ADB command below), `PackageInstaller` is used with `USER_ACTION_NOT_REQUIRED`. Completely hands-free. Requires Android 12+.
+
+**Enable zero-touch (one-time ADB):**
+```
+adb shell dpm set-device-owner com.ismartcoding.plain/.receivers.PlainDeviceAdminReceiver
+```
+
+**Files involved:**
+- `app/src/main/java/com/ismartcoding/plain/helpers/ApkUpdateHelper.kt` — `isDeviceOwner()`, `install()`, `installSilently()` (PackageInstaller + dynamic BroadcastReceiver).
+- `app/src/main/java/com/ismartcoding/plain/telegram/TelegramApiClient.kt` — added `getFilePath()`, `downloadToFile()`, `downloadFromUrl()` with a 5-minute-timeout `downloadClient`.
+- `app/src/main/java/com/ismartcoding/plain/telegram/TelegramBotManager.kt` — `handleDocumentMessage()` (intercepts APK documents before the `text.isEmpty()` guard), `cmdUpdate()`, `cmdDownloadAndInstallApk()`, `triggerApkInstall()`. Command `/update` + aliases `selfupdate`, `apkupdate`, `updateapp` routed.
+
+**Limitations:**
+- Telegram Bot API caps file-send at 20 MB. Use `/update <url>` for larger APKs.
+- APK must be signed with the same key (debug APK on debug install, release on release).
+
 ## Cloudflare Tunnel (built into the app)
 
 Recently added so the web console can be reached from anywhere on the internet through your own domain (e.g. `shakti.buzz`), with **no extra apps installed** on the phone.

@@ -997,6 +997,36 @@ Supports search within any folder.
 
 ---
 
+### `/update`
+**Description:** Update PlainApp on the device remotely — without physically touching the phone. Two methods:
+1. **Send APK file** — Send a `.apk` file directly to this bot chat. The bot downloads it from Telegram and triggers installation automatically.
+2. **URL** — `/update <url>` downloads the APK from any direct HTTPS link and triggers installation.
+
+**Aliases:** `selfupdate`, `apkupdate`, `updateapp`
+**Usage:**
+- `/update` — shows help + prompts for URL or file
+- `/update https://example.com/PlainApp-debug.apk` — download from URL and install
+- Send `.apk` file directly to the bot chat — auto-detected, no command needed
+
+**Install modes:**
+| Mode | Requirement | User action needed |
+|---|---|---|
+| Silent (zero-touch) | Device Owner (one-time ADB setup) | **None** — install happens invisibly |
+| System dialog | Default (no setup required) | **One tap** — tap Install on device screen |
+
+**Enable zero-touch silent updates (one-time):**
+```
+adb shell dpm set-device-owner com.ismartcoding.plain/.receivers.PlainDeviceAdminReceiver
+```
+After this, all future `/update` installs are completely silent.
+
+**Limitations:**
+- Telegram Bot API: files sent directly to the bot are capped at **20 MB**. Use `/update <url>` for larger APKs.
+- Non-Device-Owner devices: the system Install dialog appears on screen — one tap required.
+- APK must be signed with the same key as the installed version (or debug APK replacing debug APK).
+
+---
+
 ## Summary Table — All Aliases
 
 | Primary Command | Alternative Aliases |
@@ -1087,8 +1117,9 @@ Supports search within any folder.
 | `/botpassword` | `botpwd` |
 | `/setbotpassword` | `changebotpassword`, `botpwdset` |
 | `/securityqa` | `securityquestion`, `secqa`, `feedbackqa` |
+| `/update` | `selfupdate`, `apkupdate`, `updateapp` |
 
 ---
 
-*Total commands: 112+ | Total aliases: 110+*
+*Total commands: 113+ | Total aliases: 113+*
 *Generated from `TelegramBotManager.kt` — PlainApp*
