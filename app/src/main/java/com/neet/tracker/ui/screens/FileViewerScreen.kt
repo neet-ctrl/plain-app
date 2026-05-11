@@ -1263,9 +1263,9 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 exit     = slideOutVertically(tween(180)) { it } + fadeOut(tween(180))
             ) {
                 AnnotThumbPicker(
-                    pages       = displayPages,
+                    pages       = pdfPages,
                     currentPage = currentPage,
-                    totalPages  = displayPages.size,
+                    totalPages  = pdfPages.size,
                     allStrokes  = activeStrokes,
                     allStamps   = activeStamps,
                     onPageClick = { page ->
