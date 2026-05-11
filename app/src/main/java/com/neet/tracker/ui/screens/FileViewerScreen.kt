@@ -28,6 +28,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke as DrawStyle
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -220,10 +221,9 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var annotToolbarWidthDp  by remember { mutableFloatStateOf(240f) }
     var annotZoomEnabled     by remember { mutableStateOf(false) }
 
-    // ── Line Pointer ───────────────────────────────────────────────────────────
-    var linePointerEnabled      by remember { mutableStateOf(false) }
-    var linePointerColorArgb    by remember { mutableIntStateOf(android.graphics.Color.parseColor("#FF1744")) }
-    var linePointerYFraction    by remember { mutableFloatStateOf(0.35f) }
+    // ── Laser Pointer ─────────────────────────────────────────────────────────
+    var linePointerEnabled   by remember { mutableStateOf(false) }
+    var linePointerColorArgb by remember { mutableIntStateOf(android.graphics.Color.parseColor("#FF1744")) }
 
     // ── Annotation / Draw-on-PDF ───────────────────────────────────────────────
     val annoScope           = rememberCoroutineScope()
@@ -939,15 +939,9 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             )
         }
 
-        // ── Line Pointer Overlay (draggable glowing line across the page) ─────
+        // ── Laser Pointer Overlay ─────────────────────────────────────────────
         if (linePointerEnabled && pdfPages.isNotEmpty()) {
-            LinePointerOverlay(
-                colorArgb  = linePointerColorArgb,
-                yFraction  = linePointerYFraction,
-                onDragY    = { dy, totalHeightPx ->
-                    linePointerYFraction = (linePointerYFraction + dy / totalHeightPx).coerceIn(0.02f, 0.98f)
-                }
-            )
+            LinePointerOverlay(colorArgb = linePointerColorArgb)
         }
         if (showSolutionWindow && solutionUri.isNotBlank()) {
             FloatingSolutionViewer(
@@ -1754,83 +1748,81 @@ private fun PdfAnnotationOverlay(
     }
 }
 
-// ─── Line Pointer Overlay ──────────────────────────────────────────────────────
-// A full-screen transparent overlay that renders a bright glowing horizontal
-// reading-ruler line. The user drags it vertically to point at any line of text.
+// ─── Laser Pointer Overlay ─────────────────────────────────────────────────────
+// A full-screen transparent overlay that renders a bright glowing laser dot that
+// follows the user's finger and leaves a short fading trail — exactly like a real
+// laser pointer in PDF presentation software (PDF Annotator, GoodNotes, etc.).
+// The trail is fully temporary: it fades away ~1.2 s after the user stops drawing.
+
+private data class LaserDot(val x: Float, val y: Float, val timeMs: Long)
 
 @Composable
-private fun LinePointerOverlay(
-    colorArgb: Int,
-    yFraction: Float,
-    onDragY: (dy: Float, totalHeightPx: Float) -> Unit,
-) {
-    val density   = LocalDensity.current
-    val lineColor = Color(colorArgb)
+private fun LinePointerOverlay(colorArgb: Int) {
+    val color         = Color(colorArgb)
+    val trailMs       = 1200L
 
-    val inf     = rememberInfiniteTransition(label = "lp_pulse")
-    val pulse   by inf.animateFloat(
-        initialValue  = 0.55f,
-        targetValue   = 1f,
-        animationSpec = infiniteRepeatable(tween(900, easing = EaseInOutSine), RepeatMode.Reverse),
-        label         = "lp_pulse_v"
-    )
+    var dots by remember { mutableStateOf<List<LaserDot>>(emptyList()) }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val totalHeightPx = with(density) { maxHeight.toPx() }
-        val yPx           = totalHeightPx * yFraction
+    // Frame-driven clock so the trail fades smoothly at ~60 fps without any delay().
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) { withFrameMillis { t -> nowMs = t } }
+    }
 
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(yFraction) {
-                    detectDragGestures { _, drag ->
-                        onDragY(drag.y, totalHeightPx)
-                    }
-                }
-        ) {
-            val w = size.width
+    // Trim expired trail points on every frame — this drives recomposition
+    val visibleDots = remember(nowMs, dots) {
+        val cutoff = nowMs - trailMs
+        dots.filter { it.timeMs >= cutoff }
+    }
 
-            // Soft outer glow band
-            drawRect(
-                brush  = Brush.verticalGradient(
-                    colors     = listOf(Color.Transparent, lineColor.copy(alpha = 0.18f * pulse), Color.Transparent),
-                    startY     = yPx - 18.dp.toPx(),
-                    endY       = yPx + 18.dp.toPx()
-                ),
-                topLeft = Offset(0f, yPx - 18.dp.toPx()),
-                size    = androidx.compose.ui.geometry.Size(w, 36.dp.toPx())
-            )
+    Canvas(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(colorArgb) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        dots = listOf(LaserDot(offset.x, offset.y, System.currentTimeMillis()))
+                    },
+                    onDrag = { change, _ ->
+                        val t      = System.currentTimeMillis()
+                        val cutoff = t - trailMs
+                        dots = (dots.filter { it.timeMs >= cutoff } +
+                                LaserDot(change.position.x, change.position.y, t))
+                            .takeLast(300)
+                    },
+                    onDragEnd    = { /* trail fades naturally via the frame clock */ },
+                    onDragCancel = {}
+                )
+            }
+    ) {
+        if (visibleDots.isEmpty()) return@Canvas
 
-            // Medium glow line
+        // ── Fading trail ────────────────────────────────────────────────────
+        for (i in 1 until visibleDots.size) {
+            val prev  = visibleDots[i - 1]
+            val curr  = visibleDots[i]
+            val age   = nowMs - curr.timeMs
+            val alpha = (1f - age.toFloat() / trailMs).coerceIn(0f, 1f)
             drawLine(
-                color       = lineColor.copy(alpha = 0.38f * pulse),
-                start       = Offset(0f, yPx),
-                end         = Offset(w, yPx),
-                strokeWidth = 8.dp.toPx(),
+                color       = color.copy(alpha = alpha * 0.88f),
+                start       = Offset(prev.x, prev.y),
+                end         = Offset(curr.x, curr.y),
+                strokeWidth = (7.dp.toPx() * alpha).coerceAtLeast(1f),
                 cap         = StrokeCap.Round
-            )
-
-            // Bright core line
-            drawLine(
-                color       = lineColor.copy(alpha = 0.92f),
-                start       = Offset(0f, yPx),
-                end         = Offset(w, yPx),
-                strokeWidth = 2.5.dp.toPx(),
-                cap         = StrokeCap.Round
-            )
-
-            // Drag handle dot at left edge
-            drawCircle(
-                color  = lineColor,
-                radius = 6.dp.toPx(),
-                center = Offset(18.dp.toPx(), yPx)
-            )
-            drawCircle(
-                color  = Color.White.copy(0.9f),
-                radius = 3.dp.toPx(),
-                center = Offset(18.dp.toPx(), yPx)
             )
         }
+
+        // ── Glowing dot at the current (newest) tip ─────────────────────────
+        val tip      = visibleDots.last()
+        val tipAge   = nowMs - tip.timeMs
+        val tipAlpha = (1f - tipAge.toFloat() / trailMs).coerceIn(0f, 1f)
+        val cx       = tip.x
+        val cy       = tip.y
+
+        drawCircle(color = color.copy(alpha = 0.18f * tipAlpha), radius = 30.dp.toPx(), center = Offset(cx, cy))
+        drawCircle(color = color.copy(alpha = 0.40f * tipAlpha), radius = 16.dp.toPx(), center = Offset(cx, cy))
+        drawCircle(color = color.copy(alpha = 0.90f * tipAlpha), radius =  7.dp.toPx(), center = Offset(cx, cy))
+        drawCircle(color = Color.White.copy(alpha = 0.95f * tipAlpha), radius = 2.8.dp.toPx(), center = Offset(cx, cy))
     }
 }
 
@@ -2332,7 +2324,7 @@ private fun FloatingAnnotToolbar(
                         }
                     }
 
-                    // ── Line Pointer section ───────────────────────────────────
+                    // ── Laser Pointer section ──────────────────────────────────
                     Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color.White.copy(0.12f)))
 
                     val lpColor = Color(linePointerColorArgb)
@@ -2363,22 +2355,19 @@ private fun FloatingAnnotToolbar(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(7.dp)
                         ) {
-                            // Line pointer icon — three stacked lines with middle one highlighted
-                            Canvas(modifier = Modifier.size(width = 18.dp, height = 14.dp)) {
-                                val w = size.width; val h = size.height
-                                val lineColor = if (linePointerEnabled) lpColor else Color.White.copy(0.3f)
-                                val dimColor  = Color.White.copy(0.15f)
-                                drawLine(dimColor,  Offset(0f, h * 0.15f), Offset(w, h * 0.15f), strokeWidth = 1.5.dp.toPx(), cap = StrokeCap.Round)
-                                drawLine(lineColor, Offset(0f, h * 0.5f),  Offset(w, h * 0.5f),  strokeWidth = if (linePointerEnabled) 3.dp.toPx() else 1.5.dp.toPx(), cap = StrokeCap.Round)
-                                if (linePointerEnabled) {
-                                    drawLine(lpColor.copy(0.35f), Offset(0f, h * 0.5f), Offset(w, h * 0.5f),
-                                        strokeWidth = 8.dp.toPx(), cap = StrokeCap.Round)
-                                }
-                                drawLine(dimColor,  Offset(0f, h * 0.85f), Offset(w, h * 0.85f), strokeWidth = 1.5.dp.toPx(), cap = StrokeCap.Round)
+                            // Laser dot icon — glowing circle with outer ring
+                            Canvas(modifier = Modifier.size(18.dp)) {
+                                val cx = size.width / 2f
+                                val cy = size.height / 2f
+                                val dotColor = if (linePointerEnabled) lpColor else Color.White.copy(0.3f)
+                                drawCircle(color = dotColor.copy(alpha = 0.22f), radius = 8.dp.toPx(), center = Offset(cx, cy))
+                                drawCircle(color = dotColor.copy(alpha = 0.55f), radius = 4.5.dp.toPx(), center = Offset(cx, cy))
+                                drawCircle(color = dotColor.copy(alpha = 1f),    radius = 2.2.dp.toPx(), center = Offset(cx, cy))
+                                drawCircle(color = Color.White.copy(alpha = if (linePointerEnabled) 0.9f else 0.4f), radius = 0.9.dp.toPx(), center = Offset(cx, cy))
                             }
 
                             Text(
-                                "Line Pointer",
+                                "Laser Pointer",
                                 style      = MaterialTheme.typography.labelMedium,
                                 color      = if (linePointerEnabled) Color.White else Color.White.copy(0.55f),
                                 fontWeight = if (linePointerEnabled) FontWeight.Bold else FontWeight.Normal,
