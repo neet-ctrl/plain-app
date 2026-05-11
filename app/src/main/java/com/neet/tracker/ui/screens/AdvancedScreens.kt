@@ -1,6 +1,9 @@
+@file:OptIn(ExperimentalLayoutApi::class)
+
 package com.neet.tracker.ui.screens
 
 import android.content.Intent
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
