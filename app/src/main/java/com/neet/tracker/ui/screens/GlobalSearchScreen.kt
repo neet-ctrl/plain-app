@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.neet.tracker.ui.components.SpaceBackground
 import com.neet.tracker.ui.theme.*
 import com.neet.tracker.ui.viewmodels.*
 
@@ -282,7 +283,7 @@ fun GlobalSearchScreen(
                 else -> {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, top = 8.dp, bottom = 24.dp),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(0.dp)
                     ) {
                         grouped.entries.sortedBy { it.key.ordinal }.forEach { (cat, items) ->

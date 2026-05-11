@@ -300,7 +300,6 @@ interface NEETDao {
     @Query("SELECT COUNT(*) FROM diary_entries")     fun countDiaryEntries(): Flow<Int>
     @Query("SELECT COUNT(DISTINCT date) FROM date_events") fun countEventDates(): Flow<Int>
     @Query("SELECT COUNT(*) FROM dictionary_neet")   fun countNeetDict(): Flow<Int>
-    @Query("SELECT COUNT(*) FROM mnemonics")         fun countMnemonics(): Flow<Int>
     @Query("SELECT COUNT(*) FROM diagrams")          fun countDiagrams(): Flow<Int>
     @Query("SELECT COUNT(*) FROM chapter_short_notes") fun countChapterNotes(): Flow<Int>
     @Query("SELECT COUNT(*) FROM day_waste")         fun countDayWaste(): Flow<Int>

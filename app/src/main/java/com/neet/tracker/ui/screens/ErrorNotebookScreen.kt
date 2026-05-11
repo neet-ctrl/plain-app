@@ -668,8 +668,7 @@ private fun AddEditErrorDialog(
                             modifier = Modifier.height(136.dp),
                             userScrollEnabled = false
                         ) {
-                            gridItems(ErrorType.values().size) { i ->
-                                val t = ErrorType.values()[i]
+                            gridItems(ErrorType.values().toList()) { t ->
                                 val sel = errorType == t
                                 Box(
                                     modifier = Modifier
