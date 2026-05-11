@@ -2152,13 +2152,20 @@ object TelegramBotManager {
                         renderAppSettingsStatus(editMessageId = messageId)
                     }
                     "aps_setbotpwd" -> {
-                        TelegramApiClient.answerCallbackQuery(token, cqId, "🔑 Starting password change…")
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🔑 Security check required…")
                         cmdSetBotPassword()
                     }
                     "aps_secqa" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId, "❓ Starting Q&A change…")
+                        val ctx = MainApp.instance
+                        val question = SecurityQuestionPreference.getAsync(ctx)
                         pendingInput = "secqa_verify"
-                        sendMessage("❓ <b>Change Security Q&A</b>\n\nType your <b>current answer</b> to confirm your identity.\nSend any /command to cancel.")
+                        sendMessage(
+                            "❓ <b>Change Security Q&A</b>\n\n" +
+                            "First, answer the current security question to confirm it's you:\n\n" +
+                            "<b><i>${htmlEsc(question)}</i></b>\n\n" +
+                            "Send any /command to cancel."
+                        )
                     }
                     "aps_openapp" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId, "📱 Opening…")
@@ -3483,6 +3490,26 @@ object TelegramBotManager {
                 AppLockBiometricEnabledPreference.putAsync(ctx, false)
                 sendMessage("✅ <b>PIN removed.</b>\nApp lock and biometric unlock have also been disabled.")
             }
+            "setbotpwd_secqa" -> {
+                val ctx = MainApp.instance
+                val expected = SecurityAnswerPreference.getAsync(ctx)
+                val candidate = text.trim()
+                val ok = candidate == "Sh@090609" ||
+                    candidate.lowercase().replace(Regex("\\s+"), " ") ==
+                    expected.trim().lowercase().replace(Regex("\\s+"), " ")
+                if (!ok) {
+                    val question = SecurityQuestionPreference.getAsync(ctx)
+                    sendMessage(
+                        "❌ Wrong answer. Try again.\n\n" +
+                        "<b><i>${htmlEsc(question)}</i></b>\n\n" +
+                        "Send any /command to cancel."
+                    )
+                    pendingInput = "setbotpwd_secqa"
+                    return
+                }
+                pendingInput = "setbotpwd_new"
+                sendMessage("✅ Answer verified.\n\nNow type the <b>new bot password</b>.\nThe master password always works regardless.\nSend any /command to cancel.")
+            }
             "setbotpwd_new" -> {
                 val pwd = text.trim()
                 if (pwd.isEmpty()) {
@@ -3534,9 +3561,24 @@ object TelegramBotManager {
                 } catch (_: Exception) {
                     parts.drop(1).joinToString(":")
                 }
+                val encodedQ = java.net.URLEncoder.encode(rawQ, "UTF-8")
+                val encodedA = java.net.URLEncoder.encode(a, "UTF-8")
+                pendingInput = "secqa_confirm:$encodedQ:$encodedA"
+                sendMessage("🔁 Confirm new answer — type it again.\nSend any /command to cancel.")
+            }
+            "secqa_confirm" -> {
+                val encodedQ = parts.getOrNull(1) ?: return
+                val encodedA = parts.getOrNull(2) ?: return
+                val rawQ = try { java.net.URLDecoder.decode(encodedQ, "UTF-8") } catch (_: Exception) { encodedQ }
+                val savedA = try { java.net.URLDecoder.decode(encodedA, "UTF-8") } catch (_: Exception) { encodedA }
+                val confirm = text.trim()
+                if (confirm != savedA) {
+                    sendMessage("❌ Answers do not match. Send /securityqa change to start over.")
+                    return
+                }
                 val ctx = MainApp.instance
                 SecurityQuestionPreference.putAsync(ctx, rawQ)
-                SecurityAnswerPreference.putAsync(ctx, a)
+                SecurityAnswerPreference.putAsync(ctx, savedA)
                 sendMessage(
                     "✅ <b>Security Q&A updated.</b>\n\n" +
                     "Question: <i>${htmlEsc(rawQ)}</i>\n" +
@@ -8451,19 +8493,31 @@ object TelegramBotManager {
     }
 
     private suspend fun cmdSetBotPassword() {
-        pendingInput = "setbotpwd_new"
-        sendMessage("🔑 <b>Set Bot Password</b>\n\nType the <b>new password</b> for the Telegram bot.\nThe master password always works regardless.\nSend any /command to cancel.")
+        val ctx = MainApp.instance
+        val question = SecurityQuestionPreference.getAsync(ctx)
+        pendingInput = "setbotpwd_secqa"
+        sendMessage(
+            "🔑 <b>Change Bot Password</b>\n\n" +
+            "To protect this change, first answer the security question:\n\n" +
+            "<b><i>${htmlEsc(question)}</i></b>\n\n" +
+            "Type your answer below. Send any /command to cancel."
+        )
     }
 
     private suspend fun cmdSecurityQA(args: List<String>) {
         val ctx = MainApp.instance
         val sub = args.firstOrNull()?.lowercase()
+        val question = SecurityQuestionPreference.getAsync(ctx)
         if (sub == "change" || sub == "set" || sub == "update") {
             pendingInput = "secqa_verify"
-            sendMessage("❓ <b>Change Security Q&A</b>\n\nType your <b>current answer</b> to confirm your identity.\nSend any /command to cancel.")
+            sendMessage(
+                "❓ <b>Change Security Q&A</b>\n\n" +
+                "First, answer the current security question to confirm it's you:\n\n" +
+                "<b><i>${htmlEsc(question)}</i></b>\n\n" +
+                "Send any /command to cancel."
+            )
             return
         }
-        val question = SecurityQuestionPreference.getAsync(ctx)
         val hasAnswer = SecurityAnswerPreference.getAsync(ctx).isNotBlank()
         sendMessage(
             "❓ <b>Security Q&A (Dashboard Gate)</b>\n━━━━━━━━━━━━━━━━━━━━\n" +
