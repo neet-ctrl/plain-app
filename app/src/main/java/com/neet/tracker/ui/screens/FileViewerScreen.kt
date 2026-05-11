@@ -55,6 +55,7 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -2728,8 +2729,10 @@ private fun AnnotSidebar(
                 modifier = Modifier
                     .size(44.dp)
                     .pointerInput(Unit) {
-                        launch { detectTapGestures(onTap = { onCollapse() }) }
-                        detectDragGestures { _, drag -> onDrag(drag.x, drag.y) }
+                        coroutineScope {
+                            launch { detectTapGestures(onTap = { onCollapse() }) }
+                            launch { detectDragGestures { _, drag -> onDrag(drag.x, drag.y) } }
+                        }
                     },
                 contentAlignment = Alignment.Center
             ) {
