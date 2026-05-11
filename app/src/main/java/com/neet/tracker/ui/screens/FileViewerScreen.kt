@@ -300,6 +300,13 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var annoRedoStack       by remember { mutableStateOf<List<Map<Int, List<AnnotationStroke>>>>(emptyList()) }
     var allPageTextBoxes    by remember { mutableStateOf<Map<Int, List<AnnotationTextBox>>>(emptyMap()) }
     var pendingTextPos      by remember { mutableStateOf<Pair<Float, Float>?>(null) }
+    var pendingEditTextBox  by remember { mutableStateOf<AnnotationTextBox?>(null) }
+    var lastTextColorArgb   by remember { mutableIntStateOf(android.graphics.Color.WHITE) }
+    var lastTextFontSize    by remember { mutableFloatStateOf(14f) }
+    var lastTextBold        by remember { mutableStateOf(false) }
+    var lastTextItalic      by remember { mutableStateOf(false) }
+    var lastTextBgArgb      by remember { mutableIntStateOf(0) }
+    var lastTextBorder      by remember { mutableStateOf(true) }
     var showSolutionWindow  by remember { mutableStateOf(false) }
     var isSwapped           by remember { mutableStateOf(false) }
     var solutionPages       by remember { mutableStateOf<List<Bitmap>>(emptyList()) }
@@ -796,6 +803,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                         allPageTextBoxes = allPageTextBoxes + (currentPage to upd)
                         annoScope.launch { AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes) }
                     },
+                    onTextBoxTap = { tb -> pendingEditTextBox = tb },
                     pageImageBoxes  = allPageImageBoxes[currentPage] ?: emptyList(),
                     onImageTap      = { xNorm, yNorm ->
                         pendingImageTapPos = Pair(xNorm, yNorm)
@@ -1256,15 +1264,49 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
         }
         pendingTextPos?.let { (xNorm, yNorm) ->
             TextBoxEditorDialog(
-                xNorm = xNorm,
-                yNorm = yNorm,
+                xNorm            = xNorm,
+                yNorm            = yNorm,
+                initialColorArgb = lastTextColorArgb,
+                initialFontSize  = lastTextFontSize,
+                initialBold      = lastTextBold,
+                initialItalic    = lastTextItalic,
+                initialBgArgb    = lastTextBgArgb,
+                initialBorder    = lastTextBorder,
                 onSave = { tb ->
+                    lastTextColorArgb = tb.colorArgb
+                    lastTextFontSize  = tb.fontSizeSp
+                    lastTextBold      = tb.isBold
+                    lastTextItalic    = tb.isItalic
+                    lastTextBgArgb    = tb.bgArgb
+                    lastTextBorder    = tb.hasBorder
                     val cur = allPageTextBoxes[currentPage] ?: emptyList()
                     allPageTextBoxes = allPageTextBoxes + (currentPage to cur + tb)
                     annoScope.launch { AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes) }
                     pendingTextPos = null
                 },
                 onDismiss = { pendingTextPos = null }
+            )
+        }
+        pendingEditTextBox?.let { tb ->
+            TextBoxEditorDialog(
+                xNorm       = tb.xNorm,
+                yNorm       = tb.yNorm,
+                existingBox = tb,
+                onSave = { updated ->
+                    val cur = allPageTextBoxes[currentPage] ?: emptyList()
+                    val upd = cur.map { if (it.id == tb.id) updated.copy(id = tb.id) else it }
+                    allPageTextBoxes = allPageTextBoxes + (currentPage to upd)
+                    annoScope.launch { AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes) }
+                    pendingEditTextBox = null
+                },
+                onDelete = {
+                    val cur = allPageTextBoxes[currentPage] ?: emptyList()
+                    val upd = cur.filter { it.id != tb.id }
+                    allPageTextBoxes = allPageTextBoxes + (currentPage to upd)
+                    annoScope.launch { AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes) }
+                    pendingEditTextBox = null
+                },
+                onDismiss = { pendingEditTextBox = null }
             )
         }
     }
@@ -1423,6 +1465,7 @@ private fun UvPdfPage(
     pageTextBoxes: List<AnnotationTextBox> = emptyList(),
     onTextBoxPlace: (Float, Float) -> Unit = { _, _ -> },
     onTextBoxDelete: (String) -> Unit = {},
+    onTextBoxTap: (AnnotationTextBox) -> Unit = {},
     pageImageBoxes: List<AnnotationImageBox> = emptyList(),
     onImageTap: (Float, Float) -> Unit = { _, _ -> },
     onImageBoxUpdate: (AnnotationImageBox) -> Unit = {},
@@ -1617,6 +1660,9 @@ private fun UvPdfPage(
                                     if (tb.hasBorder) Modifier.border(1.dp, Color(tb.colorArgb).copy(0.75f), RoundedCornerShape(8.dp))
                                     else Modifier
                                 )
+                                .then(
+                                    if (annotationMode) Modifier.clickable { onTextBoxTap(tb) } else Modifier
+                                )
                                 .padding(horizontal = 7.dp, vertical = 5.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1629,17 +1675,13 @@ private fun UvPdfPage(
                                     lineHeight = (tb.fontSizeSp * 1.35f).sp
                                 )
                                 if (annotationMode) {
-                                    Spacer(Modifier.width(3.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .size(17.dp)
-                                            .background(NeonRed.copy(0.88f), CircleShape)
-                                            .border(1.dp, NeonRed, CircleShape)
-                                            .clickable { onTextBoxDelete(tb.id) },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(10.dp))
-                                    }
+                                    Spacer(Modifier.width(4.dp))
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        null,
+                                        tint     = Color(tb.colorArgb).copy(0.6f),
+                                        modifier = Modifier.size(11.dp)
+                                    )
                                 }
                             }
                         }
@@ -4197,16 +4239,26 @@ private fun UvViewerControls(
 private fun TextBoxEditorDialog(
     xNorm: Float,
     yNorm: Float,
+    existingBox: AnnotationTextBox? = null,
+    initialColorArgb: Int = android.graphics.Color.WHITE,
+    initialFontSize: Float = 14f,
+    initialBold: Boolean = false,
+    initialItalic: Boolean = false,
+    initialBgArgb: Int = 0,
+    initialBorder: Boolean = true,
     onSave: (AnnotationTextBox) -> Unit,
+    onDelete: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
-    var text      by remember { mutableStateOf("") }
-    var colorArgb by remember { mutableIntStateOf(android.graphics.Color.WHITE) }
-    var fontSize  by remember { mutableFloatStateOf(14f) }
-    var isBold    by remember { mutableStateOf(false) }
-    var isItalic  by remember { mutableStateOf(false) }
-    var bgArgb    by remember { mutableIntStateOf(0) }
-    var hasBorder by remember { mutableStateOf(true) }
+    val isEditing = existingBox != null
+    var text      by remember { mutableStateOf(existingBox?.text ?: "") }
+    var colorArgb by remember { mutableIntStateOf(existingBox?.colorArgb ?: initialColorArgb) }
+    var fontSize  by remember { mutableFloatStateOf(existingBox?.fontSizeSp ?: initialFontSize) }
+    var isBold    by remember { mutableStateOf(existingBox?.isBold ?: initialBold) }
+    var isItalic  by remember { mutableStateOf(existingBox?.isItalic ?: initialItalic) }
+    var bgArgb    by remember { mutableIntStateOf(existingBox?.bgArgb ?: initialBgArgb) }
+    var hasBorder by remember { mutableStateOf(existingBox?.hasBorder ?: initialBorder) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -4228,9 +4280,61 @@ private fun TextBoxEditorDialog(
                             .border(1.dp, NeonCyan.copy(0.6f), RoundedCornerShape(13.dp)),
                         contentAlignment = Alignment.Center
                     ) { Icon(Icons.Default.TextFields, null, tint = NeonCyan, modifier = Modifier.size(22.dp)) }
-                    Column {
-                        Text("Add Text Label", style = MaterialTheme.typography.headlineSmall, color = NeonCyan, fontWeight = FontWeight.ExtraBold)
-                        Text("Customise & place on PDF", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.38f))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            if (isEditing) "Edit Text Label" else "Add Text Label",
+                            style = MaterialTheme.typography.headlineSmall, color = NeonCyan, fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            if (isEditing) "Tap · Place to save changes" else "Customise & place on PDF",
+                            style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.38f)
+                        )
+                    }
+                    if (isEditing && onDelete != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .shadow(6.dp, RoundedCornerShape(10.dp), spotColor = NeonRed.copy(0.4f))
+                                .background(NeonRed.copy(0.15f), RoundedCornerShape(10.dp))
+                                .border(1.dp, NeonRed.copy(0.5f), RoundedCornerShape(10.dp))
+                                .clickable { showDeleteConfirm = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Delete, null, tint = NeonRed, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+                if (showDeleteConfirm && onDelete != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(NeonRed.copy(0.08f), RoundedCornerShape(12.dp))
+                            .border(1.dp, NeonRed.copy(0.35f), RoundedCornerShape(12.dp))
+                            .padding(12.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Delete this text label?", style = MaterialTheme.typography.bodySmall, color = NeonRed, fontWeight = FontWeight.SemiBold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(Color.White.copy(0.05f), RoundedCornerShape(8.dp))
+                                        .border(0.5.dp, Color.White.copy(0.2f), RoundedCornerShape(8.dp))
+                                        .clickable { showDeleteConfirm = false }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) { Text("Cancel", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(0.6f)) }
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(NeonRed.copy(0.22f), RoundedCornerShape(8.dp))
+                                        .border(1.dp, NeonRed.copy(0.7f), RoundedCornerShape(8.dp))
+                                        .clickable { onDelete() }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) { Text("Delete", style = MaterialTheme.typography.labelMedium, color = NeonRed, fontWeight = FontWeight.Bold) }
+                            }
+                        }
                     }
                 }
                 Box(modifier = Modifier.fillMaxWidth().height(0.5.dp)
@@ -4455,13 +4559,18 @@ private fun TextBoxEditorDialog(
                     .padding(horizontal = 18.dp, vertical = 10.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(Icons.Default.TextFields, null,
+                    Icon(
+                        if (isEditing) Icons.Default.Check else Icons.Default.TextFields,
+                        null,
                         tint     = NeonCyan.copy(if (text.isBlank()) 0.35f else 1f),
-                        modifier = Modifier.size(14.dp))
-                    Text("Place Label",
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        if (isEditing) "Save Changes" else "Place Label",
                         color      = NeonCyan.copy(if (text.isBlank()) 0.35f else 1f),
                         fontWeight = FontWeight.ExtraBold,
-                        style      = MaterialTheme.typography.labelLarge)
+                        style      = MaterialTheme.typography.labelLarge
+                    )
                 }
             }
         },
