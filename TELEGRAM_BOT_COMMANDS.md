@@ -911,6 +911,85 @@ Supports search within any folder.
 
 ---
 
+## App Settings
+
+### `/appsettings`
+**Description:** Shows a full overview of all app security settings with inline toggle buttons. The single hub for everything below.
+**Aliases:** `appsetting`
+**Usage:** `/appsettings`
+
+---
+
+### `/hideicon`
+**Description:** Hide or show the PlainApp launcher icon on the device home screen.
+**Aliases:** `launchericon`, `iconhide`
+**Usage:** `/hideicon` (show status) | `/hideicon on` (hide) | `/hideicon off` (show)
+
+---
+
+### `/applock`
+**Description:** Enable or disable the app-open PIN lock. Requires a PIN to already be set via `/setpin`.
+**Aliases:** *(none — `/applocker` is a different feature for locking individual apps)*
+**Usage:** `/applock` (show status) | `/applock on` | `/applock off`
+
+---
+
+### `/biometric`
+**Description:** Enable or disable fingerprint / face-unlock for the PlainApp app lock.
+**Aliases:** *(none)*
+**Usage:** `/biometric` (show status) | `/biometric on` | `/biometric off`
+
+---
+
+### `/appinfog`
+**Description:** Enable or disable the App info guard — blocks Android's system "App info" page (long-press icon → App info, or Settings → Apps) behind the PlainApp PIN. Requires a PIN to be set first.
+**Aliases:** `appinfoguard`
+**Usage:** `/appinfog` (show status) | `/appinfog on` | `/appinfog off`
+
+---
+
+### `/setpin`
+**Description:** Interactively set or change the app unlock PIN (4–12 digits). If a PIN already exists you will be asked for the current one first.
+**Aliases:** `changepin`
+**Usage:** `/setpin` → follow interactive prompts
+
+---
+
+### `/removepin`
+**Description:** Interactively remove the app unlock PIN. Also disables app lock and biometric unlock. Requires entering the current PIN to confirm.
+**Aliases:** `deletepin`
+**Usage:** `/removepin` → follow interactive prompts
+
+---
+
+### `/openapp`
+**Description:** Brings the PlainApp main screen to the foreground on the device. Useful after a fresh boot or when the app is backgrounded.
+**Aliases:** `openappdevice`, `launchapp`
+**Usage:** `/openapp`
+
+---
+
+### `/botpassword`
+**Description:** Enable or disable the Telegram bot password protection. When enabled, the bot asks for a password at session start (15 min timeout). The master password always works.
+**Aliases:** `botpwd`
+**Usage:** `/botpassword` (show status) | `/botpassword on` | `/botpassword off`
+
+---
+
+### `/setbotpassword`
+**Description:** Interactively change the Telegram bot session password.
+**Aliases:** `changebotpassword`, `botpwdset`
+**Usage:** `/setbotpassword` → type new password when prompted
+
+---
+
+### `/securityqa`
+**Description:** View the current dashboard security question, or start an interactive flow to change both the question and answer used by the web panel's feedback/dashboard gate.
+**Aliases:** `securityquestion`, `secqa`, `feedbackqa`
+**Usage:** `/securityqa` (show current) | `/securityqa change` (interactive update)
+
+---
+
 ## Summary Table — All Aliases
 
 | Primary Command | Alternative Aliases |
@@ -988,10 +1067,20 @@ Supports search within any folder.
 | `/fwdfiles` | `forwardedfiles`, `sentfiles` |
 | `/filestats` | `filequeue`, `uploadstats` |
 | `/retryfailed` | `retryfiles`, `retryuploads` |
-| `/applocker` | `lockapps`, `applock`, `perapplock` |
+| `/applocker` | `lockapps`, `perapplock` |
 | `/intruders` | `captures`, `intrudercaptures` |
+| `/appsettings` | `appsetting` |
+| `/hideicon` | `launchericon`, `iconhide` |
+| `/applock` | *(see `/applocker` for per-app locks)* |
+| `/appinfog` | `appinfoguard` |
+| `/setpin` | `changepin` |
+| `/removepin` | `deletepin` |
+| `/openapp` | `openappdevice`, `launchapp` |
+| `/botpassword` | `botpwd` |
+| `/setbotpassword` | `changebotpassword`, `botpwdset` |
+| `/securityqa` | `securityquestion`, `secqa`, `feedbackqa` |
 
 ---
 
-*Total commands: 100+ | Total aliases: 100+*
+*Total commands: 112+ | Total aliases: 110+*
 *Generated from `TelegramBotManager.kt` — PlainApp*
