@@ -37,6 +37,8 @@ class BookViewModel @Inject constructor(private val dao: NEETDao) : ViewModel() 
 class PYQViewModel @Inject constructor(private val dao: NEETDao) : ViewModel() {
     val chapterwiseSources = dao.getPYQChapterwiseSources().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val yearwiseSources = dao.getPYQYearwiseSources().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val allChapters = dao.getAllPYQChapters().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val allYears = dao.getAllPYQYears().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     fun saveSource(s: PYQSource) = viewModelScope.launch { dao.savePYQSource(s) }
     fun deleteSource(s: PYQSource) = viewModelScope.launch { dao.deletePYQSource(s) }
     fun chaptersFor(srcId: String) = dao.getPYQChapters(srcId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -51,6 +53,7 @@ class PYQViewModel @Inject constructor(private val dao: NEETDao) : ViewModel() {
 class TestPaperViewModel @Inject constructor(private val dao: NEETDao) : ViewModel() {
     val onlineTests = dao.getOnlineTests().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val offlineTests = dao.getOfflineTests().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val allTests = dao.getAllTestPapers().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     fun save(t: TestPaper) = viewModelScope.launch { dao.saveTestPaper(t) }
     fun delete(t: TestPaper) = viewModelScope.launch { dao.deleteTestPaper(t) }
 }

@@ -217,6 +217,12 @@ interface NEETDao {
     fun getAllDateEventDates(): Flow<List<String>>
     @Query("SELECT date FROM diary_entries")
     fun getAllDiaryDates(): Flow<List<String>>
+    @Query("SELECT * FROM pyq_chapters ORDER BY rowid ASC")
+    fun getAllPYQChapters(): Flow<List<PYQChapter>>
+    @Query("SELECT * FROM pyq_years ORDER BY year ASC")
+    fun getAllPYQYears(): Flow<List<PYQYear>>
+    @Query("SELECT * FROM test_papers ORDER BY createdAt ASC")
+    fun getAllTestPapers(): Flow<List<TestPaper>>
 
     // ── Home card counts ──────────────────────────────────────────────────────
     @Query("SELECT COUNT(*) FROM notebooks")         fun countNotebooks(): Flow<Int>

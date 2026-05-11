@@ -49,6 +49,10 @@ private sealed class CalendarDetail {
     data class EventDetail(val event: DateEvent) : CalendarDetail()
     data class DiaryDetail(val diary: DailyDiary) : CalendarDetail()
     data class PlannerDetail(val plannerEvent: PlannerEvent, val entryId: String) : CalendarDetail()
+    data class TestPaperDetail(val paper: TestPaper) : CalendarDetail()
+    data class SamplePaperDetail(val paper: SamplePaper) : CalendarDetail()
+    data class PYQChapterDetail(val chapter: PYQChapter, val sourceName: String) : CalendarDetail()
+    data class PYQYearDetail(val year: PYQYear, val bookName: String) : CalendarDetail()
 }
 
 @Composable
@@ -56,13 +60,32 @@ fun UniversalCalendarScreen(navController: NavController) {
     val eventVm: DateEventViewModel = hiltViewModel()
     val diaryVm: DiaryViewModel = hiltViewModel()
     val dayPlannerVm: PlannerViewModel = hiltViewModel()
+    val testVm: TestPaperViewModel = hiltViewModel()
+    val sampleVm: SamplePaperViewModel = hiltViewModel()
+    val pyqVm: PYQViewModel = hiltViewModel()
 
     val dateEvents     by eventVm.allEvents.collectAsState()
     val diaryEntries   by diaryVm.entries.collectAsState()
     val plannerEntries by dayPlannerVm.dayEntries.collectAsState()
+    val allTests       by testVm.allTests.collectAsState()
+    val samplePapers   by sampleVm.papers.collectAsState()
+    val pyqChapters    by pyqVm.allChapters.collectAsState()
+    val pyqYears       by pyqVm.allYears.collectAsState()
+    val pyqSources     by pyqVm.chapterwiseSources.collectAsState()
+    val pyqBooks       by pyqVm.yearwiseSources.collectAsState()
 
-    val allDates = (dateEvents.map { it.date } + diaryEntries.map { it.date } + plannerEntries.map { it.date })
-        .distinct().sorted()
+    val testsWithDate   = allTests.filter { it.prefixDate.isNotBlank() }
+    val samplesWithDate = samplePapers.filter { it.prefixDate.isNotBlank() }
+
+    val allDates = (
+        dateEvents.map { it.date } +
+        diaryEntries.map { it.date } +
+        plannerEntries.map { it.date } +
+        testsWithDate.map { it.prefixDate } +
+        samplesWithDate.map { it.prefixDate } +
+        pyqChapters.flatMap { ch -> ch.completionDates.map { cd -> cd.date } } +
+        pyqYears.flatMap { yr -> yr.completionDates.map { cd -> cd.date } }
+    ).filter { it.isNotBlank() }.distinct().sorted()
 
     var calendarDetail by remember { mutableStateOf<CalendarDetail?>(null) }
 
@@ -75,14 +98,19 @@ fun UniversalCalendarScreen(navController: NavController) {
                 contentPadding = PaddingValues(bottom = 80.dp)
             ) {
                 if (allDates.isEmpty()) {
-                    item { EmptyState("No events found in any module yet.\nAdd events, plans, or diary entries to see them here.", Icons.Default.Today) }
+                    item { EmptyState("No events found in any module yet.\nAdd events, plans, diary entries, tests, or PYQ dates to see them here.", Icons.Default.Today) }
                 }
                 items(allDates) { date ->
-                    val eventsForDate  = dateEvents.filter { it.date == date }
-                    val diariesForDate = diaryEntries.filter { it.date == date }
-                    val plansForDate   = plannerEntries.filter { it.date == date }
-                    val plannerPairs   = plansForDate.flatMap { entry -> entry.events.map { ev -> ev to entry } }
-                    val total = eventsForDate.size + diariesForDate.size + plannerPairs.size
+                    val eventsForDate      = dateEvents.filter { it.date == date }
+                    val diariesForDate     = diaryEntries.filter { it.date == date }
+                    val plansForDate       = plannerEntries.filter { it.date == date }
+                    val plannerPairs       = plansForDate.flatMap { entry -> entry.events.map { ev -> ev to entry } }
+                    val testsForDate       = testsWithDate.filter { it.prefixDate == date }
+                    val samplesForDate     = samplesWithDate.filter { it.prefixDate == date }
+                    val pyqChaptersForDate = pyqChapters.filter { ch -> ch.completionDates.any { cd -> cd.date == date } }
+                    val pyqYearsForDate    = pyqYears.filter { yr -> yr.completionDates.any { cd -> cd.date == date } }
+                    val total = eventsForDate.size + diariesForDate.size + plannerPairs.size +
+                        testsForDate.size + samplesForDate.size + pyqChaptersForDate.size + pyqYearsForDate.size
 
                     GlassCard(glowColor = NeonCyan, modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -122,6 +150,48 @@ fun UniversalCalendarScreen(navController: NavController) {
                                     onItemTap = { i ->
                                         val (ev, entry) = plannerPairs[i]
                                         calendarDetail = CalendarDetail.PlannerDetail(ev, entry.id)
+                                    }
+                                )
+                            }
+                            if (testsForDate.isNotEmpty()) {
+                                CalendarSectionTappable(
+                                    label = "Test Papers", color = NeonGreen,
+                                    items = testsForDate.map { "${it.name} (${it.type})" to Icons.Default.Quiz },
+                                    onItemTap = { i -> calendarDetail = CalendarDetail.TestPaperDetail(testsForDate[i]) }
+                                )
+                            }
+                            if (samplesForDate.isNotEmpty()) {
+                                CalendarSectionTappable(
+                                    label = "Sample Papers", color = NeonOrange,
+                                    items = samplesForDate.map { it.name.ifBlank { "Sample Paper" } to Icons.Default.Description },
+                                    onItemTap = { i -> calendarDetail = CalendarDetail.SamplePaperDetail(samplesForDate[i]) }
+                                )
+                            }
+                            if (pyqChaptersForDate.isNotEmpty()) {
+                                CalendarSectionTappable(
+                                    label = "PYQ Chapters", color = NeonCyan,
+                                    items = pyqChaptersForDate.map { ch ->
+                                        val src = pyqSources.find { it.id == ch.sourceId }?.name ?: ""
+                                        "${ch.name}${if (src.isNotBlank()) " · $src" else ""}" to Icons.Default.MenuBook
+                                    },
+                                    onItemTap = { i ->
+                                        val ch = pyqChaptersForDate[i]
+                                        val src = pyqSources.find { it.id == ch.sourceId }?.name ?: ""
+                                        calendarDetail = CalendarDetail.PYQChapterDetail(ch, src)
+                                    }
+                                )
+                            }
+                            if (pyqYearsForDate.isNotEmpty()) {
+                                CalendarSectionTappable(
+                                    label = "PYQ Years", color = NeonPurple,
+                                    items = pyqYearsForDate.map { yr ->
+                                        val book = pyqBooks.find { it.id == yr.bookId }?.name ?: ""
+                                        "Year ${yr.year}${if (book.isNotBlank()) " · $book" else ""}" to Icons.Default.CalendarToday
+                                    },
+                                    onItemTap = { i ->
+                                        val yr = pyqYearsForDate[i]
+                                        val book = pyqBooks.find { it.id == yr.bookId }?.name ?: ""
+                                        calendarDetail = CalendarDetail.PYQYearDetail(yr, book)
                                     }
                                 )
                             }
@@ -205,9 +275,187 @@ fun UniversalCalendarScreen(navController: NavController) {
                                 }
                             )
                         }
+                        is CalendarDetail.TestPaperDetail -> {
+                            CalendarTestPaperCard(paper = detail.paper, onDismiss = { calendarDetail = null })
+                        }
+                        is CalendarDetail.SamplePaperDetail -> {
+                            CalendarSamplePaperCard(paper = detail.paper, onDismiss = { calendarDetail = null })
+                        }
+                        is CalendarDetail.PYQChapterDetail -> {
+                            CalendarPYQChapterCard(chapter = detail.chapter, sourceName = detail.sourceName, onDismiss = { calendarDetail = null })
+                        }
+                        is CalendarDetail.PYQYearDetail -> {
+                            CalendarPYQYearCard(year = detail.year, bookName = detail.bookName, onDismiss = { calendarDetail = null })
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CalendarTestPaperCard(paper: TestPaper, onDismiss: () -> Unit) {
+    val accentColor = if (paper.type == "ONLINE") NeonGreen else NeonOrange
+    GlassCard(glowColor = accentColor, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ThreeDIconBox(icon = Icons.Default.Quiz, tint = accentColor, size = 42.dp, iconSize = 22.dp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(paper.name.ifBlank { "Test Paper" }, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.ExtraBold)
+                    Text("${paper.type} · ${paper.prefixDate}", style = MaterialTheme.typography.labelSmall, color = accentColor.copy(0.8f))
+                }
+            }
+            NeonDivider(accentColor.copy(0.4f))
+            if (paper.marksObtained.isNotBlank()) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Star, null, tint = NeonGold, modifier = Modifier.size(14.dp))
+                    Text("Marks: ${paper.marksObtained}", style = MaterialTheme.typography.bodySmall, color = Color.White)
+                }
+            }
+            if (paper.topicsAsked.isNotBlank()) {
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Label, null, tint = accentColor.copy(0.7f), modifier = Modifier.size(14.dp))
+                    Text("Topics: ${paper.topicsAsked}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.8f))
+                }
+            }
+            if (paper.remark.isNotBlank()) {
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.StickyNote2, null, tint = NeonGold.copy(0.7f), modifier = Modifier.size(14.dp))
+                    Text(paper.remark, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.7f))
+                }
+            }
+            val statusColor = when (paper.status) { Status.COMPLETED -> StatusCompleted; Status.CROSSED -> StatusCross; Status.REVISION -> StatusRevision; else -> StatusExpected }
+            Box(modifier = Modifier.background(statusColor.copy(0.15f), RoundedCornerShape(10.dp)).border(0.5.dp, statusColor.copy(0.4f), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 5.dp)) {
+                Text(paper.status.name, style = MaterialTheme.typography.labelMedium, color = statusColor, fontWeight = FontWeight.Bold)
+            }
+            OutlinedButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth(), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Close") }
+        }
+    }
+}
+
+@Composable
+private fun CalendarSamplePaperCard(paper: SamplePaper, onDismiss: () -> Unit) {
+    val accentColor = NeonOrange
+    GlassCard(glowColor = accentColor, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ThreeDIconBox(icon = Icons.Default.Description, tint = accentColor, size = 42.dp, iconSize = 22.dp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(paper.name.ifBlank { "Sample Paper" }, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.ExtraBold)
+                    Text("Sample Paper · ${paper.prefixDate}", style = MaterialTheme.typography.labelSmall, color = accentColor.copy(0.8f))
+                }
+            }
+            NeonDivider(accentColor.copy(0.4f))
+            if (paper.marksObtained.isNotBlank()) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Star, null, tint = NeonGold, modifier = Modifier.size(14.dp))
+                    Text("Marks: ${paper.marksObtained}", style = MaterialTheme.typography.bodySmall, color = Color.White)
+                }
+            }
+            if (paper.remark.isNotBlank()) {
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.StickyNote2, null, tint = NeonGold.copy(0.7f), modifier = Modifier.size(14.dp))
+                    Text(paper.remark, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.7f))
+                }
+            }
+            val statusColor = when (paper.status) { Status.COMPLETED -> StatusCompleted; Status.CROSSED -> StatusCross; Status.REVISION -> StatusRevision; else -> StatusExpected }
+            Box(modifier = Modifier.background(statusColor.copy(0.15f), RoundedCornerShape(10.dp)).border(0.5.dp, statusColor.copy(0.4f), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 5.dp)) {
+                Text(paper.status.name, style = MaterialTheme.typography.labelMedium, color = statusColor, fontWeight = FontWeight.Bold)
+            }
+            OutlinedButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth(), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Close") }
+        }
+    }
+}
+
+@Composable
+private fun CalendarPYQChapterCard(chapter: PYQChapter, sourceName: String, onDismiss: () -> Unit) {
+    val accentColor = NeonCyan
+    GlassCard(glowColor = accentColor, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ThreeDIconBox(icon = Icons.Default.MenuBook, tint = accentColor, size = 42.dp, iconSize = 22.dp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(chapter.name.ifBlank { "PYQ Chapter" }, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.ExtraBold)
+                    if (sourceName.isNotBlank()) Text(sourceName, style = MaterialTheme.typography.labelSmall, color = accentColor.copy(0.8f))
+                }
+            }
+            NeonDivider(accentColor.copy(0.4f))
+            if (chapter.completionDates.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Completion Dates", style = MaterialTheme.typography.labelSmall, color = accentColor.copy(0.7f), fontWeight = FontWeight.SemiBold)
+                    chapter.completionDates.forEach { cd ->
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.CheckCircle, null, tint = StatusCompleted, modifier = Modifier.size(13.dp))
+                            Text(cd.date, style = MaterialTheme.typography.bodySmall, color = Color.White)
+                            if (cd.note.isNotBlank()) Text("· ${cd.note}", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
+                        }
+                    }
+                }
+            }
+            if (chapter.wrongQuestions.isNotBlank()) {
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.ErrorOutline, null, tint = NeonRed.copy(0.7f), modifier = Modifier.size(14.dp))
+                    Text("Wrong Qs: ${chapter.wrongQuestions}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.8f))
+                }
+            }
+            if (chapter.remark.isNotBlank()) {
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.StickyNote2, null, tint = NeonGold.copy(0.7f), modifier = Modifier.size(14.dp))
+                    Text(chapter.remark, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.7f))
+                }
+            }
+            val statusColor = when (chapter.status) { Status.COMPLETED -> StatusCompleted; Status.CROSSED -> StatusCross; Status.REVISION -> StatusRevision; else -> StatusExpected }
+            Box(modifier = Modifier.background(statusColor.copy(0.15f), RoundedCornerShape(10.dp)).border(0.5.dp, statusColor.copy(0.4f), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 5.dp)) {
+                Text(chapter.status.name, style = MaterialTheme.typography.labelMedium, color = statusColor, fontWeight = FontWeight.Bold)
+            }
+            OutlinedButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth(), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Close") }
+        }
+    }
+}
+
+@Composable
+private fun CalendarPYQYearCard(year: PYQYear, bookName: String, onDismiss: () -> Unit) {
+    val accentColor = NeonPurple
+    GlassCard(glowColor = accentColor, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ThreeDIconBox(icon = Icons.Default.CalendarToday, tint = accentColor, size = 42.dp, iconSize = 22.dp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("PYQ Year ${year.year}", style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.ExtraBold)
+                    if (bookName.isNotBlank()) Text(bookName, style = MaterialTheme.typography.labelSmall, color = accentColor.copy(0.8f))
+                }
+            }
+            NeonDivider(accentColor.copy(0.4f))
+            if (year.completionDates.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Completion Dates", style = MaterialTheme.typography.labelSmall, color = accentColor.copy(0.7f), fontWeight = FontWeight.SemiBold)
+                    year.completionDates.forEach { cd ->
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.CheckCircle, null, tint = StatusCompleted, modifier = Modifier.size(13.dp))
+                            Text(cd.date, style = MaterialTheme.typography.bodySmall, color = Color.White)
+                            if (cd.note.isNotBlank()) Text("· ${cd.note}", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
+                        }
+                    }
+                }
+            }
+            if (year.wrongQuestions.isNotBlank()) {
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.ErrorOutline, null, tint = NeonRed.copy(0.7f), modifier = Modifier.size(14.dp))
+                    Text("Wrong Qs: ${year.wrongQuestions}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.8f))
+                }
+            }
+            if (year.remark.isNotBlank()) {
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.StickyNote2, null, tint = NeonGold.copy(0.7f), modifier = Modifier.size(14.dp))
+                    Text(year.remark, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.7f))
+                }
+            }
+            val statusColor = when (year.status) { Status.COMPLETED -> StatusCompleted; Status.CROSSED -> StatusCross; Status.REVISION -> StatusRevision; else -> StatusExpected }
+            Box(modifier = Modifier.background(statusColor.copy(0.15f), RoundedCornerShape(10.dp)).border(0.5.dp, statusColor.copy(0.4f), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 5.dp)) {
+                Text(year.status.name, style = MaterialTheme.typography.labelMedium, color = statusColor, fontWeight = FontWeight.Bold)
+            }
+            OutlinedButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth(), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Close") }
         }
     }
 }
