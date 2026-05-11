@@ -28,6 +28,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke as DrawStyle
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -2024,7 +2025,8 @@ private fun ImageBoxItem(
                 if (annotationMode) Modifier.pointerInput(box.id) {
                     awaitPointerEventScope {
                         while (true) {
-                            val down  = awaitFirstDown(requireUnconsumed = false)
+                            val downEvt = awaitPointerEvent(PointerEventPass.Initial)
+                            val down = downEvt.changes.firstOrNull { it.pressed } ?: continue
                             val curWpx = liveBox.wNorm * imageWidthPx
                             val curHpx = liveBox.hNorm * imageHeightPx
                             val zone  = hitTestImgZone(down.position, padPx, curWpx, curHpx, handleR)
