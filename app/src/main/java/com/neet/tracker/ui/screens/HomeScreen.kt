@@ -296,21 +296,30 @@ fun HomeScreen(
                     )
                 }
 
+                // Routes that have already played their entrance animation — survives
+                // recompositions and scroll-up/down without replaying the animation.
+                val seenRoutes = remember { mutableSetOf<String>() }
+
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     contentPadding = PaddingValues(bottom = 100.dp)
                 ) {
-                    itemsIndexed(filtered) { index, card ->
-                        // Only stagger the first 6 cards (initial viewport).
-                        // Cards that enter via scrolling show instantly (delay = 0).
-                        val delay = if (index < 6) index * 45L else 0L
-                        var visible by remember { mutableStateOf(delay == 0L) }
-                        LaunchedEffect(Unit) {
-                            if (delay > 0L) {
-                                kotlinx.coroutines.delay(delay)
+                    itemsIndexed(
+                        items       = filtered,
+                        key         = { _, card -> card.route },   // preserves remember state across scrolling
+                        contentType = { _, _ -> "module_card" }
+                    ) { index, card ->
+                        // Stagger only on the very first appearance; never replay on scroll-up.
+                        val alreadySeen = card.route in seenRoutes
+                        val delay = if (!alreadySeen && index < 6) index * 45L else 0L
+                        var visible by remember { mutableStateOf(alreadySeen || delay == 0L) }
+                        LaunchedEffect(card.route) {
+                            if (!visible) {
+                                if (delay > 0L) kotlinx.coroutines.delay(delay)
                                 visible = true
+                                seenRoutes.add(card.route)
                             }
                         }
                         AnimatedVisibility(
@@ -825,16 +834,28 @@ fun HomeHeader(profile: StudentProfile?, navController: NavController) {
 
 @Composable
 fun HomeModuleCard(card: MainCard, count: Int? = null, onClick: () -> Unit) {
+    // Durations fixed once per composition — NOT inside animationSpec where they'd
+    // be re-evaluated on every recomposition and constantly restart the transition.
+    val glowDuration  = remember { (1800..2900).random() }
+    val shineDuration = remember { (4000..6000).random() }
+
     val infiniteTransition = rememberInfiniteTransition(label = "hmc_${card.title}")
     val glowAlpha by infiniteTransition.animateFloat(
         initialValue = 0.14f, targetValue = 0.36f,
-        animationSpec = infiniteRepeatable(tween((1800..2900).random(), easing = EaseInOutSine), RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(tween(glowDuration, easing = EaseInOutSine), RepeatMode.Reverse),
         label = "glow"
     )
     val shineOffset by infiniteTransition.animateFloat(
         initialValue = -1f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween((4000..6000).random(), easing = EaseInOutSine), RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(tween(shineDuration, easing = EaseInOutSine), RepeatMode.Reverse),
         label = "shine"
+    )
+    // Badge pulse must be declared unconditionally (Compose: no hooks inside ifs).
+    val badgeTransition = rememberInfiniteTransition(label = "badge_${card.title}")
+    val badgePulse by badgeTransition.animateFloat(
+        initialValue = 0.75f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1600, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "badge_pulse"
     )
     var pressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (pressed) 0.92f else 1f, spring(0.52f, 320f), label = "scale")
@@ -919,11 +940,6 @@ fun HomeModuleCard(card: MainCard, count: Int? = null, onClick: () -> Unit) {
         )
 
         if (count != null && count > 0) {
-            val badgePulse by rememberInfiniteTransition(label = "badge_${card.title}").animateFloat(
-                initialValue = 0.75f, targetValue = 1f,
-                animationSpec = infiniteRepeatable(tween(1600, easing = EaseInOutSine), RepeatMode.Reverse),
-                label = "badge_pulse"
-            )
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
