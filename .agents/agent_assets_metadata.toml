@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "JYUH1o1AA0SvynioPu4Il"
+uri = "file://docs/device-owner-guide.md"
+type = "text"
+title = "Device Owner Mode — Complete Guide"
