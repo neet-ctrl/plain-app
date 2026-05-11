@@ -65,7 +65,8 @@ fun PYQChapterwiseScreen(navController: NavController, vm: PYQViewModel = hiltVi
 
 @Composable
 fun PYQChapterwiseDetailScreen(navController: NavController, sourceId: String, sourceName: String, vm: PYQViewModel = hiltViewModel()) {
-    val chapters by vm.chaptersFor(sourceId).collectAsState()
+    val chaptersFlow = remember(sourceId) { vm.chaptersFor(sourceId) }
+    val chapters by chaptersFlow.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var showAdd by remember { mutableStateOf(false) }
     var showStatus by remember { mutableStateOf<PYQChapter?>(null) }
@@ -152,7 +153,8 @@ fun PYQYearwiseScreen(navController: NavController, vm: PYQViewModel = hiltViewM
 
 @Composable
 fun PYQYearwiseDetailScreen(navController: NavController, bookId: String, bookName: String, vm: PYQViewModel = hiltViewModel()) {
-    val years by vm.yearsFor(bookId).collectAsState()
+    val yearsFlow = remember(bookId) { vm.yearsFor(bookId) }
+    val years by yearsFlow.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var showAdd by remember { mutableStateOf(false) }
     var showStatus by remember { mutableStateOf<PYQYear?>(null) }

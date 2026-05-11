@@ -169,7 +169,8 @@ fun NotebookEditDialog(notebook: Notebook?, onSave: (Notebook) -> Unit, onDismis
 
 @Composable
 fun NotebookChaptersScreen(navController: NavController, notebookId: String, notebookNo: String, vm: NotebookViewModel = hiltViewModel()) {
-    val chapters by vm.chaptersFor(notebookId).collectAsState()
+    val chaptersFlow = remember(notebookId) { vm.chaptersFor(notebookId) }
+    val chapters by chaptersFlow.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var showAdd by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<NotebookChapter?>(null) }

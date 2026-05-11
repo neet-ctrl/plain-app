@@ -25,7 +25,10 @@ class NotebookViewModel @Inject constructor(private val dao: NEETDao) : ViewMode
     val notebooks = dao.getNotebooks().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     fun save(n: Notebook) = viewModelScope.launch { dao.saveNotebook(n) }
     fun delete(n: Notebook) = viewModelScope.launch { dao.deleteNotebook(n) }
-    fun chaptersFor(nbId: String) = dao.getNotebookChapters(nbId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val chapterFlows = HashMap<String, StateFlow<List<NotebookChapter>>>()
+    fun chaptersFor(nbId: String) = chapterFlows.getOrPut(nbId) {
+        dao.getNotebookChapters(nbId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
     fun saveChapter(c: NotebookChapter) = viewModelScope.launch { dao.saveNotebookChapter(c) }
     fun deleteChapter(c: NotebookChapter) = viewModelScope.launch { dao.deleteNotebookChapter(c) }
 }
@@ -45,10 +48,16 @@ class PYQViewModel @Inject constructor(private val dao: NEETDao) : ViewModel() {
     val allYears = dao.getAllPYQYears().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     fun saveSource(s: PYQSource) = viewModelScope.launch { dao.savePYQSource(s) }
     fun deleteSource(s: PYQSource) = viewModelScope.launch { dao.deletePYQSource(s) }
-    fun chaptersFor(srcId: String) = dao.getPYQChapters(srcId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val pyqChapterFlows = HashMap<String, StateFlow<List<PYQChapter>>>()
+    fun chaptersFor(srcId: String) = pyqChapterFlows.getOrPut(srcId) {
+        dao.getPYQChapters(srcId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
     fun saveChapter(c: PYQChapter) = viewModelScope.launch { dao.savePYQChapter(c) }
     fun deleteChapter(c: PYQChapter) = viewModelScope.launch { dao.deletePYQChapter(c) }
-    fun yearsFor(bookId: String) = dao.getPYQYears(bookId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val pyqYearFlows = HashMap<String, StateFlow<List<PYQYear>>>()
+    fun yearsFor(bookId: String) = pyqYearFlows.getOrPut(bookId) {
+        dao.getPYQYears(bookId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
     fun saveYear(y: PYQYear) = viewModelScope.launch { dao.savePYQYear(y) }
     fun deleteYear(y: PYQYear) = viewModelScope.launch { dao.deletePYQYear(y) }
 }
