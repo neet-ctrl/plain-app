@@ -1278,6 +1278,58 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     onClose = { showAnnotThumbs = false }
                 )
             }
+
+            // ── Annotation full-screen prev / next page nav ─────────────────────
+            AnimatedVisibility(
+                visible  = !showAnnotThumbs && !showToolSheet && !showLaserSheet,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter    = slideInVertically(tween(200)) { it } + fadeIn(tween(200)),
+                exit     = slideOutVertically(tween(160)) { it } + fadeOut(tween(160))
+            ) {
+                val annotTotal = if (isSwapped && solutionPages.isNotEmpty()) solutionPages.size else pdfPages.size
+                Row(
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .padding(bottom = 18.dp)
+                        .background(Color(0xDD0D0D1A), RoundedCornerShape(32.dp))
+                        .border(1.dp, NeonCyan.copy(0.18f), RoundedCornerShape(32.dp))
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(0.dp)
+                ) {
+                    IconButton(
+                        onClick  = { if (currentPage > 0) { currentPage--; scale = 1f; panOffset = Offset.Zero } },
+                        enabled  = currentPage > 0,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.ChevronLeft,
+                            contentDescription = "Previous page",
+                            tint   = if (currentPage > 0) NeonCyan else Color.White.copy(0.22f),
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+                    Text(
+                        text     = "${currentPage + 1} / $annotTotal",
+                        style    = MaterialTheme.typography.labelLarge,
+                        color    = Color.White.copy(0.88f),
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 10.dp)
+                    )
+                    IconButton(
+                        onClick  = { if (currentPage < annotTotal - 1) { currentPage++; scale = 1f; panOffset = Offset.Zero } },
+                        enabled  = currentPage < annotTotal - 1,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = "Next page",
+                            tint   = if (currentPage < annotTotal - 1) NeonCyan else Color.White.copy(0.22f),
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+                }
+            }
         }
 
         if (showSolutionWindow && solutionUri.isNotBlank()) {
