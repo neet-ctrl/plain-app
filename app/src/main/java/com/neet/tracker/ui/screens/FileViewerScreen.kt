@@ -1940,6 +1940,14 @@ private fun PdfAnnotationOverlay(
     var currentPoints by remember { mutableStateOf<List<Pair<Float, Float>>>(emptyList()) }
     var eraserPos     by remember { mutableStateOf<Pair<Float, Float>?>(null) }
 
+    // Always-fresh callback refs so pointerInput coroutine never captures stale lambdas.
+    // Without these, every new stroke would read the activeStrokes captured at first composition
+    // and overwrite all previously committed strokes.
+    val liveOnStrokeCommit      = rememberUpdatedState(onStrokeCommit)
+    val liveOnStrokesErase      = rememberUpdatedState(onStrokesErase)
+    val liveOnEraseGestureStart = rememberUpdatedState(onEraseGestureStart)
+    val liveOnPartialErase      = rememberUpdatedState(onPartialErase)
+
     Canvas(
         modifier = modifier
             .pointerInput(tool, colorArgb, strokeWidthDp, annotZoomEnabled, inkOpacity, straightLine, annotLineType, eraserWidthDp, eraserPartial, eraserErasesPen, eraserErasesHigh, isHorizontalScroll) {
@@ -1960,7 +1968,7 @@ private fun PdfAnnotationOverlay(
                                         val isH  = tool == AnnotationTool.HIGHLIGHTER
                                         val fc   = Color(colorArgb).copy(alpha = if (isH) inkOpacity * 0.38f else inkOpacity)
                                         val pts  = if (straightLine) listOf(drawPoints.first(), drawPoints.last()) else drawPoints.toList()
-                                        onStrokeCommit(AnnotationStroke(
+                                        liveOnStrokeCommit.value(AnnotationStroke(
                                             points    = pts,
                                             colorArgb = fc.toArgb(),
                                             widthDp   = strokeWidthDp * if (isH) 3.5f else 1f,
@@ -1982,7 +1990,7 @@ private fun PdfAnnotationOverlay(
                                         val isH  = tool == AnnotationTool.HIGHLIGHTER
                                         val fc   = Color(colorArgb).copy(alpha = if (isH) inkOpacity * 0.38f else inkOpacity)
                                         val pts  = if (straightLine) listOf(drawPoints.first(), drawPoints.last()) else drawPoints.toList()
-                                        onStrokeCommit(AnnotationStroke(pts, fc.toArgb(), strokeWidthDp * if (isH) 3.5f else 1f, when (tool) { AnnotationTool.ARROW -> "arrow"; AnnotationTool.HIGHLIGHTER -> "highlight"; else -> "pen" }, annotLineType))
+                                        liveOnStrokeCommit.value(AnnotationStroke(pts, fc.toArgb(), strokeWidthDp * if (isH) 3.5f else 1f, when (tool) { AnnotationTool.ARROW -> "arrow"; AnnotationTool.HIGHLIGHTER -> "highlight"; else -> "pen" }, annotLineType))
                                         drawPoints.clear(); currentPoints = emptyList()
                                     }
                                     val p1  = pressed[0].position
@@ -2019,12 +2027,12 @@ private fun PdfAnnotationOverlay(
                                                 }
                                             }
                                             if (hit.isNotEmpty()) {
-                                                if (!eraseStarted) { onEraseGestureStart(); eraseStarted = true }
+                                                if (!eraseStarted) { liveOnEraseGestureStart.value(); eraseStarted = true }
                                                 if (eraserPartial) {
                                                     val toAdd = hit.flatMap { s -> partialEraseSegments(s, nx, ny, eraserRadiusPx, imageWidthPx, imageHeightPx) }
-                                                    onPartialErase(hit, toAdd)
+                                                    liveOnPartialErase.value(hit, toAdd)
                                                 } else {
-                                                    onStrokesErase(hit)
+                                                    liveOnStrokesErase.value(hit)
                                                 }
                                             }
                                         } else {
@@ -2083,7 +2091,7 @@ private fun PdfAnnotationOverlay(
                                             val isH  = tool == AnnotationTool.HIGHLIGHTER
                                             val fc   = Color(colorArgb).copy(alpha = if (isH) inkOpacity * 0.38f else inkOpacity)
                                             val pts  = if (straightLine) listOf(drawPoints.first(), drawPoints.last()) else drawPoints.toList()
-                                            onStrokeCommit(AnnotationStroke(
+                                            liveOnStrokeCommit.value(AnnotationStroke(
                                                 points    = pts,
                                                 colorArgb = fc.toArgb(),
                                                 widthDp   = strokeWidthDp * if (isH) 3.5f else 1f,
@@ -2136,12 +2144,12 @@ private fun PdfAnnotationOverlay(
                                                     }
                                                 }
                                                 if (hit.isNotEmpty()) {
-                                                    if (!eraseStarted) { onEraseGestureStart(); eraseStarted = true }
+                                                    if (!eraseStarted) { liveOnEraseGestureStart.value(); eraseStarted = true }
                                                     if (eraserPartial) {
                                                         val toAdd = hit.flatMap { s -> partialEraseSegments(s, nx, ny, eraserRadiusPx, imageWidthPx, imageHeightPx) }
-                                                        onPartialErase(hit, toAdd)
+                                                        liveOnPartialErase.value(hit, toAdd)
                                                     } else {
-                                                        onStrokesErase(hit)
+                                                        liveOnStrokesErase.value(hit)
                                                     }
                                                 }
                                             } else {
