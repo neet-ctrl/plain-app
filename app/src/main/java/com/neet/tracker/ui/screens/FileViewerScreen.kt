@@ -47,6 +47,8 @@ import com.neet.tracker.ui.components.*
 import com.neet.tracker.ui.dialogs.DialogTextField
 import com.neet.tracker.ui.dialogs.NEETDialog
 import com.neet.tracker.ui.dialogs.RichTextToolbar
+import com.neet.tracker.ui.dialogs.ViewEditToggle
+import com.neet.tracker.ui.dialogs.ViewModeBox
 import com.neet.tracker.ui.theme.*
 import com.neet.tracker.util.AnnotationManager
 import com.neet.tracker.util.AnnotationStroke
@@ -1095,7 +1097,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 enter   = slideInVertically { it } + fadeIn(tween(250)),
                 exit    = slideOutVertically { it } + fadeOut(tween(200))
             ) {
-                AnnotationPanel(text = notesText, onTextChange = { notesText = it })
+                AnnotationPanel(text = notesText, onTextChange = { notesText = it }, onDismiss = { notesExpanded = false })
             }
         }
 
@@ -1469,25 +1471,37 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
 // ─── Annotation Panel ─────────────────────────────────────────────────────────
 
 @Composable
-private fun AnnotationPanel(text: String, onTextChange: (String) -> Unit) {
+private fun AnnotationPanel(text: String, onTextChange: (String) -> Unit, onDismiss: () -> Unit) {
+    // draft is the local editing buffer; only committed on Save
+    var draft       by remember { mutableStateOf(text) }
+    // default to view mode when there is already saved content
+    var isViewMode  by remember(text.isNotBlank()) { mutableStateOf(text.isNotBlank()) }
     var showEmojiPanel by remember { mutableStateOf(false) }
+
+    // keep draft in sync when the panel first opens with existing text
+    LaunchedEffect(text) { if (draft != text && isViewMode) draft = text }
+
+    val panelShape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(24.dp, RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp), spotColor = NeonGold.copy(0.35f))
+            .shadow(24.dp, panelShape, spotColor = NeonGold.copy(0.35f))
             .background(
                 Brush.verticalGradient(listOf(Color(0xFF0D1929), Color(0xFF070F1C))),
-                RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
+                panelShape
             )
             .border(
                 BorderStroke(1.dp, Brush.horizontalGradient(listOf(NeonGold.copy(0.4f), NeonCyan.copy(0.25f), NeonPurple.copy(0.4f)))),
-                RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
+                panelShape
             )
     ) {
+        // drag handle
         Box(modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp), contentAlignment = Alignment.Center) {
             Box(modifier = Modifier.size(36.dp, 4.dp).background(Color.White.copy(0.2f), RoundedCornerShape(2.dp)))
         }
+
+        // ── Header row ──────────────────────────────────────────────────────────
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1499,91 +1513,162 @@ private fun AnnotationPanel(text: String, onTextChange: (String) -> Unit) {
                     .border(0.5.dp, NeonGold.copy(0.4f), RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) { Icon(Icons.Default.EditNote, null, tint = NeonGold, modifier = Modifier.size(16.dp)) }
-            Text("My Annotations & Notes", style = MaterialTheme.typography.labelLarge,
-                color = NeonGold, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            if (text.isNotBlank()) {
-                Text("${text.length} ch", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.3f))
-                IconButton(onClick = { onTextChange("") }, modifier = Modifier.size(28.dp)) {
+            Text(
+                "My Annotations & Notes",
+                style = MaterialTheme.typography.labelLarge,
+                color = NeonGold,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            // char count + clear — only visible in edit mode
+            if (!isViewMode && draft.isNotBlank()) {
+                Text("${draft.length} ch", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.3f))
+                IconButton(onClick = { draft = "" }, modifier = Modifier.size(28.dp)) {
                     Icon(Icons.Default.DeleteSweep, null, tint = NeonRed.copy(0.6f), modifier = Modifier.size(16.dp))
                 }
             }
         }
 
-        NeonDivider(NeonGold.copy(0.25f))
-        Spacer(Modifier.height(4.dp))
-
-        LazyRow(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-            contentPadding = PaddingValues(vertical = 2.dp)
-        ) {
-            items(UV_STATUS_MARKS) { mark ->
-                Box(
-                    modifier = Modifier.size(34.dp)
-                        .background(Color.White.copy(0.06f), RoundedCornerShape(8.dp))
-                        .border(0.5.dp, Color.White.copy(0.12f), RoundedCornerShape(8.dp))
-                        .clickable { onTextChange(text + mark) },
-                    contentAlignment = Alignment.Center
-                ) { Text(mark, fontSize = 16.sp) }
-            }
-            item {
-                Box(modifier = Modifier.height(34.dp).width(1.dp).background(Color.White.copy(0.1f)))
-            }
-            item {
-                Box(
-                    modifier = Modifier.size(34.dp)
-                        .background(if (showEmojiPanel) NeonGold.copy(0.2f) else Color.White.copy(0.06f), RoundedCornerShape(8.dp))
-                        .border(0.5.dp, if (showEmojiPanel) NeonGold.copy(0.5f) else Color.White.copy(0.12f), RoundedCornerShape(8.dp))
-                        .clickable { showEmojiPanel = !showEmojiPanel },
-                    contentAlignment = Alignment.Center
-                ) { Text("😊", fontSize = 16.sp) }
-            }
-        }
-
-        AnimatedVisibility(visible = showEmojiPanel, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
-            LazyRow(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                items(UV_QUICK_EMOJIS) { emoji ->
-                    Box(
-                        modifier = Modifier.size(36.dp)
-                            .background(Color.White.copy(0.06f), RoundedCornerShape(8.dp))
-                            .border(0.5.dp, Color.White.copy(0.1f), RoundedCornerShape(8.dp))
-                            .clickable { onTextChange(text + emoji); showEmojiPanel = false },
-                        contentAlignment = Alignment.Center
-                    ) { Text(emoji, fontSize = 18.sp) }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(4.dp))
+        // ── View / Edit toggle ──────────────────────────────────────────────────
         Column(modifier = Modifier.padding(horizontal = 12.dp)) {
-            RichTextToolbar(accentColor = NeonGold, onInsert = { onTextChange(text + it) })
+            ViewEditToggle(isViewMode = isViewMode, onToggle = { isViewMode = !isViewMode; showEmojiPanel = false })
         }
-        Spacer(Modifier.height(8.dp))
 
-        BasicTextField(
-            value    = text,
-            onValueChange = onTextChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 110.dp, max = 220.dp)
-                .padding(horizontal = 12.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color.White.copy(0.035f))
-                .border(0.5.dp, NeonGold.copy(0.25f), RoundedCornerShape(14.dp))
-                .padding(12.dp),
-            textStyle = TextStyle(color = Color.White.copy(0.9f), fontSize = 14.sp, lineHeight = 22.sp),
-            decorationBox = { inner ->
-                if (text.isEmpty()) {
-                    Text("Write annotations, key points, thoughts about this file…\nUse the toolbar above for rich formatting ✏️",
-                        style = TextStyle(color = Color.White.copy(0.2f), fontSize = 13.sp, lineHeight = 20.sp))
+        Spacer(Modifier.height(8.dp))
+        NeonDivider(NeonGold.copy(0.25f))
+        Spacer(Modifier.height(6.dp))
+
+        // ── Content: view or edit ───────────────────────────────────────────────
+        AnimatedContent(
+            targetState = isViewMode,
+            transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
+            label = "annot_mode"
+        ) { viewMode ->
+            if (viewMode) {
+                // ── View mode ──────────────────────────────────────────────────
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ViewModeBox(
+                        content    = text,
+                        accentColor = NeonGold,
+                        emptyHint  = "No annotations yet — switch to Edit to add notes",
+                        minHeight  = 100.dp
+                    )
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonGold.copy(0.15f)),
+                        border = BorderStroke(1.dp, NeonGold.copy(0.4f))
+                    ) {
+                        Icon(Icons.Default.Close, null, tint = NeonGold, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Close", color = NeonGold, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(4.dp))
                 }
-                inner()
+            } else {
+                // ── Edit mode ──────────────────────────────────────────────────
+                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    // Quick status marks + emoji toggle
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        contentPadding = PaddingValues(vertical = 2.dp)
+                    ) {
+                        items(UV_STATUS_MARKS) { mark ->
+                            Box(
+                                modifier = Modifier.size(34.dp)
+                                    .background(Color.White.copy(0.06f), RoundedCornerShape(8.dp))
+                                    .border(0.5.dp, Color.White.copy(0.12f), RoundedCornerShape(8.dp))
+                                    .clickable { draft += mark },
+                                contentAlignment = Alignment.Center
+                            ) { Text(mark, fontSize = 16.sp) }
+                        }
+                        item {
+                            Box(modifier = Modifier.height(34.dp).width(1.dp).background(Color.White.copy(0.1f)))
+                        }
+                        item {
+                            Box(
+                                modifier = Modifier.size(34.dp)
+                                    .background(if (showEmojiPanel) NeonGold.copy(0.2f) else Color.White.copy(0.06f), RoundedCornerShape(8.dp))
+                                    .border(0.5.dp, if (showEmojiPanel) NeonGold.copy(0.5f) else Color.White.copy(0.12f), RoundedCornerShape(8.dp))
+                                    .clickable { showEmojiPanel = !showEmojiPanel },
+                                contentAlignment = Alignment.Center
+                            ) { Text("😊", fontSize = 16.sp) }
+                        }
+                    }
+
+                    AnimatedVisibility(visible = showEmojiPanel, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            items(UV_QUICK_EMOJIS) { emoji ->
+                                Box(
+                                    modifier = Modifier.size(36.dp)
+                                        .background(Color.White.copy(0.06f), RoundedCornerShape(8.dp))
+                                        .border(0.5.dp, Color.White.copy(0.1f), RoundedCornerShape(8.dp))
+                                        .clickable { draft += emoji; showEmojiPanel = false },
+                                    contentAlignment = Alignment.Center
+                                ) { Text(emoji, fontSize = 18.sp) }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(4.dp))
+                    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
+                        RichTextToolbar(accentColor = NeonGold, onInsert = { draft += it })
+                    }
+                    Spacer(Modifier.height(8.dp))
+
+                    BasicTextField(
+                        value         = draft,
+                        onValueChange = { draft = it },
+                        modifier      = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 110.dp, max = 220.dp)
+                            .padding(horizontal = 12.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color.White.copy(0.035f))
+                            .border(0.5.dp, NeonGold.copy(0.25f), RoundedCornerShape(14.dp))
+                            .padding(12.dp),
+                        textStyle = TextStyle(color = Color.White.copy(0.9f), fontSize = 14.sp, lineHeight = 22.sp),
+                        decorationBox = { inner ->
+                            if (draft.isEmpty()) {
+                                Text(
+                                    "Write annotations, key points, thoughts about this file…\nUse the toolbar above for rich formatting ✏️",
+                                    style = TextStyle(color = Color.White.copy(0.2f), fontSize = 13.sp, lineHeight = 20.sp)
+                                )
+                            }
+                            inner()
+                        }
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+                    // Save / Cancel row
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { draft = text; isViewMode = text.isNotBlank(); showEmojiPanel = false },
+                            modifier = Modifier.weight(1f),
+                            border = BorderStroke(1.dp, Color.White.copy(0.2f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                        ) { Text("Cancel") }
+                        Button(
+                            onClick = { onTextChange(draft); isViewMode = true; showEmojiPanel = false },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonGold.copy(0.2f)),
+                            border = BorderStroke(1.dp, NeonGold.copy(0.6f))
+                        ) { Text("Save", color = NeonGold, fontWeight = FontWeight.Bold) }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
             }
-        )
-        Spacer(Modifier.height(12.dp))
+        }
     }
 }
 
