@@ -250,13 +250,9 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var isHorizontalScroll by remember { mutableStateOf(false) }
     var zoomEnabled        by remember { mutableStateOf(false) }
 
-    // ── Annotation fullscreen + sidebar ───────────────────────────────────────
+    // ── Annotation fullscreen ──────────────────────────────────────────────────
     var annotFullScreen    by remember { mutableStateOf(false) }
     var annotZoomEnabled   by remember { mutableStateOf(false) }
-    // Sidebar state — draggable anywhere, flippable vertical↔horizontal
-    var sidebarIsVertical  by remember { mutableStateOf(true) }
-    var sidebarOffsetX     by remember { mutableFloatStateOf(0f) }
-    var sidebarOffsetY     by remember { mutableFloatStateOf(240f) }
     var showToolSheet      by remember { mutableStateOf(false) }
     var showLaserSheet     by remember { mutableStateOf(false) }
     var showAnnotThumbs    by remember { mutableStateOf(false) }
@@ -676,176 +672,238 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
             }
 
             // ── Main content ───────────────────────────────────────────────────
-            Box(
-                modifier = Modifier.weight(1f)
-                    .clickable(enabled = focusMode) { focusMode = false }
-            ) {
-                when {
-                    fileUri.isBlank() -> FileErrorView()
-                    isImage -> {
-                        // Local file image (e.g. copied photo) — render directly from File.
-                        if (localFile != null) {
-                            AsyncImage(
-                                model              = localFile,
-                                contentDescription = title,
-                                modifier           = Modifier.fillMaxSize()
-                            )
-                        } else if (uri != null) {
-                            ImageViewer(uri = uri, title = title)
-                        } else {
-                            FileErrorView()
+            // Shared PDF page lambda — reused in both annotation Row and normal Box
+            val pdfPageContent: @Composable () -> Unit = {
+                UvPdfPage(
+                    bitmap          = pdfPages[currentPage.coerceIn(0, pdfPages.lastIndex)],
+                    scale           = scale,
+                    panOffset       = panOffset,
+                    onTransform = { s, p ->
+                        scale     = (scale * s).coerceIn(0.5f, 6f)
+                        panOffset = Offset(panOffset.x + p.x, panOffset.y + p.y)
+                    },
+                    zoomEnabled        = zoomEnabled,
+                    isHorizontalScroll = isHorizontalScroll,
+                    onPrev = { if (currentPage > 0) { currentPage--; scale = 1f; panOffset = Offset.Zero } },
+                    onNext = { if (currentPage < pdfPages.lastIndex) { currentPage++; scale = 1f; panOffset = Offset.Zero } },
+                    annotationMode      = annotationMode,
+                    annotationTool      = annotationTool,
+                    annotationColorArgb = annotationColorArgb,
+                    annotationWidthDp   = annotationWidthDp,
+                    annotZoomEnabled    = annotZoomEnabled,
+                    pageStrokes         = allPageStrokes[currentPage] ?: emptyList(),
+                    onStrokeCommit = { stroke ->
+                        annoUndoStack  = (annoUndoStack + allPageStrokes).takeLast(50)
+                        annoRedoStack  = emptyList()
+                        val updated    = (allPageStrokes[currentPage] ?: emptyList()) + stroke
+                        allPageStrokes = allPageStrokes + (currentPage to updated)
+                        annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                    },
+                    onEraseGestureStart = {
+                        // Push undo snapshot once per eraser drag gesture
+                        annoUndoStack = (annoUndoStack + allPageStrokes).takeLast(50)
+                        annoRedoStack = emptyList()
+                    },
+                    onStrokesErase = { removed ->
+                        val current    = allPageStrokes[currentPage] ?: emptyList()
+                        val removedSet = removed.toSet()
+                        val updated    = current.filter { it !in removedSet }
+                        allPageStrokes = allPageStrokes + (currentPage to updated)
+                        annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
+                    },
+                    pageTextBoxes   = allPageTextBoxes[currentPage] ?: emptyList(),
+                    onTextBoxPlace  = { xNorm, yNorm -> pendingTextPos = Pair(xNorm, yNorm) },
+                    onTextBoxDelete = { id ->
+                        val cur = allPageTextBoxes[currentPage] ?: emptyList()
+                        val upd = cur.filter { it.id != id }
+                        allPageTextBoxes = allPageTextBoxes + (currentPage to upd)
+                        annoScope.launch { AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes) }
+                    },
+                    pageImageBoxes  = allPageImageBoxes[currentPage] ?: emptyList(),
+                    onImageTap      = { xNorm, yNorm ->
+                        pendingImageTapPos = Pair(xNorm, yNorm)
+                        imagePicker.launch("image/*")
+                    },
+                    onImageBoxUpdate = { updatedBox ->
+                        val cur = allPageImageBoxes[currentPage] ?: emptyList()
+                        val upd = cur.map { if (it.id == updatedBox.id) updatedBox else it }
+                        allPageImageBoxes = allPageImageBoxes + (currentPage to upd)
+                        annoScope.launch { AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes) }
+                    },
+                    onImageBoxDelete = { id ->
+                        val cur = allPageImageBoxes[currentPage] ?: emptyList()
+                        val upd = cur.filter { it.id != id }
+                        allPageImageBoxes = allPageImageBoxes + (currentPage to upd)
+                        annoScope.launch { AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes) }
+                    },
+                    pageStamps     = allPageStamps[currentPage] ?: emptyList(),
+                    onStampPlace   = { xNorm, yNorm ->
+                        selectedStampEmoji?.let { emoji ->
+                            val st  = AnnotationStamp(xNorm = xNorm, yNorm = yNorm, emoji = emoji)
+                            val cur = allPageStamps[currentPage] ?: emptyList()
+                            allPageStamps = allPageStamps + (currentPage to cur + st)
+                            annoScope.launch { AnnotationManager.saveStamps(context, fileUri, allPageStamps) }
                         }
+                    },
+                    onStampDelete  = { id ->
+                        val cur = allPageStamps[currentPage] ?: emptyList()
+                        val upd = cur.filter { it.id != id }
+                        allPageStamps = allPageStamps + (currentPage to upd)
+                        annoScope.launch { AnnotationManager.saveStamps(context, fileUri, allPageStamps) }
                     }
-                    tryAsPdf -> {
-                        when {
-                            pdfLoading -> UvLoadingView()
-                            pdfPages.isNotEmpty() -> UvPdfPage(
-                                bitmap          = pdfPages[currentPage.coerceIn(0, pdfPages.lastIndex)],
-                                scale           = scale,
-                                panOffset       = panOffset,
-                                onTransform = { s, p ->
-                                    scale     = (scale * s).coerceIn(0.5f, 6f)
-                                    panOffset = Offset(panOffset.x + p.x, panOffset.y + p.y)
-                                },
-                                zoomEnabled        = zoomEnabled,
-                                isHorizontalScroll = isHorizontalScroll,
-                                onPrev = { if (currentPage > 0) { currentPage--; scale = 1f; panOffset = Offset.Zero } },
-                                onNext = { if (currentPage < pdfPages.lastIndex) { currentPage++; scale = 1f; panOffset = Offset.Zero } },
-                                annotationMode      = annotationMode,
-                                annotationTool      = annotationTool,
-                                annotationColorArgb = annotationColorArgb,
-                                annotationWidthDp   = annotationWidthDp,
-                                annotZoomEnabled    = annotZoomEnabled,
-                                pageStrokes         = allPageStrokes[currentPage] ?: emptyList(),
-                                onStrokeCommit = { stroke ->
-                                    annoUndoStack  = (annoUndoStack + allPageStrokes).takeLast(50)
-                                    annoRedoStack  = emptyList()
-                                    val updated    = (allPageStrokes[currentPage] ?: emptyList()) + stroke
-                                    allPageStrokes = allPageStrokes + (currentPage to updated)
-                                    annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
-                                },
-                                onEraseGestureStart = {
-                                    // Push undo snapshot once per eraser drag gesture
-                                    annoUndoStack = (annoUndoStack + allPageStrokes).takeLast(50)
-                                    annoRedoStack = emptyList()
-                                },
-                                onStrokesErase = { removed ->
-                                    val current    = allPageStrokes[currentPage] ?: emptyList()
-                                    val removedSet = removed.toSet()
-                                    val updated    = current.filter { it !in removedSet }
-                                    allPageStrokes = allPageStrokes + (currentPage to updated)
-                                    annoScope.launch { AnnotationManager.save(context, fileUri, allPageStrokes) }
-                                },
-                                pageTextBoxes   = allPageTextBoxes[currentPage] ?: emptyList(),
-                                onTextBoxPlace  = { xNorm, yNorm -> pendingTextPos = Pair(xNorm, yNorm) },
-                                onTextBoxDelete = { id ->
-                                    val cur = allPageTextBoxes[currentPage] ?: emptyList()
-                                    val upd = cur.filter { it.id != id }
-                                    allPageTextBoxes = allPageTextBoxes + (currentPage to upd)
-                                    annoScope.launch { AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes) }
-                                },
-                                pageImageBoxes  = allPageImageBoxes[currentPage] ?: emptyList(),
-                                onImageTap      = { xNorm, yNorm ->
-                                    pendingImageTapPos = Pair(xNorm, yNorm)
-                                    imagePicker.launch("image/*")
-                                },
-                                onImageBoxUpdate = { updatedBox ->
-                                    val cur = allPageImageBoxes[currentPage] ?: emptyList()
-                                    val upd = cur.map { if (it.id == updatedBox.id) updatedBox else it }
-                                    allPageImageBoxes = allPageImageBoxes + (currentPage to upd)
-                                    annoScope.launch { AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes) }
-                                },
-                                onImageBoxDelete = { id ->
-                                    val cur = allPageImageBoxes[currentPage] ?: emptyList()
-                                    val upd = cur.filter { it.id != id }
-                                    allPageImageBoxes = allPageImageBoxes + (currentPage to upd)
-                                    annoScope.launch { AnnotationManager.saveImageBoxes(context, fileUri, allPageImageBoxes) }
-                                },
-                                pageStamps     = allPageStamps[currentPage] ?: emptyList(),
-                                onStampPlace   = { xNorm, yNorm ->
-                                    selectedStampEmoji?.let { emoji ->
-                                        val st  = AnnotationStamp(xNorm = xNorm, yNorm = yNorm, emoji = emoji)
-                                        val cur = allPageStamps[currentPage] ?: emptyList()
-                                        allPageStamps = allPageStamps + (currentPage to cur + st)
-                                        annoScope.launch { AnnotationManager.saveStamps(context, fileUri, allPageStamps) }
-                                    }
-                                },
-                                onStampDelete  = { id ->
-                                    val cur = allPageStamps[currentPage] ?: emptyList()
-                                    val upd = cur.filter { it.id != id }
-                                    allPageStamps = allPageStamps + (currentPage to upd)
-                                    annoScope.launch { AnnotationManager.saveStamps(context, fileUri, allPageStamps) }
-                                }
-                            )
-                            pdfError -> {
-                                if (uri != null) {
-                                    FileFailureLog(
-                                        uri = uri, title = title,
-                                        detectedMime = mimeType, detectedExt = extension,
-                                        resolvedName = resolvedDisplayName, rawUri = fileUri,
-                                        errorMessage = pdfErrorMessage, context = context
-                                    )
-                                } else {
-                                    // Local file that couldn't be rendered as PDF (e.g. it's a
-                                    // Word doc). Show simpler error with Open Externally button.
-                                    LocalFileRenderError(
-                                        localFile    = localFile,
-                                        title        = title,
-                                        errorMessage = pdfErrorMessage,
-                                        context      = context
-                                    )
+                )
+            }
+
+            if (annotationMode && annotFullScreen && tryAsPdf && pdfPages.isNotEmpty()) {
+                // Annotation mode: fixed sidebar on LEFT, PDF fills the RIGHT — matches reference layout
+                Row(modifier = Modifier.weight(1f)) {
+                    AnnotSidebarFixed(
+                        tool               = annotationTool,
+                        linePointerEnabled = linePointerEnabled,
+                        onToolSelect       = { t ->
+                            annotationTool  = t
+                            if (t == AnnotationTool.TEXT || t == AnnotationTool.IMAGE || t == AnnotationTool.STAMP) annotZoomEnabled = false
+                            showToolSheet   = true
+                            showLaserSheet  = false
+                            showAnnotThumbs = false
+                        },
+                        onLaserTap = {
+                            showLaserSheet  = true
+                            showToolSheet   = false
+                            showAnnotThumbs = false
+                        }
+                    )
+                    Box(modifier = Modifier.weight(1f)) {
+                        pdfPageContent()
+                        // Bookmark ribbon
+                        if (isBookmarked) {
+                            Box(
+                                modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp)
+                                    .background(NeonGold.copy(0.9f), RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp, topEnd = 6.dp))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text("⭐", fontSize = 11.sp)
+                                    Text("Bookmarked", style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF1A1000), fontWeight = FontWeight.Bold)
                                 }
                             }
-                            else -> UvLoadingView()
                         }
-                    }
-                    else -> {
-                        if (uri != null) {
-                            FileFailureLog(
-                                uri = uri, title = title,
-                                detectedMime = mimeType, detectedExt = extension,
-                                resolvedName = resolvedDisplayName, rawUri = fileUri,
-                                errorMessage = "URI scheme not supported for in-app viewing.", context = context
-                            )
-                        } else {
-                            FileErrorView()
+                        // Current page mark badge
+                        if (currentMark.isNotEmpty()) {
+                            Box(
+                                modifier = Modifier.align(Alignment.TopStart).padding(top = 8.dp, start = 8.dp)
+                                    .background(Color.Black.copy(0.65f), RoundedCornerShape(10.dp))
+                                    .border(0.5.dp, NeonCyan.copy(0.3f), RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) { Text(currentMark, fontSize = 16.sp) }
                         }
-                    }
-                }
-
-                // Bookmark ribbon
-                if (isBookmarked && pdfPages.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp)
-                            .background(NeonGold.copy(0.9f), RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp, topEnd = 6.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text("⭐", fontSize = 11.sp)
-                            Text("Bookmarked", style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF1A1000), fontWeight = FontWeight.Bold)
+                        // Zoom indicator
+                        if (scale != 1f) {
+                            Box(
+                                modifier = Modifier.align(Alignment.TopEnd)
+                                    .padding(top = if (isBookmarked) 44.dp else 8.dp, end = 8.dp)
+                                    .background(Color.Black.copy(0.65f), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) { Text("${(scale * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = NeonCyan) }
                         }
                     }
                 }
+            } else {
+                Box(
+                    modifier = Modifier.weight(1f)
+                        .clickable(enabled = focusMode) { focusMode = false }
+                ) {
+                    when {
+                        fileUri.isBlank() -> FileErrorView()
+                        isImage -> {
+                            // Local file image (e.g. copied photo) — render directly from File.
+                            if (localFile != null) {
+                                AsyncImage(
+                                    model              = localFile,
+                                    contentDescription = title,
+                                    modifier           = Modifier.fillMaxSize()
+                                )
+                            } else if (uri != null) {
+                                ImageViewer(uri = uri, title = title)
+                            } else {
+                                FileErrorView()
+                            }
+                        }
+                        tryAsPdf -> {
+                            when {
+                                pdfLoading -> UvLoadingView()
+                                pdfPages.isNotEmpty() -> pdfPageContent()
+                                pdfError -> {
+                                    if (uri != null) {
+                                        FileFailureLog(
+                                            uri = uri, title = title,
+                                            detectedMime = mimeType, detectedExt = extension,
+                                            resolvedName = resolvedDisplayName, rawUri = fileUri,
+                                            errorMessage = pdfErrorMessage, context = context
+                                        )
+                                    } else {
+                                        // Local file that couldn't be rendered as PDF (e.g. it's a
+                                        // Word doc). Show simpler error with Open Externally button.
+                                        LocalFileRenderError(
+                                            localFile    = localFile,
+                                            title        = title,
+                                            errorMessage = pdfErrorMessage,
+                                            context      = context
+                                        )
+                                    }
+                                }
+                                else -> UvLoadingView()
+                            }
+                        }
+                        else -> {
+                            if (uri != null) {
+                                FileFailureLog(
+                                    uri = uri, title = title,
+                                    detectedMime = mimeType, detectedExt = extension,
+                                    resolvedName = resolvedDisplayName, rawUri = fileUri,
+                                    errorMessage = "URI scheme not supported for in-app viewing.", context = context
+                                )
+                            } else {
+                                FileErrorView()
+                            }
+                        }
+                    }
 
-                // Current page mark badge
-                if (currentMark.isNotEmpty() && pdfPages.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier.align(Alignment.TopStart).padding(top = 8.dp, start = 8.dp)
-                            .background(Color.Black.copy(0.65f), RoundedCornerShape(10.dp))
-                            .border(0.5.dp, NeonCyan.copy(0.3f), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) { Text(currentMark, fontSize = 16.sp) }
-                }
+                    // Bookmark ribbon
+                    if (isBookmarked && pdfPages.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp)
+                                .background(NeonGold.copy(0.9f), RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp, topEnd = 6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text("⭐", fontSize = 11.sp)
+                                Text("Bookmarked", style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF1A1000), fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
 
-                // Zoom indicator
-                if (scale != 1f && pdfPages.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier.align(Alignment.TopEnd)
-                            .padding(top = if (isBookmarked) 44.dp else 8.dp, end = 8.dp)
-                            .background(Color.Black.copy(0.65f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) { Text("${(scale * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = NeonCyan) }
+                    // Current page mark badge
+                    if (currentMark.isNotEmpty() && pdfPages.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier.align(Alignment.TopStart).padding(top = 8.dp, start = 8.dp)
+                                .background(Color.Black.copy(0.65f), RoundedCornerShape(10.dp))
+                                .border(0.5.dp, NeonCyan.copy(0.3f), RoundedCornerShape(10.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) { Text(currentMark, fontSize = 16.sp) }
+                    }
+
+                    // Zoom indicator
+                    if (scale != 1f && pdfPages.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier.align(Alignment.TopEnd)
+                                .padding(top = if (isBookmarked) 44.dp else 8.dp, end = 8.dp)
+                                .background(Color.Black.copy(0.65f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) { Text("${(scale * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = NeonCyan) }
+                    }
                 }
             }
 
@@ -985,31 +1043,6 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 },
             )
 
-            // ── Draggable tool sidebar (vertical ↔ horizontal, free position) ──
-            AnnotSidebar(
-                isVertical         = sidebarIsVertical,
-                offsetX            = sidebarOffsetX,
-                offsetY            = sidebarOffsetY,
-                tool               = annotationTool,
-                linePointerEnabled = linePointerEnabled,
-                onDrag             = { dx, dy ->
-                    sidebarOffsetX = (sidebarOffsetX + dx).coerceAtLeast(0f)
-                    sidebarOffsetY = (sidebarOffsetY + dy).coerceAtLeast(0f)
-                },
-                onFlip             = { sidebarIsVertical = !sidebarIsVertical },
-                onToolSelect       = { t ->
-                    annotationTool  = t
-                    if (t == AnnotationTool.TEXT || t == AnnotationTool.IMAGE || t == AnnotationTool.STAMP) annotZoomEnabled = false
-                    showToolSheet   = true
-                    showLaserSheet  = false
-                    showAnnotThumbs = false
-                },
-                onLaserTap         = {
-                    showLaserSheet  = true
-                    showToolSheet   = false
-                    showAnnotThumbs = false
-                },
-            )
 
             // ── Per-tool settings bottom sheet ─────────────────────────────────
             if (showToolSheet) {
@@ -2310,6 +2343,7 @@ private fun AnnotTopHeader(
             .fillMaxWidth()
             .shadow(8.dp, spotColor = Color.Black.copy(0.3f))
             .background(Color(0xF00E1A2A))
+            .statusBarsPadding()
             .padding(horizontal = 8.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp)
@@ -2533,6 +2567,45 @@ private fun SidebarToolButton(
     }
 }
 
+// ─── 4a. Fixed sidebar (used in Row annotation layout) ──────────────────────────
+@Composable
+private fun AnnotSidebarFixed(
+    tool: AnnotationTool,
+    linePointerEnabled: Boolean,
+    onToolSelect: (AnnotationTool) -> Unit,
+    onLaserTap: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxHeight()
+            .shadow(4.dp, RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp), spotColor = Color.Black.copy(0.18f))
+            .background(Color.White.copy(0.97f), RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp))
+            .border(0.5.dp, Color.Black.copy(0.07f), RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp))
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        SIDEBAR_TOOLS.forEach { (t, icon, _) ->
+            val sel = if (t == null) linePointerEnabled else tool == t
+            val accent = when (t) {
+                AnnotationTool.HIGHLIGHTER -> Color(0xFFFF6F00)
+                AnnotationTool.ERASER      -> Color(0xFFE53935)
+                AnnotationTool.TEXT        -> Color(0xFF00ACC1)
+                AnnotationTool.IMAGE       -> Color(0xFF7C4DFF)
+                AnnotationTool.STAMP       -> Color(0xFFFF8F00)
+                null                       -> Color(0xFFFF1744)
+                else                       -> Color(0xFF1565C0)
+            }
+            SidebarToolButton(
+                icon        = icon,
+                selected    = sel,
+                accentColor = accent,
+                onClick     = { if (t == null) onLaserTap() else onToolSelect(t) }
+            )
+        }
+    }
+}
+
 // ─── 4. Sidebar ────────────────────────────────────────────────────────────────
 @Composable
 private fun AnnotSidebar(
@@ -2579,7 +2652,7 @@ private fun AnnotSidebar(
             }
             // ── Divider ──────────────────────────────────────────────────────
             if (isVertical) {
-                Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp).height(0.5.dp).background(Color.Black.copy(0.1f)))
+                Box(modifier = Modifier.width(36.dp).height(0.5.dp).background(Color.Black.copy(0.1f)))
             } else {
                 Box(modifier = Modifier.fillMaxHeight().padding(vertical = 6.dp).width(0.5.dp).background(Color.Black.copy(0.1f)))
             }
