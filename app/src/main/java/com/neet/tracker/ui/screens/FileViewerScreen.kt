@@ -259,6 +259,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
     var sidebarOffsetY     by remember { mutableFloatStateOf(240f) }
     var showToolSheet      by remember { mutableStateOf(false) }
     var showLaserSheet     by remember { mutableStateOf(false) }
+    var showAnnotThumbs    by remember { mutableStateOf(false) }
     // Per-tool annotation settings
     var annotStraightLine          by remember { mutableStateOf(false) }
     var annotLineType              by remember { mutableIntStateOf(0) }   // 0=solid 1=dotted 2=dashed
@@ -935,6 +936,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 canUndo        = annoUndoStack.isNotEmpty(),
                 canRedo        = annoRedoStack.isNotEmpty(),
                 zoomEnabled    = annotZoomEnabled,
+                showThumbs     = showAnnotThumbs,
                 solutionUri    = solutionUri,
                 onUndo         = {
                     annoUndoStack.lastOrNull()?.let { snap ->
@@ -961,6 +963,11 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     }
                 },
                 onZoomToggle   = { annotZoomEnabled = !annotZoomEnabled },
+                onThumbToggle  = {
+                    showAnnotThumbs = !showAnnotThumbs
+                    showToolSheet   = false
+                    showLaserSheet  = false
+                },
                 onOpenSolution = { showSolutionWindow = true },
                 onDone         = {
                     annotationMode     = false
@@ -969,6 +976,7 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     linePointerEnabled = false
                     showToolSheet      = false
                     showLaserSheet     = false
+                    showAnnotThumbs    = false
                     annoScope.launch {
                         AnnotationManager.save(context, fileUri, allPageStrokes)
                         AnnotationManager.saveTextBoxes(context, fileUri, allPageTextBoxes)
@@ -990,14 +998,16 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                 },
                 onFlip             = { sidebarIsVertical = !sidebarIsVertical },
                 onToolSelect       = { t ->
-                    annotationTool = t
+                    annotationTool  = t
                     if (t == AnnotationTool.TEXT || t == AnnotationTool.IMAGE || t == AnnotationTool.STAMP) annotZoomEnabled = false
-                    showToolSheet  = true
-                    showLaserSheet = false
+                    showToolSheet   = true
+                    showLaserSheet  = false
+                    showAnnotThumbs = false
                 },
                 onLaserTap         = {
-                    showLaserSheet = true
-                    showToolSheet  = false
+                    showLaserSheet  = true
+                    showToolSheet   = false
+                    showAnnotThumbs = false
                 },
             )
 
@@ -1060,6 +1070,27 @@ fun FileViewerScreen(navController: NavController, fileUri: String, title: Strin
                     onToggle           = { linePointerEnabled = !linePointerEnabled },
                     onColorChange      = { linePointerColorArgb = it },
                     onClose            = { showLaserSheet = false },
+                )
+            }
+
+            // ── Compact page thumbnail picker (overlay, not full-screen) ────────
+            AnimatedVisibility(
+                visible  = showAnnotThumbs && pdfPages.isNotEmpty(),
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter    = slideInVertically(tween(220)) { it } + fadeIn(tween(220)),
+                exit     = slideOutVertically(tween(180)) { it } + fadeOut(tween(180))
+            ) {
+                AnnotThumbPicker(
+                    pages       = pdfPages,
+                    currentPage = currentPage,
+                    totalPages  = totalPages,
+                    onPageClick = { page ->
+                        currentPage     = page
+                        scale           = 1f
+                        panOffset       = Offset.Zero
+                        showAnnotThumbs = false
+                    },
+                    onClose = { showAnnotThumbs = false }
                 )
             }
         }
@@ -2264,11 +2295,13 @@ private fun AnnotTopHeader(
     canUndo: Boolean,
     canRedo: Boolean,
     zoomEnabled: Boolean,
+    showThumbs: Boolean,
     solutionUri: String,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onClearPage: () -> Unit,
     onZoomToggle: () -> Unit,
+    onThumbToggle: () -> Unit,
     onOpenSolution: () -> Unit,
     onDone: () -> Unit,
 ) {
@@ -2305,6 +2338,14 @@ private fun AnnotTopHeader(
             .background(zb, RoundedCornerShape(8.dp))) {
             Icon(Icons.Default.ZoomIn, null,
                 tint = if (zoomEnabled) NeonCyan else Color.White.copy(0.5f),
+                modifier = Modifier.size(18.dp))
+        }
+        // Thumbnail page picker toggle
+        val tb = if (showThumbs) NeonGold.copy(0.22f) else Color.Transparent
+        IconButton(onClick = onThumbToggle, modifier = Modifier.size(36.dp)
+            .background(tb, RoundedCornerShape(8.dp))) {
+            Icon(Icons.Default.GridView, null,
+                tint = if (showThumbs) NeonGold else Color.White.copy(0.5f),
                 modifier = Modifier.size(18.dp))
         }
         // Solution
@@ -2957,7 +2998,139 @@ private fun ImageSheetContent(
     }
 }
 
-// ─── 7. Laser pointer sheet ─────────────────────────────────────────────────────
+// ─── 7. Annotation page thumbnail picker (fullscreen-mode overlay) ─────────────
+@Composable
+private fun AnnotThumbPicker(
+    pages: List<android.graphics.Bitmap>,
+    currentPage: Int,
+    totalPages: Int,
+    onPageClick: (Int) -> Unit,
+    onClose: () -> Unit,
+) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(currentPage) {
+        runCatching { listState.animateScrollToItem(currentPage.coerceIn(0, pages.lastIndex)) }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(24.dp, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                spotColor = Color.Black.copy(0.55f))
+            .background(Color(0xF2091422), RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+            .border(BorderStroke(0.5.dp,
+                Brush.horizontalGradient(listOf(NeonCyan.copy(0.3f), NeonGold.copy(0.2f), NeonCyan.copy(0.3f)))),
+                RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+    ) {
+        // Drag pill
+        Box(modifier = Modifier.fillMaxWidth().padding(top = 9.dp, bottom = 3.dp),
+            contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.size(width = 38.dp, height = 3.dp)
+                .background(Color.White.copy(0.2f), CircleShape))
+        }
+
+        // Header row: icon + title + page counter + close button
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(Icons.Default.GridView, null,
+                tint = NeonGold.copy(0.8f), modifier = Modifier.size(14.dp))
+            Text("Jump to Page",
+                style = MaterialTheme.typography.labelMedium,
+                color = NeonGold.copy(0.9f),
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f))
+            Text("${currentPage + 1} / $totalPages",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(0.38f))
+            Spacer(Modifier.width(4.dp))
+            IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
+                Icon(Icons.Default.Close, null,
+                    tint = Color.White.copy(0.38f), modifier = Modifier.size(14.dp))
+            }
+        }
+
+        // Thin divider
+        Box(modifier = Modifier.fillMaxWidth().height(0.5.dp)
+            .background(Brush.horizontalGradient(
+                listOf(Color.Transparent, NeonCyan.copy(0.25f), NeonGold.copy(0.2f), Color.Transparent))))
+
+        // Horizontal thumbnail scroll — compact, NOT full-screen
+        LazyRow(
+            state = listState,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            itemsIndexed(pages) { index, bmp ->
+                val selected = index == currentPage
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                    modifier = Modifier.clickable { onPageClick(index) }
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(58.dp)
+                            .shadow(
+                                if (selected) 12.dp else 2.dp,
+                                RoundedCornerShape(8.dp),
+                                spotColor = if (selected) NeonCyan.copy(0.65f) else Color.Black.copy(0.3f)
+                            )
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(
+                                if (selected) 2.dp else 0.5.dp,
+                                if (selected) NeonCyan else Color.White.copy(0.12f),
+                                RoundedCornerShape(8.dp)
+                            )
+                    ) {
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = "Page ${index + 1}",
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        // Selected page tint overlay
+                        if (selected) {
+                            Box(modifier = Modifier
+                                .matchParentSize()
+                                .background(NeonCyan.copy(0.13f)))
+                        }
+                    }
+                    // Page number badge
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                if (selected) NeonCyan.copy(0.22f) else Color.White.copy(0.06f),
+                                RoundedCornerShape(4.dp)
+                            )
+                            .border(0.5.dp,
+                                if (selected) NeonCyan.copy(0.7f) else Color.White.copy(0.1f),
+                                RoundedCornerShape(4.dp))
+                            .padding(horizontal = 5.dp, vertical = 2.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "${index + 1}",
+                            fontSize = 9.sp,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (selected) NeonCyan else Color.White.copy(0.32f),
+                            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+        }
+
+        // Bottom safe spacing
+        Spacer(Modifier.height(10.dp))
+    }
+}
+
+// ─── 8. Laser pointer sheet ─────────────────────────────────────────────────────
 @Composable
 private fun LaserSheet(
     linePointerEnabled: Boolean,
