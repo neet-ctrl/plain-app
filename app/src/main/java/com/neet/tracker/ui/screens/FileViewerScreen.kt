@@ -1731,105 +1731,106 @@ private fun PdfAnnotationOverlay(
                             }
                         }
                     } else {
-                        // ── Single-touch: draw OR swipe-to-navigate ─────────────
-                        // A fast/long swipe (≥ swipeThresholdPx total displacement)
-                        // in the dominant axis navigates pages instead of drawing.
-                        // Two-finger touches are NOT handled here — detectDragGestures
-                        // only ever tracks the first pointer, so two fingers can never
-                        // accidentally create a stroke in this branch.
-                        val swipeThresholdPx = with(density) { 90.dp.toPx() }
-                        var eraseStarted   = false
-                        var totalDragX     = 0f
-                        var totalDragY     = 0f
-                        var isSwipeGesture = false
-
-                        detectDragGestures(
-                            onDragStart = { offset ->
-                                totalDragX     = 0f
-                                totalDragY     = 0f
-                                isSwipeGesture = false
-                                val nx = (offset.x / imageWidthPx).coerceIn(0f, 1f)
-                                val ny = (offset.y / imageHeightPx).coerceIn(0f, 1f)
-                                if (tool == AnnotationTool.ERASER) {
-                                    eraserPos    = Pair(nx, ny)
-                                    eraseStarted = false
-                                } else {
-                                    currentPoints = listOf(Pair(nx, ny))
-                                }
-                            },
-                            onDrag = { change, dragAmount ->
-                                totalDragX += dragAmount.x
-                                totalDragY += dragAmount.y
-
-                                val absX = kotlin.math.abs(totalDragX)
-                                val absY = kotlin.math.abs(totalDragY)
-
-                                // Once a swipe is detected mid-drag, lock that state
-                                // and erase the stroke preview so nothing gets drawn.
-                                if (!isSwipeGesture &&
-                                    (absX > swipeThresholdPx || absY > swipeThresholdPx)) {
-                                    isSwipeGesture = true
-                                    currentPoints  = emptyList()   // discard preview stroke
-                                    eraserPos      = null
-                                }
-
-                                if (!isSwipeGesture) {
-                                    val nx = (change.position.x / imageWidthPx).coerceIn(0f, 1f)
-                                    val ny = (change.position.y / imageHeightPx).coerceIn(0f, 1f)
-                                    if (tool == AnnotationTool.ERASER) {
-                                        eraserPos = Pair(nx, ny)
-                                        val hit = liveStrokes.filter { stroke ->
-                                            stroke.points.any { (px, py) ->
-                                                val dx = (px - nx) * imageWidthPx
-                                                val dy = (py - ny) * imageHeightPx
-                                                sqrt(dx * dx + dy * dy) < eraserRadiusPx
+                        // ── Single-touch: draw/erase ONLY. Two-finger swipe: navigate pages ──
+                        // Single finger NEVER triggers page navigation no matter how long the stroke.
+                        awaitPointerEventScope {
+                            val drawPoints      = mutableListOf<Pair<Float, Float>>()
+                            var eraseStarted    = false
+                            var twoFingerX      = 0f
+                            var twoFingerY      = 0f
+                            var twoFingerActive = false
+                            while (true) {
+                                val event   = awaitPointerEvent()
+                                val pressed = event.changes.filter { it.pressed }
+                                when {
+                                    pressed.isEmpty() -> {
+                                        // All fingers lifted — commit stroke OR fire navigation
+                                        if (twoFingerActive) {
+                                            twoFingerActive = false
+                                            val threshold = 80f
+                                            if (isHorizontalScroll) {
+                                                when {
+                                                    twoFingerX < -threshold -> onNext()
+                                                    twoFingerX >  threshold -> onPrev()
+                                                }
+                                            } else {
+                                                when {
+                                                    twoFingerY < -threshold -> onNext()
+                                                    twoFingerY >  threshold -> onPrev()
+                                                }
                                             }
+                                        } else if (tool != AnnotationTool.ERASER && drawPoints.size >= 2) {
+                                            val isH = tool == AnnotationTool.HIGHLIGHTER
+                                            val fc  = Color(colorArgb).copy(alpha = if (isH) 0.38f else 1f)
+                                            onStrokeCommit(AnnotationStroke(
+                                                points    = drawPoints.toList(),
+                                                colorArgb = fc.toArgb(),
+                                                widthDp   = strokeWidthDp * if (isH) 3.5f else 1f,
+                                                tool      = when (tool) {
+                                                    AnnotationTool.ARROW       -> "arrow"
+                                                    AnnotationTool.HIGHLIGHTER -> "highlight"
+                                                    else                       -> "pen"
+                                                }
+                                            ))
                                         }
-                                        if (hit.isNotEmpty()) {
-                                            if (!eraseStarted) { onEraseGestureStart(); eraseStarted = true }
-                                            onStrokesErase(hit)
+                                        drawPoints.clear()
+                                        currentPoints   = emptyList()
+                                        eraserPos       = null
+                                        eraseStarted    = false
+                                        twoFingerX      = 0f
+                                        twoFingerY      = 0f
+                                        event.changes.forEach { it.consume() }
+                                    }
+                                    pressed.size >= 2 -> {
+                                        // Two fingers — accumulate swipe delta; discard any partial stroke
+                                        if (!twoFingerActive) {
+                                            twoFingerActive = true
+                                            twoFingerX = 0f; twoFingerY = 0f
+                                            drawPoints.clear(); currentPoints = emptyList(); eraserPos = null
                                         }
-                                    } else {
-                                        currentPoints = currentPoints + Pair(nx, ny)
+                                        val moves = pressed.filter { it.previousPressed }
+                                        if (moves.size >= 2) {
+                                            twoFingerX += moves.map { it.position.x - it.previousPosition.x }.average().toFloat()
+                                            twoFingerY += moves.map { it.position.y - it.previousPosition.y }.average().toFloat()
+                                        }
+                                        pressed.forEach { it.consume() }
+                                    }
+                                    else -> {
+                                        // Single finger — draw or erase, never navigate
+                                        if (twoFingerActive) {
+                                            pressed.forEach { it.consume() }
+                                        } else {
+                                            val c  = pressed[0]
+                                            val nx = (c.position.x / imageWidthPx).coerceIn(0f, 1f)
+                                            val ny = (c.position.y / imageHeightPx).coerceIn(0f, 1f)
+                                            if (tool == AnnotationTool.ERASER) {
+                                                eraserPos = Pair(nx, ny)
+                                                val hit = liveStrokes.filter { s ->
+                                                    s.points.any { (px, py) ->
+                                                        val ex = (px - nx) * imageWidthPx
+                                                        val ey = (py - ny) * imageHeightPx
+                                                        sqrt(ex * ex + ey * ey) < eraserRadiusPx
+                                                    }
+                                                }
+                                                if (hit.isNotEmpty()) {
+                                                    if (!eraseStarted) { onEraseGestureStart(); eraseStarted = true }
+                                                    onStrokesErase(hit)
+                                                }
+                                            } else {
+                                                if (!c.previousPressed) {
+                                                    drawPoints.clear()
+                                                    drawPoints.add(Pair(nx, ny))
+                                                } else {
+                                                    drawPoints.add(Pair(nx, ny))
+                                                }
+                                                currentPoints = drawPoints.toList()
+                                            }
+                                            c.consume()
+                                        }
                                     }
                                 }
-                            },
-                            onDragEnd = {
-                                if (isSwipeGesture) {
-                                    // Navigate pages based on dominant swipe axis
-                                    val absX = kotlin.math.abs(totalDragX)
-                                    val absY = kotlin.math.abs(totalDragY)
-                                    if (absX >= absY) {
-                                        if (totalDragX < 0) onNext() else onPrev()
-                                    } else {
-                                        if (totalDragY < 0) onNext() else onPrev()
-                                    }
-                                } else if (tool != AnnotationTool.ERASER && currentPoints.size >= 2) {
-                                    val isHighlight = tool == AnnotationTool.HIGHLIGHTER
-                                    val finalColor  = Color(colorArgb).copy(alpha = if (isHighlight) 0.38f else 1f)
-                                    onStrokeCommit(AnnotationStroke(
-                                        points    = currentPoints,
-                                        colorArgb = finalColor.toArgb(),
-                                        widthDp   = strokeWidthDp * if (isHighlight) 3.5f else 1f,
-                                        tool      = when (tool) {
-                                            AnnotationTool.ARROW       -> "arrow"
-                                            AnnotationTool.HIGHLIGHTER -> "highlight"
-                                            else                       -> "pen"
-                                        }
-                                    ))
-                                }
-                                currentPoints  = emptyList()
-                                eraserPos      = null
-                                eraseStarted   = false
-                                isSwipeGesture = false
-                            },
-                            onDragCancel = {
-                                currentPoints  = emptyList()
-                                eraserPos      = null
-                                eraseStarted   = false
-                                isSwipeGesture = false
                             }
-                        )
+                        }
                     }
                 }
             }
