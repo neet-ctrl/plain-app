@@ -29,9 +29,10 @@ import com.neet.tracker.data.models.*
         NeetSequencePdf::class,
         Reminder::class,
         ErrorEntry::class,
-        RevisionItem::class
+        RevisionItem::class,
+        FlashcardProgress::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

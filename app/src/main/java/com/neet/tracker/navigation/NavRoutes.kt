@@ -59,6 +59,9 @@ object Routes {
     // Global Search
     const val GLOBAL_SEARCH       = "global_search"
 
+    // Flashcard Review
+    const val FLASHCARD_REVIEW    = "flashcard_review"
+
     // File Viewer
     const val FILE_VIEWER = "file_viewer/{encodedUri}/{title}?solutionUri={solutionUri}"
 

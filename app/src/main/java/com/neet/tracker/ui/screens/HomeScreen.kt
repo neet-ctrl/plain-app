@@ -237,6 +237,7 @@ fun HomeScreen(
         MainCard("Lack Points",        Icons.Default.TrendingDown,      Routes.LACK_POINTS,         NeonRed,    "Identify & fix weaknesses"),
         MainCard("Error Notebook",     Icons.Default.ErrorOutline,      Routes.ERROR_NOTEBOOK,      NeonOrange, "Track & fix mistakes"),
         MainCard("Revision Scheduler", Icons.Default.AutoGraph,         Routes.REVISION_SCHEDULER,  NeonTeal,   "Spaced revision planner"),
+        MainCard("Flashcard Review",   Icons.Default.Quiz,              Routes.FLASHCARD_REVIEW,    NeonPink,   "AI-powered flip card study"),
     )
 
     val filtered = mainCards.filter {

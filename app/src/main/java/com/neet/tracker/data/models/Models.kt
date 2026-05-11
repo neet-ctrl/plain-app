@@ -1,6 +1,7 @@
 package com.neet.tracker.data.models
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
@@ -503,5 +504,29 @@ data class Reminder(
     val isActive: Boolean = true,
     val linkedEntityId: String = "",
     val linkedEntityType: String = "",
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+// ─── Flashcard Enums ──────────────────────────────────────────────────────────
+
+enum class FlashcardType { NEET_TERM, NON_NEET_WORD, MNEMONIC }
+
+// ─── Flashcard Progress Entity ────────────────────────────────────────────────
+
+@Entity(
+    tableName = "flashcard_progress",
+    indices = [Index(value = ["cardId", "cardType"], unique = true)]
+)
+data class FlashcardProgress(
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val cardId: String = "",
+    val cardType: FlashcardType = FlashcardType.NEET_TERM,
+    val easeFactor: Float = 2.5f,
+    val intervalDays: Int = 0,
+    val repetitions: Int = 0,
+    val dueDate: String = "",
+    val totalReviews: Int = 0,
+    val correctReviews: Int = 0,
+    val lastReviewed: Long = 0L,
     val createdAt: Long = System.currentTimeMillis()
 )

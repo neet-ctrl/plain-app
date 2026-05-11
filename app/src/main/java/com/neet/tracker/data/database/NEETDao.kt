@@ -274,6 +274,20 @@ interface NEETDao {
     @Query("SELECT * FROM chapter_short_notes ORDER BY subject ASC")
     fun getAllChapterShortNotes(): Flow<List<ChapterShortNote>>
 
+    // ── Flashcard Progress ────────────────────────────────────────────────────
+    @Query("SELECT * FROM flashcard_progress ORDER BY dueDate ASC")
+    fun getAllFlashcardProgress(): Flow<List<FlashcardProgress>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveFlashcardProgress(p: FlashcardProgress)
+    @Query("SELECT COUNT(*) FROM flashcard_progress WHERE dueDate <= :today AND dueDate != ''")
+    fun countDueFlashcards(today: String): Flow<Int>
+    @Query("SELECT COUNT(*) FROM dictionary_neet")
+    fun countNeetDictionary(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM dictionary_non_neet")
+    fun countNonNeetDictionary(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM mnemonics")
+    fun countMnemonics(): Flow<Int>
+
     // ── Home card counts ──────────────────────────────────────────────────────
     @Query("SELECT COUNT(*) FROM notebooks")         fun countNotebooks(): Flow<Int>
     @Query("SELECT COUNT(*) FROM books")             fun countBooks(): Flow<Int>
