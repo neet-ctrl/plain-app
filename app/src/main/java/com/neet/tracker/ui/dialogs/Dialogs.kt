@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.neet.tracker.data.ChapterStore
 import com.neet.tracker.data.models.CompletionDate
 import com.neet.tracker.data.models.Status
 import com.neet.tracker.ui.components.*
@@ -1326,6 +1327,211 @@ fun URLDialog(currentUrl: String, onSave: (String) -> Unit, onDismiss: () -> Uni
                         border = BorderStroke(1.dp, NeonCyan.copy(0.6f))
                     ) { Text("Save Link", color = NeonCyan, fontWeight = FontWeight.Bold) }
                 }
+            }
+        }
+    }
+}
+
+// ─── Chapter Picker Dialog ────────────────────────────────────────────────────
+
+@Composable
+fun ChapterPickerDialog(
+    title: String = "Select Chapter",
+    accentColor: Color = NeonCyan,
+    multiSelect: Boolean = true,
+    preSelected: List<String> = emptyList(),
+    onConfirm: (List<String>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val chapters = remember { ChapterStore.getChapters(context) }
+    var search by remember { mutableStateOf("") }
+    var selected by remember { mutableStateOf(preSelected.toSet()) }
+    val filtered = remember(search, chapters) {
+        if (search.isBlank()) chapters else chapters.filter { it.contains(search, true) }
+    }
+
+    NEETDialog(title = title, icon = Icons.Default.MenuBook, accentColor = accentColor, onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (chapters.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(accentColor.copy(0.08f), RoundedCornerShape(10.dp))
+                        .border(0.5.dp, accentColor.copy(0.3f), RoundedCornerShape(10.dp))
+                        .padding(14.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.Info, null, tint = accentColor, modifier = Modifier.size(16.dp))
+                        Text("No chapters configured. Add chapters via Profile → Chapter Library.", style = MaterialTheme.typography.labelSmall, color = accentColor.copy(0.8f))
+                    }
+                }
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth(), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Close") }
+            } else {
+                OutlinedTextField(
+                    value = search,
+                    onValueChange = { search = it },
+                    placeholder = { Text("Search chapters...", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(0.3f)) },
+                    leadingIcon = { Icon(Icons.Default.Search, null, tint = accentColor.copy(0.7f), modifier = Modifier.size(18.dp)) },
+                    trailingIcon = {
+                        if (search.isNotBlank()) IconButton(onClick = { search = "" }) {
+                            Icon(Icons.Default.Close, null, tint = Color.White.copy(0.4f), modifier = Modifier.size(16.dp))
+                        }
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = accentColor.copy(0.6f),
+                        unfocusedBorderColor = Color.White.copy(0.15f),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White.copy(0.8f),
+                        cursorColor = accentColor
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (selected.isNotEmpty()) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("${selected.size} selected", style = MaterialTheme.typography.labelSmall, color = accentColor)
+                        TextButton(onClick = { selected = emptySet() }) {
+                            Text("Clear all", style = MaterialTheme.typography.labelSmall, color = NeonRed.copy(0.8f))
+                        }
+                    }
+                }
+
+                Box(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (filtered.isEmpty()) {
+                            item {
+                                Text("No results for \"$search\"", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.4f), modifier = Modifier.padding(8.dp))
+                            }
+                        }
+                        items(filtered) { ch ->
+                            val isSelected = ch in selected
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isSelected) accentColor.copy(0.15f) else Color.White.copy(0.03f))
+                                    .border(if (isSelected) 1.dp else 0.5.dp, if (isSelected) accentColor.copy(0.6f) else Color.White.copy(0.08f), RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        selected = if (!multiSelect) setOf(ch)
+                                        else if (isSelected) selected - ch else selected + ch
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Checkbox(
+                                    checked = isSelected,
+                                    onCheckedChange = null,
+                                    colors = CheckboxDefaults.colors(checkedColor = accentColor, uncheckedColor = Color.White.copy(0.3f), checkmarkColor = Color.Black),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(ch, style = MaterialTheme.typography.bodySmall, color = if (isSelected) accentColor else Color.White.copy(0.8f), modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
+                    Button(
+                        onClick = { if (selected.isNotEmpty()) onConfirm(selected.toList()) },
+                        modifier = Modifier.weight(1f),
+                        enabled = selected.isNotEmpty(),
+                        colors = ButtonDefaults.buttonColors(containerColor = accentColor.copy(0.2f)),
+                        border = BorderStroke(1.dp, accentColor.copy(0.6f))
+                    ) { Text("Confirm (${selected.size})", color = if (selected.isNotEmpty()) accentColor else accentColor.copy(0.4f), fontWeight = FontWeight.Bold) }
+                }
+            }
+        }
+    }
+}
+
+// ─── Chapter Input Field ──────────────────────────────────────────────────────
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ChapterInputField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    accentColor: Color = NeonCyan,
+    multiSelect: Boolean = false,
+    label: String = "Chapter"
+) {
+    val context = LocalContext.current
+    val chapters = remember { ChapterStore.getChapters(context) }
+    var showPicker by remember { mutableStateOf(false) }
+
+    if (chapters.isEmpty()) {
+        DialogTextField(value = value, onValueChange = onValueChange, label = label, icon = Icons.Default.MenuBook, accentColor = accentColor)
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (value.isNotBlank()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    value.split(",").map { it.trim() }.filter { it.isNotBlank() }.forEach { ch ->
+                        Box(
+                            modifier = Modifier
+                                .background(accentColor.copy(0.18f), RoundedCornerShape(20.dp))
+                                .border(0.5.dp, accentColor.copy(0.5f), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(ch, style = MaterialTheme.typography.labelSmall, color = accentColor)
+                        }
+                    }
+                }
+            }
+            OutlinedButton(
+                onClick = { showPicker = true },
+                modifier = Modifier.fillMaxWidth(),
+                border = BorderStroke(1.dp, accentColor.copy(0.5f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = accentColor),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.MenuBook, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(if (value.isBlank()) "Select $label" else "Change $label", style = MaterialTheme.typography.labelMedium)
+            }
+        }
+    }
+
+    if (showPicker) {
+        ChapterPickerDialog(
+            title = "Select $label",
+            accentColor = accentColor,
+            multiSelect = multiSelect,
+            preSelected = value.split(",").map { it.trim() }.filter { it.isNotBlank() },
+            onConfirm = { selected ->
+                onValueChange(selected.joinToString(", "))
+                showPicker = false
+            },
+            onDismiss = { showPicker = false }
+        )
+    }
+}
+
+// ─── Chapter Simple Add Dialog ────────────────────────────────────────────────
+
+@Composable
+fun ChapterSimpleAddDialog(
+    title: String,
+    accentColor: Color,
+    icon: ImageVector,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var chapter by remember { mutableStateOf("") }
+    NEETDialog(title = title, icon = icon, accentColor = accentColor, onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            ChapterInputField(value = chapter, onValueChange = { chapter = it }, accentColor = accentColor, multiSelect = false)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
+                Button(
+                    onClick = { if (chapter.isNotBlank()) onSave(chapter) },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = accentColor.copy(0.2f)),
+                    border = BorderStroke(1.dp, accentColor.copy(0.6f))
+                ) { Text("Add", color = accentColor, fontWeight = FontWeight.Bold) }
             }
         }
     }

@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.neet.tracker.data.ChapterStore
 import com.neet.tracker.data.models.*
 import com.neet.tracker.navigation.fileViewerRoute
 import com.neet.tracker.ui.components.*
@@ -31,6 +32,8 @@ import com.neet.tracker.ui.dialogs.DialogTextField
 import com.neet.tracker.ui.dialogs.NeetDatePickerButton
 import com.neet.tracker.ui.theme.*
 import com.neet.tracker.ui.viewmodels.ProfileViewModel
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import java.net.URLEncoder
 
 @Composable
@@ -307,6 +310,158 @@ fun ProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewM
                                 Icon(Icons.Default.Add, null, tint = NeonGold)
                                 Spacer(Modifier.width(8.dp))
                                 Text("Add NEET Attempt", color = NeonGold, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                // ── Chapter Library ───────────────────────────────────────────
+                item {
+                    val clipboardManager = LocalClipboardManager.current
+                    var chLibExpanded by remember { mutableStateOf(false) }
+                    var jsonInput by remember { mutableStateOf(ChapterStore.loadJson(context)) }
+                    val chapCount = remember(jsonInput) { ChapterStore.getChapters(context).size }
+                    val fmt1Example = """{"Physics":["Units and Measurements","Motion in a Straight Line"],"Chemistry":["Some Basic Concepts","Atomic Structure"],"Biology":["The Living World","Biological Classification"]}"""
+                    val fmt2Example = """["Units and Measurements","Some Basic Concepts","The Living World"]"""
+
+                    GlassCard(glowColor = NeonGreen) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clickable { chLibExpanded = !chLibExpanded },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(modifier = Modifier.size(4.dp, 20.dp).background(NeonGreen, RoundedCornerShape(2.dp)))
+                                Icon(Icons.Default.LibraryBooks, null, tint = NeonGreen, modifier = Modifier.size(18.dp))
+                                Text("Chapter Library", style = MaterialTheme.typography.headlineMedium, color = NeonGreen, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                if (chapCount > 0) {
+                                    Box(
+                                        modifier = Modifier
+                                            .background(NeonGreen.copy(0.18f), RoundedCornerShape(8.dp))
+                                            .border(0.5.dp, NeonGreen.copy(0.5f), RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) { Text("$chapCount chapters", style = MaterialTheme.typography.labelSmall, color = NeonGreen) }
+                                }
+                                Icon(if (chLibExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null, tint = NeonGreen, modifier = Modifier.size(20.dp))
+                            }
+
+                            AnimatedVisibility(visible = chLibExpanded) {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    NeonDivider(NeonGreen)
+
+                                    // Format guide
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth()
+                                            .background(Color.White.copy(0.04f), RoundedCornerShape(12.dp))
+                                            .border(0.5.dp, NeonCyan.copy(0.25f), RoundedCornerShape(12.dp))
+                                            .padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Icon(Icons.Default.Code, null, tint = NeonCyan, modifier = Modifier.size(14.dp))
+                                            Text("JSON Format Guide", style = MaterialTheme.typography.labelMedium, color = NeonCyan, fontWeight = FontWeight.Bold)
+                                        }
+
+                                        Text("Format 1 — Subject-wise (Recommended):", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.55f))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth()
+                                                .background(Color(0xFF050E22), RoundedCornerShape(8.dp))
+                                                .border(0.5.dp, NeonGreen.copy(0.3f), RoundedCornerShape(8.dp))
+                                                .padding(10.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.Top
+                                        ) {
+                                            Text(
+                                                "{\n  \"Physics\": [\"Ch1\", \"Ch2\"],\n  \"Chemistry\": [\"Ch3\"],\n  \"Biology\": [\"Ch4\"]\n}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = NeonGreen,
+                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            IconButton(onClick = { clipboardManager.setText(AnnotatedString(fmt1Example)) }, modifier = Modifier.size(28.dp)) {
+                                                Icon(Icons.Default.ContentCopy, null, tint = NeonCyan.copy(0.7f), modifier = Modifier.size(14.dp))
+                                            }
+                                        }
+
+                                        Text("Format 2 — Flat list:", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.55f))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth()
+                                                .background(Color(0xFF050E22), RoundedCornerShape(8.dp))
+                                                .border(0.5.dp, NeonPurple.copy(0.3f), RoundedCornerShape(8.dp))
+                                                .padding(10.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.Top
+                                        ) {
+                                            Text(
+                                                "[\"Ch1\", \"Ch2\", \"Ch3\", \"Ch4\"]",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = NeonPurple,
+                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            IconButton(onClick = { clipboardManager.setText(AnnotatedString(fmt2Example)) }, modifier = Modifier.size(28.dp)) {
+                                                Icon(Icons.Default.ContentCopy, null, tint = NeonCyan.copy(0.7f), modifier = Modifier.size(14.dp))
+                                            }
+                                        }
+                                    }
+
+                                    // JSON input
+                                    Text("Paste your chapter JSON below:", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
+                                    OutlinedTextField(
+                                        value = jsonInput,
+                                        onValueChange = { jsonInput = it },
+                                        placeholder = { Text("Paste JSON here...", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.25f)) },
+                                        minLines = 4,
+                                        maxLines = 10,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = NeonGreen.copy(0.6f),
+                                            unfocusedBorderColor = Color.White.copy(0.15f),
+                                            focusedTextColor = NeonGreen,
+                                            unfocusedTextColor = Color.White.copy(0.7f),
+                                            cursorColor = NeonGreen
+                                        ),
+                                        shape = RoundedCornerShape(12.dp),
+                                        textStyle = MaterialTheme.typography.labelSmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    Button(
+                                        onClick = { ChapterStore.saveJson(context, jsonInput) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(containerColor = NeonGreen.copy(0.2f)),
+                                        border = BorderStroke(1.dp, NeonGreen.copy(0.7f))
+                                    ) {
+                                        Icon(Icons.Default.Save, null, tint = NeonGreen, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Save Chapter Library", color = NeonGreen, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    NeonDivider(NeonRed.copy(0.35f))
+
+                                    OutlinedButton(
+                                        onClick = { ChapterStore.clearChapters(context); jsonInput = "" },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        border = BorderStroke(1.dp, NeonRed.copy(0.5f)),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonRed)
+                                    ) {
+                                        Icon(Icons.Default.DeleteSweep, null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Clear Chapter Library", style = MaterialTheme.typography.labelMedium)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            try { context.cacheDir.deleteRecursively() } catch (_: Exception) {}
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        border = BorderStroke(1.dp, NeonOrange.copy(0.5f)),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonOrange)
+                                    ) {
+                                        Icon(Icons.Default.CleaningServices, null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Clear App Cache", style = MaterialTheme.typography.labelMedium)
+                                    }
+                                }
                             }
                         }
                     }

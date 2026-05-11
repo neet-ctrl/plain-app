@@ -262,7 +262,7 @@ fun ChapterEditDialog(chapter: NotebookChapter?, notebookId: String, onSave: (No
     var name by remember { mutableStateOf(chapter?.name ?: "") }
     NEETDialog(title = if (chapter == null) "New Chapter" else "Edit Chapter", icon = Icons.Default.MenuBook, accentColor = NeonCyan, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            DialogTextField(value = name, onValueChange = { name = it }, label = "Chapter Name", icon = Icons.Default.Article, accentColor = NeonCyan)
+            ChapterInputField(value = name, onValueChange = { name = it }, accentColor = NeonCyan, multiSelect = false, label = "Chapter Name")
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("Cancel") }
                 Button(onClick = { onSave((chapter ?: NotebookChapter(notebookId = notebookId)).copy(name = name)) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonCyan.copy(0.2f)), border = BorderStroke(1.dp, NeonCyan.copy(0.6f))) {

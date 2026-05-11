@@ -210,7 +210,7 @@ fun AddNeetTermDialog(serialNo: Int, onSave: (DictionaryNeet) -> Unit, onDismiss
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             DialogTextField(value = term, onValueChange = { term = it }, label = "Term / Word", icon = Icons.Default.Abc, accentColor = NeonCyan)
             DialogTextField(value = definition, onValueChange = { definition = it }, label = "Definition", icon = Icons.Default.Info, accentColor = NeonCyan, multiline = true)
-            DialogTextField(value = chapter, onValueChange = { chapter = it }, label = "Chapter", icon = Icons.Default.MenuBook, accentColor = NeonCyan)
+            ChapterInputField(value = chapter, onValueChange = { chapter = it }, accentColor = NeonCyan, multiSelect = false, label = "Chapter")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Subject.values().forEach { s ->
                     FilterChip(selected = subject == s, onClick = { subject = s }, label = { Text(s.name, fontSize = 10.sp) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = NeonCyan.copy(0.2f), selectedLabelColor = NeonCyan))
@@ -372,7 +372,7 @@ fun AddMnemonicDialog(onSave: (Mnemonic) -> Unit, onDismiss: () -> Unit) {
     NEETDialog(title = "Add Mnemonic", icon = Icons.Default.Psychology, accentColor = NeonPurple, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             DialogTextField(value = name, onValueChange = { name = it }, label = "Mnemonic Name", icon = Icons.Default.Label, accentColor = NeonPurple)
-            DialogTextField(value = chapter, onValueChange = { chapter = it }, label = "Chapter", icon = Icons.Default.MenuBook, accentColor = NeonPurple)
+            ChapterInputField(value = chapter, onValueChange = { chapter = it }, accentColor = NeonPurple, multiSelect = false, label = "Chapter")
             DialogTextField(value = description, onValueChange = { description = it }, label = "Description / Technique", icon = Icons.Default.Notes, accentColor = NeonPurple, multiline = true)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Subject.values().forEach { s -> FilterChip(selected = subject == s, onClick = { subject = s }, label = { Text(s.name, fontSize = 10.sp) }) } }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

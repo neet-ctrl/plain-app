@@ -553,7 +553,7 @@ fun AddSequenceDialog(nextSerial: Int, onSave: (NeetSequence) -> Unit, onDismiss
     var subject by remember { mutableStateOf(Subject.GENERAL) }
     NEETDialog(title = "Add to Sequence #$nextSerial", icon = Icons.Default.LinearScale, accentColor = NeonPurple, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            DialogTextField(value = name, onValueChange = { name = it }, label = "Chapter Name", icon = Icons.Default.Article, accentColor = NeonPurple)
+            ChapterInputField(value = name, onValueChange = { name = it }, accentColor = NeonPurple, multiSelect = false, label = "Chapter Name")
             Text("Select Subject", style = MaterialTheme.typography.labelLarge, color = NeonPurple, fontWeight = FontWeight.Bold)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(Subject.values().toList()) { s ->
@@ -661,7 +661,7 @@ fun AddDiagramDialog(subject: String, color: Color, onSave: (Diagram) -> Unit, o
     }
     NEETDialog(title = "Add Diagram", icon = Icons.Default.AccountTree, accentColor = color, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            DialogTextField(value = chapter, onValueChange = { chapter = it }, label = "Chapter Name", icon = Icons.Default.Article, accentColor = color)
+            ChapterInputField(value = chapter, onValueChange = { chapter = it }, accentColor = color, multiSelect = false, label = "Chapter Name")
             Button(onClick = { launcher.launch(arrayOf("application/pdf")) }, colors = ButtonDefaults.buttonColors(containerColor = color.copy(0.12f)), border = BorderStroke(1.dp, color.copy(0.4f)), modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.UploadFile, null, tint = color); Spacer(Modifier.width(8.dp))
                 Text(if (fileUri.isBlank()) "Upload Diagram PDF" else "✓ PDF Uploaded", color = color)
@@ -762,7 +762,7 @@ fun AddChapterNoteDialog(subject: String, color: Color, onSave: (ChapterShortNot
     }
     NEETDialog(title = "Add Short Notes", icon = Icons.Default.Article, accentColor = color, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            DialogTextField(value = chapter, onValueChange = { chapter = it }, label = "Chapter Name", icon = Icons.Default.MenuBook, accentColor = color)
+            ChapterInputField(value = chapter, onValueChange = { chapter = it }, accentColor = color, multiSelect = false, label = "Chapter Name")
             Button(onClick = { launcher.launch(arrayOf("application/pdf")) }, colors = ButtonDefaults.buttonColors(containerColor = color.copy(0.12f)), border = BorderStroke(1.dp, color.copy(0.4f)), modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.UploadFile, null, tint = color); Spacer(Modifier.width(8.dp))
                 Text(if (fileUri.isBlank()) "Upload Notes PDF" else "✓ PDF Uploaded", color = color)

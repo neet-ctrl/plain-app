@@ -106,7 +106,7 @@ fun PYQChapterwiseDetailScreen(navController: NavController, sourceId: String, s
         }
     }
 
-    if (showAdd) SimpleAddDialog("Add Chapter", "Chapter Name", NeonCyan, Icons.Default.MenuBook,
+    if (showAdd) ChapterSimpleAddDialog("Add Chapter", NeonCyan, Icons.Default.MenuBook,
         onSave = { vm.saveChapter(PYQChapter(sourceId = sourceId, name = it)); showAdd = false },
         onDismiss = { showAdd = false })
     showStatus?.let { ch -> StatusSelectorDialog(ch.status, onSelect = { vm.saveChapter(ch.copy(status = it)); showStatus = null }, onDismiss = { showStatus = null }) }
