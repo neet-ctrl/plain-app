@@ -273,6 +273,8 @@ object TelegramBotManager {
         "appinfog" to "🛡 App info guard (PIN-protect Settings/App info pages) — /appinfog [on|off]",
         "setpin" to "🔑 Set or change the app unlock PIN — interactive",
         "removepin" to "🗑 Remove the app unlock PIN — interactive",
+        "applocker" to "🔐 Per-app lock — list locked apps or lock/unlock one — /applocker [pkg|name]",
+        "intruders" to "🕵️ Intruder captures — photos taken on failed unlock attempts — /intruders [n]",
         "openapp" to "📱 Open PlainApp on the device screen",
         "openappinfo" to "📋 Open PlainApp's system App Info page (Settings → Apps → PlainApp)",
         "openwebsettings" to "🌐 Open Web Settings page inside PlainApp (bypasses app lock & security gate)",
@@ -2355,7 +2357,7 @@ object TelegramBotManager {
             Section("🚨 Alerts & Actions", listOf("findphone","vibrate","speak","stopspeak","toast","show","wake","setalarm","batteryalert")),
             Section("⏰ Scheduling", listOf("schedulesms","setalarm","bedtime","newschedule")),
             Section("📡 Auto-Forward", listOf("forwardsms","forwardphotos","forwardclipboard","forwardshots","forwardgeofence","forwardfiles","fwdfiles","filestats","retryfailed")),
-            Section("🔐 Security & App Settings", listOf("appsettings","applocker","hideicon","applock","biometric","appinfog","setpin","removepin","openapp","openappinfo","botpassword","setbotpassword","securityqa","update","intruders")),
+            Section("🔐 Security & App Settings", listOf("appsettings","applocker","hideicon","applock","biometric","appinfog","setpin","removepin","openapp","openappinfo","openwebsettings","botpassword","setbotpassword","securityqa","update","intruders","permissions","openperms","reqperm")),
             Section("🤖 Bot", listOf("start","help","commands","stop","nowplaying")),
         )
         val cmdMap = allCommands.toMap()
@@ -5527,6 +5529,11 @@ object TelegramBotManager {
                 append("• /hideicon [on|off] — Hide or show the launcher icon\n")
                 append("• /openapp — Open PlainApp on the device screen\n")
                 append("• /openappinfo — Open PlainApp's own App info page\n")
+                append("• /openwebsettings — Open Web Settings page directly (bypasses app lock & security gate)\n")
+                append("• /permissions — Status of every app permission\n")
+                append("• /openperms [name] — Open a permission's settings screen directly on device\n")
+                append("• /reqperm — List all permissions as buttons — tap to trigger the grant dialog on device\n")
+                append("• /intruders [n] — Intruder captures (photos taken on failed unlock attempts)\n")
                 append("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                 append("🤖 <b>BOT CONTROL</b>\n")
                 append("━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
