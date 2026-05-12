@@ -4940,6 +4940,10 @@ object TelegramBotManager {
             else -> null
         }
         return if (intent != null) {
+            // Pre-authorize the AppInfoGuard 30-second window so the accessibility
+            // service does NOT show the PIN prompt when the settings screen appears.
+            // Only /openperms triggers this — no other command calls markVerified().
+            com.ismartcoding.plain.helpers.AppInfoGuard.markVerified()
             try { ctx.startActivity(intent); true } catch (_: Exception) {
                 try { ctx.startActivity(appInfo()); true } catch (_: Exception) { false }
             }
