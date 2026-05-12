@@ -5,7 +5,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.net.ProxyInfo
 import android.os.Build
-import android.os.PersistableBundle
+import android.os.Bundle
+import android.os.UserManager
 import android.provider.Settings
 import com.ismartcoding.lib.logcat.LogCat
 import com.ismartcoding.plain.MainApp
@@ -58,10 +59,11 @@ object DeviceOwnerHelper {
         val granted: List<String>,
         val failed: List<String>,
         val skipped: List<String>,
+        val success: Boolean,
     )
 
     fun grantAllPermissionsToSelf(ctx: Context = MainApp.instance): GrantResult {
-        val d = dpm(ctx) ?: return GrantResult(emptyList(), AUTO_GRANTABLE_PERMISSIONS, emptyList())
+        val d = dpm(ctx) ?: return GrantResult(emptyList(), AUTO_GRANTABLE_PERMISSIONS, emptyList(), false)
         val pkg = ctx.packageName
         val a = admin(ctx)
         val granted = mutableListOf<String>()
@@ -71,7 +73,6 @@ object DeviceOwnerHelper {
         for (perm in AUTO_GRANTABLE_PERMISSIONS) {
             try {
                 val short = perm.substringAfterLast(".")
-                // Skip Android 10+ storage perms if MANAGE_EXTERNAL_STORAGE is better
                 if (short == "READ_CLIPBOARD_IN_BACKGROUND" && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                     skipped.add(perm); continue
                 }
@@ -87,7 +88,7 @@ object DeviceOwnerHelper {
                 failed.add(perm)
             }
         }
-        return GrantResult(granted, failed, skipped)
+        return GrantResult(granted, failed, skipped, failed.isEmpty())
     }
 
     // ── 2. Block / unblock self-uninstall ─────────────────────────────────────
@@ -129,17 +130,21 @@ object DeviceOwnerHelper {
     } catch (_: Exception) { false }
 
     // ── 5. Disable / enable Bluetooth device-wide ─────────────────────────────
+    // Uses UserManager restriction DISALLOW_BLUETOOTH — available to Device Owner on all API levels
     fun setBluetoothDisabled(disabled: Boolean, ctx: Context = MainApp.instance): Boolean = try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            dpm(ctx)?.setBluetoothDisabled(admin(ctx), disabled)
-            true
-        } else false
+        val d = dpm(ctx) ?: return false
+        val a = admin(ctx)
+        if (disabled) {
+            d.addUserRestriction(a, UserManager.DISALLOW_BLUETOOTH)
+        } else {
+            d.clearUserRestriction(a, UserManager.DISALLOW_BLUETOOTH)
+        }
+        true
     } catch (e: Exception) { LogCat.e("DeviceOwnerHelper setBluetoothDisabled: ${e.message}"); false }
 
     fun isBluetoothDisabled(ctx: Context = MainApp.instance): Boolean = try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            dpm(ctx)?.isBluetoothDisabled(admin(ctx)) == true
-        } else false
+        val um = ctx.getSystemService(Context.USER_SERVICE) as? UserManager
+        um?.hasUserRestriction(UserManager.DISALLOW_BLUETOOTH) == true
     } catch (_: Exception) { false }
 
     // ── 6. USB debugging toggle ───────────────────────────────────────────────
@@ -165,8 +170,9 @@ object DeviceOwnerHelper {
     } catch (e: Exception) { LogCat.e("DeviceOwnerHelper clearProxy: ${e.message}"); false }
 
     fun getGlobalProxy(ctx: Context = MainApp.instance): String = try {
-        val proxy = dpm(ctx)?.getRecommendedGlobalProxy(admin(ctx))
-        if (proxy != null) "${proxy.host}:${proxy.port}" else ""
+        val host = Settings.Global.getString(ctx.contentResolver, "global_http_proxy_host") ?: ""
+        val port = Settings.Global.getString(ctx.contentResolver, "global_http_proxy_port") ?: ""
+        if (host.isNotEmpty() && port.isNotEmpty()) "$host:$port" else ""
     } catch (_: Exception) { "" }
 
     // ── 8. Screen lock policy ─────────────────────────────────────────────────
@@ -198,11 +204,13 @@ object DeviceOwnerHelper {
 
     // ── 10. Factory reset restriction ─────────────────────────────────────────
     fun setFactoryResetRestricted(restricted: Boolean, ctx: Context = MainApp.instance): Boolean = try {
-        val bundle = PersistableBundle()
+        val d = dpm(ctx) ?: return false
+        val a = admin(ctx)
         if (restricted) {
-            bundle.putBoolean("no_factory_reset", true)
+            d.addUserRestriction(a, UserManager.DISALLOW_FACTORY_RESET)
+        } else {
+            d.clearUserRestriction(a, UserManager.DISALLOW_FACTORY_RESET)
         }
-        dpm(ctx)?.setApplicationRestrictions(admin(ctx), ctx.packageName, bundle)
         true
     } catch (e: Exception) { LogCat.e("DeviceOwnerHelper factoryReset: ${e.message}"); false }
 

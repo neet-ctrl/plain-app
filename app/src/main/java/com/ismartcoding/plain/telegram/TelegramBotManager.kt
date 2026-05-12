@@ -8615,12 +8615,11 @@ object TelegramBotManager {
                         val camDis = dpm.getCameraDisabled(adminComponent)
                         sb.append("  Camera disabled: ${if (camDis) "✅ Disabled" else "❌ Enabled"}\n")
                     } catch (_: Exception) {}
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                        try {
-                            val btDis = dpm.isBluetoothContactSharingDisabled(adminComponent)
-                            sb.append("  Bluetooth restricted: ${if (btDis) "✅" else "❌"}\n")
-                        } catch (_: Exception) {}
-                    }
+                    try {
+                        val um = ctx.getSystemService(android.content.Context.USER_SERVICE) as? android.os.UserManager
+                        val btDis = um?.hasUserRestriction(android.os.UserManager.DISALLOW_BLUETOOTH) == true
+                        sb.append("  Bluetooth restricted: ${if (btDis) "✅" else "❌"}\n")
+                    } catch (_: Exception) {}
                     sb.append("\n<b>Quick actions:</b>\n")
                     sb.append("  /deviceowner grantperms — auto-grant all permissions\n")
                     sb.append("  /deviceowner kiosk on|off — toggle kiosk mode\n")
@@ -8660,13 +8659,9 @@ object TelegramBotManager {
                 sendMessage("📷 <b>Camera</b>: ${if (off) "❌ Disabled device-wide" else "✅ Enabled for all apps"}")
             }
             "bt" -> {
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                    val off = args.getOrNull(1)?.lowercase() != "off"
-                    dpm.setBluetoothContactSharingDisabled(adminComponent, off)
-                    sendMessage("🔵 <b>Bluetooth</b>: ${if (off) "❌ Sharing disabled" else "✅ Sharing enabled"}")
-                } else {
-                    sendMessage("🔵 Bluetooth control requires Android 13+.")
-                }
+                val off = args.getOrNull(1)?.lowercase() != "off"
+                com.ismartcoding.plain.helpers.DeviceOwnerHelper.setBluetoothDisabled(off, ctx)
+                sendMessage("🔵 <b>Bluetooth</b>: ${if (off) "❌ Disabled device-wide (DISALLOW_BLUETOOTH restriction)" else "✅ Enabled"}")
             }
             "usb" -> {
                 val off = args.getOrNull(1)?.lowercase() != "off"
