@@ -49,7 +49,7 @@ internal fun MainActivity.handleExportFileEvent(event: ExportFileEvent) {
         exportFileActivityLauncher.launch(
             Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                 type = when (event.type) {
-                    ExportFileType.BACKUP -> "application/zip"
+                    ExportFileType.BACKUP -> "application/octet-stream"
                     else -> "text/*"
                 }
                 addCategory(Intent.CATEGORY_OPENABLE)

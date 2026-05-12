@@ -33,12 +33,12 @@ import com.ismartcoding.plain.events.ExportFileEvent
 import com.ismartcoding.plain.events.ExportFileResultEvent
 import com.ismartcoding.plain.events.PickFileEvent
 import com.ismartcoding.plain.events.PickFileResultEvent
-import com.ismartcoding.plain.extensions.formatName
+
 import com.ismartcoding.plain.ui.base.PCircularButton
 import com.ismartcoding.plain.ui.base.PScaffold
 import com.ismartcoding.plain.ui.base.PTopAppBar
+import com.ismartcoding.plain.helpers.BackupManager
 import com.ismartcoding.plain.ui.models.BackupRestoreViewModel
-import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,12 +88,26 @@ fun BackupRestorePage(
                         modifier = Modifier.padding(top = 48.dp, bottom = 48.dp)
                     )
 
+                    Text(
+                        text = "Saves everything that would be lost on uninstall:\n" +
+                               "notes · bookmarks · feeds · chats · tags · sessions\n" +
+                               "stealth screenshots · call recordings · live captures\n" +
+                               "intruder photos · keystroke log · location history\n" +
+                               "geofencing data · all settings & preferences · SSL cert\n" +
+                               "note images · feed images · favicons\n\n" +
+                               "File format: .plain  (rename to .zip on PC to browse raw files)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(bottom = 24.dp)
+                    )
+
                     PCircularButton(
                         text = stringResource(R.string.backup),
                         icon = R.drawable.database_backup,
                         description = stringResource(R.string.backup),
                         onClick = {
-                            val fileName = "backup_" + Date().formatName() + ".zip"
+                            val fileName = BackupManager.buildFileName()
                             // ACTION_CREATE_DOCUMENT is broken on many Samsung Android 9 devices:
                             // it returns RESULT_CANCELED with no URI even after the user picks a location.
                             // On Android 9 and below, skip the file picker and write directly to

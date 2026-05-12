@@ -456,6 +456,77 @@ Supports search within any folder.
 
 ---
 
+## Backup
+
+### `/backup`
+**Description:** Builds a complete `.plain` backup of ALL private PlainApp data and either sends it directly to Telegram (if ≤ 50 MB) or generates a one-time 30-minute download link (if > 50 MB).
+
+The `.plain` file is a ZIP archive — rename it to `.zip` on your PC to browse the raw contents.
+
+**What is included:**
+- 🗄 **Database** — notes, bookmarks, feeds, books, chats, tags, sessions, peers
+- 📸 **Stealth screenshots** (images + metadata JSON)
+- 📞 **Recorded calls** (.m4a audio + JSON sidecar per call)
+- 🎙 **Live captures** (live-camera photos/videos, mic recordings + sidecars)
+- 👁 **Intruder captures** (wrong-unlock selfies + metadata)
+- ⌨️ **Keystroke log** (all captured keystrokes)
+- 🗺 **Location history** (all GPS location points)
+- 🌐 **Geofencing data** (zones + event log)
+- ⚙️ **All settings & preferences** (DataStore + SharedPreferences: web password, PIN, Telegram token, every toggle, Cloudflare token/hostname, app-block config, bedtime, automation rules, …)
+- 🔐 **SSL certificate** (keystore.bks — web console HTTPS cert)
+- 🖼 **Note images, feed article images, bookmark favicons**
+
+**What is excluded** (regeneratable, not private):
+- Image/thumbnail cache
+- Upload temp chunks
+- `cloudflared` binary (re-extracted from APK at runtime)
+
+**Aliases:** `bak`, `backupdata`, `exportdata`
+**Usage:** `/backup`
+**Inline buttons:**
+- `📦 Also send as .zip` — re-sends the same file with `.zip` extension (so your PC opens it without renaming)
+- `🔄 Fresh backup` — builds and sends a brand-new backup immediately
+
+**Notes:**
+- Telegram Bot API max file size is 50 MB. Larger backups get a one-time download link (valid 30 min) served by the on-device Ktor server. If Cloudflare Tunnel is active, the link uses your public domain; otherwise it uses the local LAN IP.
+- Restore: use the Backup & Restore page in the app (accepts both `.plain` and `.zip`).
+
+---
+
+### `/restore`
+**Description:** Puts the bot into "restore mode" for 5 minutes, then waits for you to send a `.plain` or `.zip` PlainApp backup file directly to this chat.  
+Once received the bot will:
+1. Download the file from Telegram
+2. Unpack and scan the backup contents
+3. Restore all data to the device (overwrites current data)
+4. Send a detailed per-category count of what was restored
+5. Automatically restart the app (no tap needed)
+
+**Aliases:** `restoredata`, `restorebackup`, `importbackup`
+**Usage:** `/restore` → then send the `.plain` or `.zip` file as a Telegram document
+
+**Per-category status shown after restore:**
+- 🗄 Database files (notes, bookmarks, feeds, books, chats, tags, sessions)
+- 📸 Stealth screenshots
+- 📞 Call recordings
+- 👁 Intruder captures
+- 🎙 Live captures
+- 🌐 Geofence audio clips
+- ⚙️ Settings / DataStore files
+- 📋 SharedPreferences files
+- 🖼 Note images
+- 📰 Feed images
+- ⭐ Favicons
+- 📦 Total files restored
+
+**Important notes:**
+- **20 MB limit:** Telegram Bot API only accepts files up to 20 MB. Larger backup files must be restored via the in-app Backup & Restore page.
+- Sending any command while the bot is waiting cancels the restore mode.
+- Data is **overwritten** — ensure you have the right backup before confirming.
+- App restarts automatically 3 seconds after restore completes.
+
+---
+
 ## Device Control
 
 ### `/device`

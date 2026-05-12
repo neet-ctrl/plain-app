@@ -48,7 +48,7 @@
     <string name="language_desc">English, Chinese and more</string>
     <string name="backup_restore">Backup &amp; restore</string>
     <string name="backup">Backup</string>
-    <string name="backup_desc">Backup or restore PlainApp data</string>
+    <string name="backup_desc">Complete backup / restore — saves everything that would be lost on uninstall (.plain format)</string>
     <string name="developer_settings">Developer settings</string>
     <string name="features">Features</string>
     <string name="system">System default</string>

