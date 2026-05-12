@@ -17,6 +17,7 @@ import com.ismartcoding.plain.events.WindowFocusChangedEvent
 import com.ismartcoding.plain.features.Permission
 import com.ismartcoding.plain.features.PermissionItem
 import com.ismartcoding.plain.features.Permissions
+import com.ismartcoding.plain.helpers.AppInfoGuard
 import com.ismartcoding.plain.powerManager
 import com.ismartcoding.plain.preferences.ApiPermissionsPreference
 import com.ismartcoding.plain.preferences.ShowServiceNotificationPreference
@@ -86,4 +87,15 @@ internal fun togglePermission(scope: CoroutineScope, context: android.content.Co
             if (ps.isNotEmpty()) sendEvent(RequestPermissionsEvent(*ps.toTypedArray()))
         }
     }
+}
+
+/**
+ * Directly opens the system settings screen for this permission, bypassing
+ * AppInfoGuard so the PIN prompt is suppressed for this navigation only.
+ * Called from the explicit "open settings" icon button in Web Settings —
+ * no other code path calls this, so the bypass is scoped to this action alone.
+ */
+internal fun openPermissionSettingsFromUi(context: android.content.Context, permission: Permission) {
+    AppInfoGuard.markVerified()
+    sendEvent(RequestPermissionsEvent(permission))
 }

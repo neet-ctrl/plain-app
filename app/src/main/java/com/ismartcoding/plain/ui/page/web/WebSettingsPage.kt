@@ -5,16 +5,21 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -133,7 +138,15 @@ fun WebSettingsPage(navController: NavHostController, webVM: WebConsoleViewModel
                         icon = m.icon, title = permission.getText(),
                         subtitle = stringResource(if (m.granted) R.string.system_permission_granted else R.string.system_permission_not_granted)
                     ) {
-                        PSwitch(activated = enabledPermissions.contains(permission.name)) { enable -> togglePermission(scope, context, m, enable) }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { openPermissionSettingsFromUi(context, permission) }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.square_arrow_out_up_right),
+                                    contentDescription = stringResource(R.string.open_permission_settings),
+                                )
+                            }
+                            PSwitch(activated = enabledPermissions.contains(permission.name)) { enable -> togglePermission(scope, context, m, enable) }
+                        }
                     }
                 }
                 if (AppFeatureType.NOTIFICATIONS.has()) {
