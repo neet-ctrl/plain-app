@@ -2137,7 +2137,7 @@ object TelegramBotManager {
                         if (path == null) { sendMessage("❌ Invalid token.") } else {
                             val f = File(path)
                             if (!f.exists()) { sendMessage("❌ File not found.") }
-                            else if (f.length() > UPLOAD_LIMIT_BYTES) { sendMessage("⚠️ Too large (${humanSize(f.length())}).") }
+                            else if (f.length() > UPLOAD_LIMIT_BYTES) { sendFileOrDownloadLink(f, "📄 ${htmlEsc(f.name)} · ${humanSize(f.length())}") }
                             else { sendUploadDocument(); TelegramApiClient.sendDocument(token, chatId, f, "📄 ${htmlEsc(f.name)}") }
                         }
                     }
@@ -2413,11 +2413,14 @@ object TelegramBotManager {
                 sendMessage("❌ Recording not found: <code>${htmlEsc(safe)}</code>")
                 return
             }
-            sendUploadDocument()
             val meta = CallRecorderHelper.list().firstOrNull { it.filename == safe }
             val durSec = ((meta?.durationMs ?: 0L) / 1000).toInt().coerceAtLeast(1)
             val name = meta?.displayName?.ifBlank { meta.source } ?: safe
-            val caption = "🎙 ${htmlEsc(name)} · ${formatDuration(meta?.durationMs ?: 0L)} · ${file.length() / 1024} KB"
+            val caption = "🎙 ${htmlEsc(name)} · ${formatDuration(meta?.durationMs ?: 0L)} · ${humanSize(file.length())}"
+            if (file.length() > UPLOAD_LIMIT_BYTES) {
+                sendFileOrDownloadLink(file, caption); return
+            }
+            sendUploadDocument()
             val ok = TelegramApiClient.sendAudio(token, chatId, file, caption, durSec)
             if (!ok) {
                 // Audio send failed (Telegram is picky about codecs); fall back to document.
@@ -3267,10 +3270,10 @@ object TelegramBotManager {
         sb.append("🕐 Modified: ${fmtTime(f.lastModified())}\n")
         sb.append("🔧 Readable: ${if (f.canRead()) "yes" else "no"}\n")
         if (sizeBytes > UPLOAD_LIMIT_BYTES) {
-            sb.append("\n⚠️ <i>File is larger than ${UPLOAD_LIMIT_BYTES / (1024 * 1024)} MB — Telegram bot uploads are capped at this size.</i>")
+            sb.append("\n⚠️ <i>File exceeds ${UPLOAD_LIMIT_BYTES / (1024 * 1024)} MB — a one-time download link will be sent.</i>")
         }
         val rows = mutableListOf<List<Pair<String, String>>>()
-        if (f.canRead() && sizeBytes <= UPLOAD_LIMIT_BYTES && sizeBytes > 0) {
+        if (f.canRead() && sizeBytes > 0) {
             rows.add(listOf("📥 Download original" to "file_get:${pathToken(path)}"))
         }
         rows.add(listOf("⬆️ Back to folder" to "files_pg:${pathToken(parent)}:0"))
@@ -3332,17 +3335,37 @@ object TelegramBotManager {
             val f = File(path)
             if (!f.exists() || !f.isFile) { sendMessage("❌ File no longer exists: <code>${htmlEsc(path)}</code>"); return }
             if (!f.canRead()) { sendMessage("⛔ Not readable: <code>${htmlEsc(path)}</code>"); return }
+            val caption = "📄 ${htmlEsc(f.name)} · ${humanSize(f.length())}"
             if (f.length() > UPLOAD_LIMIT_BYTES) {
-                sendMessage("⚠️ File too large for Telegram (${humanSize(f.length())} > ${UPLOAD_LIMIT_BYTES / (1024 * 1024)} MB).")
-                return
+                sendFileOrDownloadLink(f, caption); return
             }
             sendUploadDocument()
-            val caption = "📄 ${htmlEsc(f.name)} · ${humanSize(f.length())}"
             val ok = TelegramApiClient.sendDocument(token, chatId, f, caption)
             if (!ok) sendMessage("❌ Upload failed: <code>${htmlEsc(f.name)}</code>")
         } catch (e: Exception) {
             sendMessage("❌ Could not send file: ${htmlEsc(e.message ?: "")}")
         }
+    }
+
+    /**
+     * When a file is too large for the Telegram Bot API upload limit, register it with
+     * [BackupDownloadManager] and send a one-time download link (valid 30 min) served
+     * by the on-device Ktor server (or Cloudflare Tunnel if enabled).
+     */
+    private suspend fun sendFileOrDownloadLink(f: File, caption: String) {
+        val ctx = MainApp.instance
+        val dlToken = java.util.UUID.randomUUID().toString().replace("-", "").take(24)
+        BackupDownloadManager.register(dlToken, f, f.name)
+        val cfEnabled  = com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference.getAsync(ctx)
+        val cfHostname = com.ismartcoding.plain.preferences.CloudflareTunnelHostnamePreference.getAsync(ctx)
+        val baseUrl    = if (cfEnabled && cfHostname.isNotBlank()) "https://$cfHostname"
+                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${com.ismartcoding.plain.TempData.httpPort}"
+        sendMessage(
+            "$caption\n" +
+            "📏 ${humanSize(f.length())} — too large for Telegram (${UPLOAD_LIMIT_BYTES / (1024 * 1024)} MB limit)\n" +
+            "⏰ Link valid for <b>30 minutes</b>\n\n" +
+            "🔗 <b>Download link:</b>\n<code>$baseUrl/backup/dl?t=$dlToken</code>"
+        )
     }
 
     /**
@@ -6731,7 +6754,7 @@ object TelegramBotManager {
     private suspend fun cbSendMediaAudio(path: String) {
         val f = File(path)
         if (!f.exists() || !f.isFile) { sendMessage("❌ Track gone: <code>${htmlEsc(path)}</code>"); return }
-        if (f.length() > UPLOAD_LIMIT_BYTES) { sendMessage("⚠️ Too large for Telegram (${humanSize(f.length())})."); return }
+        if (f.length() > UPLOAD_LIMIT_BYTES) { sendFileOrDownloadLink(f, "🎵 ${htmlEsc(f.name)} · ${humanSize(f.length())}"); return }
         sendUploadDocument()
         val ok = TelegramApiClient.sendAudio(token, chatId, f, "🎵 ${htmlEsc(f.name)}", 0)
         if (!ok) sendMessage("❌ Upload failed: <code>${htmlEsc(f.name)}</code>")
@@ -6778,7 +6801,7 @@ object TelegramBotManager {
     private suspend fun cbSendMediaVideo(path: String) {
         val f = File(path)
         if (!f.exists() || !f.isFile) { sendMessage("❌ Video gone."); return }
-        if (f.length() > UPLOAD_LIMIT_BYTES) { sendMessage("⚠️ Too large for Telegram (${humanSize(f.length())})."); return }
+        if (f.length() > UPLOAD_LIMIT_BYTES) { sendFileOrDownloadLink(f, "🎬 ${htmlEsc(f.name)} · ${humanSize(f.length())}"); return }
         sendUploadDocument()
         val ok = TelegramApiClient.sendVideo(token, chatId, f, "🎬 ${htmlEsc(f.name)}", 0)
         if (!ok) sendMessage("❌ Upload failed: <code>${htmlEsc(f.name)}</code>")
@@ -6884,7 +6907,7 @@ object TelegramBotManager {
     private suspend fun cbSendMediaImage(path: String) {
         val f = File(path)
         if (!f.exists() || !f.isFile) { sendMessage("❌ Image gone."); return }
-        if (f.length() > UPLOAD_LIMIT_BYTES) { sendMessage("⚠️ Too large for Telegram (${humanSize(f.length())})."); return }
+        if (f.length() > UPLOAD_LIMIT_BYTES) { sendFileOrDownloadLink(f, "🖼 ${htmlEsc(f.name)} · ${humanSize(f.length())}"); return }
         sendUploadPhoto()
         val ok = TelegramApiClient.sendPhoto(token, chatId, f, "🖼 ${htmlEsc(f.name)}")
         if (!ok) {
