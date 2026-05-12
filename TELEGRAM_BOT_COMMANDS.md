@@ -364,9 +364,13 @@ Supports search within any folder.
 ---
 
 ### `/applocker`
-**Description:** Opens the per-app lock hub. View and manage which apps require a PIN to open.
-**Aliases:** `lockapps`, `applock`, `perapplock`
-**Usage:** `/applocker`
+**Description:** Opens the per-app lock hub. View and manage which apps require a PIN to open. Each locked app can have its own password, session unlock, attempt log, and reveal-password option.
+**Aliases:** `lockapps`, `perapplock`
+**Usage:**
+- `/applocker` — home hub showing all locked apps and lock/unlock buttons
+- `/applocker <pkg|name>` — jump directly to a specific app's lock menu
+
+**Example:** `/applocker com.whatsapp` or `/applocker WhatsApp`
 
 ---
 
@@ -436,7 +440,12 @@ Supports search within any folder.
 ### `/geofence`
 **Description:** Manages geofence zones — list zones, add new zones, delete zones, and view enter/exit events.
 **Aliases:** `gf`, `geofences`
-**Usage:** `/geofence`
+**Usage:**
+- `/geofence` — list all configured zones with enable/disable and delete buttons
+- `/geofence events` — show recent enter/exit event log (last 20 events)
+- `/geofence add` — interactively add a new zone (prompts for `Name, lat, lng, radius_m`)
+
+**Example:** After `/geofence add`, send: `Home, 28.6139, 77.2090, 200`
 
 ---
 
@@ -818,9 +827,15 @@ Supports search within any folder.
 ---
 
 ### `/bedtime`
-**Description:** Views or sets the parental bedtime window — the time range during which the device is restricted.
+**Description:** Views or sets the parental bedtime window — the time range during which the device is restricted. During bedtime, apps on the scope list are blocked. The app allow-list is managed from the web panel.
 **Aliases:** _(none)_
-**Usage:** `/bedtime`
+**Usage:**
+- `/bedtime` — show current state, window, and inline control buttons
+- `/bedtime on` — enable bedtime (keeps existing window)
+- `/bedtime off` — disable bedtime
+- `/bedtime set HH:MM HH:MM` — set start and end time (e.g. `/bedtime set 22:00 06:30`)
+
+**Example:** `/bedtime set 23:00 07:00`
 
 ---
 
