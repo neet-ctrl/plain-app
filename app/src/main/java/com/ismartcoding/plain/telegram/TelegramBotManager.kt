@@ -2309,7 +2309,7 @@ object TelegramBotManager {
             Section("🚨 Alerts & Actions", listOf("findphone","vibrate","speak","stopspeak","toast","show","wake","setalarm","batteryalert")),
             Section("⏰ Scheduling", listOf("schedulesms","setalarm","bedtime","newschedule")),
             Section("📡 Auto-Forward", listOf("forwardsms","forwardphotos","forwardclipboard","forwardshots","forwardgeofence","forwardfiles","fwdfiles","filestats","retryfailed")),
-            Section("⚙️ App Settings", listOf("appsettings","hideicon","applock","biometric","appinfog","setpin","removepin","openapp","openappinfo","botpassword","setbotpassword","securityqa","update")),
+            Section("🔐 Security & App Settings", listOf("appsettings","applocker","hideicon","applock","biometric","appinfog","setpin","removepin","openapp","openappinfo","botpassword","setbotpassword","securityqa","update","intruders")),
             Section("🤖 Bot", listOf("start","help","commands","stop","nowplaying")),
         )
         val cmdMap = allCommands.toMap()
@@ -5215,12 +5215,30 @@ object TelegramBotManager {
                 append("📷 <b>UTILITIES</b>\n")
                 append("━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                 append("• /qrcode &lt;text or URL&gt; — Generate QR code image\n")
+                append("• /intruders [n] — Intruder captures (photos taken on failed unlock attempts)\n")
+                append("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+                append("🔐 <b>SECURITY & APP SETTINGS</b>\n")
+                append("━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+                append("• /applock [on|off] — Toggle the PlainApp PIN lock on or off\n")
+                append("• /setpin — Set or change the app PIN (interactive)\n")
+                append("• /removepin — Remove the app PIN entirely\n")
+                append("• /biometric [on|off] — Enable / disable biometric unlock\n")
+                append("• /appinfog [on|off] — PIN-protect system App info pages\n")
+                append("• /applocker [pkg|name] — Per-app lock: list locked apps or lock/unlock one\n")
+                append("• /appsettings — Overview of all PlainApp security settings\n")
+                append("• /hideicon [on|off] — Hide or show the launcher icon\n")
+                append("• /openapp — Open PlainApp on the device screen\n")
+                append("• /openappinfo — Open PlainApp's own App info page\n")
                 append("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                 append("🤖 <b>BOT CONTROL</b>\n")
                 append("━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                 append("• /start — Welcome & device status\n")
                 append("• /help — Help & all commands\n")
                 append("• /commands — This full reference\n")
+                append("• /update &lt;url&gt; — Download APK from URL and install (or send APK file directly)\n")
+                append("• /botpassword — View / verify the bot access password\n")
+                append("• /setbotpassword — Change the bot password (interactive)\n")
+                append("• /securityqa — View or change the security question & answer\n")
                 append("• /stop — Stop the bot\n\n")
                 append("💡 <i>Live alerts auto-forward for calls, SMS, notifications & location.</i>")
             })
