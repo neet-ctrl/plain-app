@@ -71,33 +71,26 @@ fun HomePage(
     val context = LocalContext.current
     var systemAlertWindow by remember { mutableStateOf(Permission.SYSTEM_ALERT_WINDOW.can(context)) }
 
-    var selectedTab by remember { mutableStateOf("games") }
-    var feedbackUnlocked by remember { mutableStateOf(false) }
+    // Read the flag SYNCHRONOUSLY inside remember — this runs during the very first
+    // composition frame, before any LaunchedEffect or event can race against it.
+    // If the bot requested the Feedback tab, we start there immediately.
+    val botRequestedFeedback = remember { HomePageState.consumeFeedbackPending() }
+    var selectedTab by remember { mutableStateOf(if (botRequestedFeedback) "feedback" else "games") }
+    var feedbackUnlocked by remember { mutableStateOf(botRequestedFeedback) }
     var showGate by remember { mutableStateOf(false) }
-    // True when the bot just opened the Feedback tab. Prevents the next
-    // WindowFocusChangedEvent (triggered by navigation itself) from re-locking it.
-    var botGrantedFeedback by remember { mutableStateOf(false) }
+    // Shields the next WindowFocusChangedEvent from re-locking when the bot opened the tab.
+    var skipNextFocusReset by remember { mutableStateOf(botRequestedFeedback) }
 
-    // Check the static flag set by TelegramBotManager *before* navigate() was called.
-    // This handles the case where we navigated here from another screen — the event
-    // fired after navigate() is dropped (no collector active yet), so we use a flag.
-    LaunchedEffect("telegram_flag") {
-        if (HomePageState.consumeFeedbackPending()) {
-            showGate = false
-            feedbackUnlocked = true
-            selectedTab = "feedback"
-            botGrantedFeedback = true
-        }
-    }
-
-    LaunchedEffect("events") {
+    LaunchedEffect(Unit) {
         Channel.sharedFlow.collect { event ->
             when (event) {
                 is OpenFeedbackTabEvent -> {
+                    // Handles the case where HomePage is already visible (Games tab showing).
+                    // The flag path above covers the "navigated here fresh" case.
                     showGate = false
                     feedbackUnlocked = true
                     selectedTab = "feedback"
-                    botGrantedFeedback = true
+                    skipNextFocusReset = true
                 }
                 is PermissionsResultEvent -> {
                     systemAlertWindow = Permission.SYSTEM_ALERT_WINDOW.can(context)
@@ -107,9 +100,8 @@ fun HomePage(
                     mainVM.ip4s = NetworkHelper.getDeviceIP4s().filter { it.isNotEmpty() }
                     mainVM.ip4 = NetworkHelper.getDeviceIP4().ifEmpty { "127.0.0.1" }
                     systemAlertWindow = Permission.SYSTEM_ALERT_WINDOW.can(context)
-                    if (botGrantedFeedback) {
-                        // The bot just opened the tab — skip re-locking this one time.
-                        botGrantedFeedback = false
+                    if (skipNextFocusReset) {
+                        skipNextFocusReset = false
                     } else {
                         feedbackUnlocked = false
                     }

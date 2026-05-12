@@ -2,12 +2,9 @@ package com.ismartcoding.plain.ui.page.home
 
 /**
  * Singleton flag set by TelegramBotManager *before* navigate(Routing.Home) is called.
- * HomePage reads it in LaunchedEffect(Unit) — the first moment the composable is active —
- * and immediately switches to the Feedback tab, bypassing the security gate.
- *
- * This handles the case where the user is on a different screen: the event fired after
- * navigate() would be dropped because no collector is active yet, so we need a flag that
- * persists until the composable actually enters composition.
+ * HomePage reads it synchronously inside `remember { }` — the very first composition frame —
+ * so selectedTab and feedbackUnlocked are initialised to "feedback"/true before any
+ * LaunchedEffect or WindowFocusChangedEvent can race against them and snap the tab back.
  */
 object HomePageState {
     @Volatile var openFeedbackPending: Boolean = false
