@@ -4743,6 +4743,13 @@ object TelegramBotManager {
             AdbPerm("ACCESSIBILITY_SERVICE", "Accessibility Service (Keystrokes)",
                 com.ismartcoding.plain.services.PlainAccessibilityService.isEnabled(ctx),
                 "adb shell settings put secure enabled_accessibility_services $pkg/.services.PlainAccessibilityService"),
+            AdbPerm("REQUEST_INSTALL_PACKAGES", "Install Unknown Apps (APK Self-Update)",
+                try {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
+                        ctx.packageManager.canRequestPackageInstalls()
+                    else true
+                } catch (_: Exception) { false },
+                "adb shell appops set $pkg REQUEST_INSTALL_PACKAGES allow"),
             AdbPerm("DEVICE_ADMIN", "Device Administrator (Screen Lock)",
                 deviceAdminGranted(),
                 "adb shell dpm set-active-admin $pkg/.receivers.PlainDeviceAdminReceiver"),

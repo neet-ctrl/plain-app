@@ -247,6 +247,20 @@ fun SchemaBuilder.addAppSchema() {
                     settingsPath = "Settings → Security → Device Admin Apps → PlainApp",
                 ),
                 ProtectedPermissionItem(
+                    name = "REQUEST_INSTALL_PACKAGES",
+                    label = "Install Unknown Apps",
+                    description = "Allows PlainApp to install APK files from unknown sources. Required for the Telegram bot /update command and APK self-update feature.",
+                    features = listOf("APK self-update via bot", "/update command", "Telegram APK install"),
+                    adbCommand = "adb shell appops set $pkg REQUEST_INSTALL_PACKAGES allow",
+                    grantType = "settings_ui",
+                    granted = try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                            ctx.packageManager.canRequestPackageInstalls()
+                        else true
+                    } catch (_: Exception) { false },
+                    settingsPath = "Settings → Apps → Special Access → Install Unknown Apps → PlainApp",
+                ),
+                ProtectedPermissionItem(
                     name = "DEVICE_OWNER",
                     label = "Device Owner (Silent APK Install)",
                     description = "Makes PlainApp the Device Owner. Required for fully silent, zero-touch APK self-updates — the system install dialog never appears. Set once via ADB. Warning: cannot be removed without a factory reset (unless removed via ADB first).",
