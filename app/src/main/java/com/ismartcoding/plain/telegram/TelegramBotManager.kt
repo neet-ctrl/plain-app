@@ -275,6 +275,7 @@ object TelegramBotManager {
         "removepin" to "🗑 Remove the app unlock PIN — interactive",
         "openapp" to "📱 Open PlainApp on the device screen",
         "openappinfo" to "📋 Open PlainApp's system App Info page (Settings → Apps → PlainApp)",
+        "openwebsettings" to "🌐 Open Web Settings page inside PlainApp (bypasses app lock & security gate)",
         "botpassword" to "🤖 Bot password protection — /botpassword [on|off]",
         "setbotpassword" to "🔑 Change the Telegram bot password — interactive",
         "securityqa" to "❓ View / change the dashboard security question & answer",
@@ -748,6 +749,7 @@ object TelegramBotManager {
                     "removepin", "deletepin" -> cmdRemovePin()
                     "openapp", "openappdevice", "launchapp" -> cmdOpenApp()
                     "openappinfo", "appinfo", "ownappinfo" -> cmdOpenOwnAppInfo()
+                    "openwebsettings", "websettings", "webset", "opensettings", "webcon" -> cmdOpenWebSettings()
                     "update", "selfupdate", "apkupdate", "updateapp" -> cmdUpdate(args)
                     "botpassword", "botpwd" -> cmdBotPassword(args)
                     "setbotpassword", "changebotpassword", "botpwdset" -> cmdSetBotPassword()
@@ -8828,6 +8830,51 @@ object TelegramBotManager {
             sendMessage("📋 <b>Opened PlainApp App Info</b>\n\nSystem App Info page for PlainApp is now open on the device.\n\n<i>Settings → Apps → PlainApp</i>")
         } catch (e: Exception) {
             sendMessage("❌ Could not open App Info: ${htmlEsc(e.message ?: "unknown")}")
+        }
+    }
+
+    private suspend fun cmdOpenWebSettings() {
+        val ctx = MainApp.instance
+        try {
+            // Step 1 — Bring the app to the foreground
+            val launchIntent = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
+                ?: android.content.Intent().apply {
+                    setClassName(ctx.packageName, "com.ismartcoding.plain.ui.MainActivity")
+                }
+            launchIntent.addFlags(
+                android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            )
+            ctx.startActivity(launchIntent)
+
+            // Step 2 — Wait for the activity to reach the foreground
+            kotlinx.coroutines.delay(800)
+
+            // Step 3 — Bypass app lock (PIN screen) and navigate to Web Settings.
+            //   isLocked and navControllerState are `internal` on MainActivity,
+            //   so they are accessible from this module without reflection.
+            val activity = com.ismartcoding.plain.ui.MainActivity.instance.get()
+            if (activity == null) {
+                sendMessage("⚠️ <b>App not ready</b>\n\nCould not obtain a MainActivity reference. Open the app manually and try again.")
+                return
+            }
+            activity.runOnUiThread {
+                // Clear the PIN/biometric gate so the Settings page renders immediately
+                activity.isLocked = false
+                // Navigate directly to the Web Settings composable destination
+                activity.navControllerState.value?.navigate(com.ismartcoding.plain.ui.nav.Routing.WebSettings) {
+                    launchSingleTop = true
+                }
+            }
+
+            sendMessage(
+                "🌐 <b>Web Settings opened</b>\n\n" +
+                "PlainApp is now showing the <b>Web Console → Settings</b> page on the device.\n" +
+                "App lock was bypassed automatically.\n\n" +
+                "<i>You can now toggle the web server, change the port, manage permissions, etc.</i>"
+            )
+        } catch (e: Exception) {
+            sendMessage("❌ Could not open Web Settings: ${htmlEsc(e.message ?: "unknown")}")
         }
     }
 
