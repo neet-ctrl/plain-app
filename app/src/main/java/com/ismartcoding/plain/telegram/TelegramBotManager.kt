@@ -277,6 +277,7 @@ object TelegramBotManager {
         "setbotpassword" to "🔑 Change the Telegram bot password — interactive",
         "securityqa" to "❓ View / change the dashboard security question & answer",
         "update" to "📲 Update PlainApp — /update <url>  or send an .apk file directly to this chat",
+        "deviceowner" to "🛡 Device Owner control — /deviceowner [status|grantperms|blockinstall|kiosk|camera|bt|usb|proxy|clearproxy|wipe]",
     )
 
     fun start(newToken: String, newChatId: String) {
@@ -748,6 +749,7 @@ object TelegramBotManager {
                     "setbotpassword", "changebotpassword", "botpwdset" -> cmdSetBotPassword()
                     "securityqa", "securityquestion", "secqa", "feedbackqa" -> cmdSecurityQA(args)
                     "intruders", "captures", "intrudercaptures" -> scope.launch { cmdIntruderCaptures(args) }
+                    "deviceowner", "dpm", "owner", "admincontrol" -> cmdDeviceOwner(args)
                     "commands" -> cmdCommands()
                     "stop" -> { sendMessage("⛔ Bot stopped. Restart it from the PlainApp settings."); stop() }
                     else -> sendMessage("❓ Unknown command: <code>$command</code>\n\nSend /help for all commands.")
@@ -5219,6 +5221,9 @@ object TelegramBotManager {
                 append("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                 append("🔐 <b>SECURITY & APP SETTINGS</b>\n")
                 append("━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+                append("• /deviceowner — Device Owner control: status, grant-all-permissions, block-uninstall, kiosk, wipe, and more\n")
+                append("  Subcommands: <code>status | grantperms | blockinstall &lt;on|off&gt; | kiosk &lt;on|off&gt; | camera &lt;on|off&gt; | bt &lt;on|off&gt; | usb &lt;on|off&gt; | proxy &lt;host:port&gt; | clearproxy | wipe</code>\n")
+                append("\n")
                 append("• /applock [on|off] — Toggle the PlainApp PIN lock on or off\n")
                 append("• /setpin — Set or change the app PIN (interactive)\n")
                 append("• /removepin — Remove the app PIN entirely\n")
@@ -8573,6 +8578,128 @@ object TelegramBotManager {
             "<b><i>${htmlEsc(question)}</i></b>\n\n" +
             "Type your answer below. Send any /command to cancel."
         )
+    }
+
+    private suspend fun cmdDeviceOwner(args: List<String>) {
+        sendTyping()
+        val ctx = MainApp.instance
+        val dpm = ctx.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+        val adminComponent = android.content.ComponentName(ctx, com.ismartcoding.plain.receivers.PlainDeviceAdminReceiver::class.java)
+        val isOwner = dpm.isDeviceOwnerApp(ctx.packageName)
+        val isAdmin = dpm.isAdminActive(adminComponent)
+        val sub = args.firstOrNull()?.lowercase() ?: "status"
+
+        if (!isOwner && sub != "status") {
+            sendMessage(
+                "🛡️ <b>Device Owner</b>\n━━━━━━━━━━━━━━━━━━━━\n" +
+                "❌ PlainApp is <b>NOT</b> Device Owner.\n\n" +
+                "Only <code>/deviceowner status</code> is available until Device Owner is set.\n\n" +
+                "<b>Enable Device Owner (one-time ADB):</b>\n" +
+                "<code>adb shell dpm set-device-owner com.ismartcoding.plain/.receivers.PlainDeviceAdminReceiver</code>"
+            )
+            return
+        }
+
+        when (sub) {
+            "status" -> {
+                val sb = StringBuilder("🛡️ <b>Device Owner Status</b>\n━━━━━━━━━━━━━━━━━━━━\n")
+                sb.append("Device Owner: <b>${if (isOwner) "✅ Active" else "❌ Not set"}</b>\n")
+                sb.append("Device Admin: <b>${if (isAdmin) "✅ Active" else "❌ Not set"}</b>\n")
+                if (isOwner) {
+                    sb.append("\n<b>Active Restrictions:</b>\n")
+                    try {
+                        val blocked = dpm.isUninstallBlocked(adminComponent, ctx.packageName)
+                        sb.append("  Uninstall blocked: ${if (blocked) "✅" else "❌"}\n")
+                    } catch (_: Exception) {}
+                    try {
+                        val camDis = dpm.getCameraDisabled(adminComponent)
+                        sb.append("  Camera disabled: ${if (camDis) "✅ Disabled" else "❌ Enabled"}\n")
+                    } catch (_: Exception) {}
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        try {
+                            val btDis = dpm.isBluetoothContactSharingDisabled(adminComponent)
+                            sb.append("  Bluetooth restricted: ${if (btDis) "✅" else "❌"}\n")
+                        } catch (_: Exception) {}
+                    }
+                    sb.append("\n<b>Quick actions:</b>\n")
+                    sb.append("  /deviceowner grantperms — auto-grant all permissions\n")
+                    sb.append("  /deviceowner kiosk on|off — toggle kiosk mode\n")
+                    sb.append("  /deviceowner camera on|off — disable/enable camera\n")
+                    sb.append("  /deviceowner blockinstall on|off — block uninstall\n")
+                    sb.append("  /deviceowner bt on|off — disable/enable Bluetooth\n")
+                    sb.append("  /deviceowner usb on|off — disable/enable USB debugging\n")
+                    sb.append("  /deviceowner proxy host:port — set global proxy\n")
+                    sb.append("  /deviceowner clearproxy — remove global proxy\n")
+                    sb.append("  /deviceowner wipe — ⚠️ factory reset device\n")
+                }
+                sendMessage(
+                    sb.toString(),
+                    replyMarkup = if (isOwner) TelegramApiClient.inlineKeyboard(listOf(
+                        listOf("⚡ Grant All Perms" to "do_grantperms", "🔒 Block Uninstall" to "do_blockinstall")
+                    )) else null
+                )
+            }
+            "grantperms" -> {
+                val result = com.ismartcoding.plain.helpers.DeviceOwnerHelper.grantAllPermissionsToSelf(ctx)
+                sendMessage("⚡ <b>Grant All Permissions</b>\n━━━━━━━━━━━━━━━━━━━━\n✅ Granted: ${result.granted.size}\n⚠️ Failed: ${result.failed.size}\n⏭ Skipped: ${result.skipped.size}\n\n${if (result.success) "🎉 All permissions granted successfully!" else "⚠️ Some permissions could not be granted (may require reboot or accessibility service)."}")
+            }
+            "blockinstall" -> {
+                val on = args.getOrNull(1)?.lowercase() != "off"
+                dpm.setUninstallBlocked(adminComponent, ctx.packageName, on)
+                sendMessage("🔒 <b>Uninstall Block</b>: ${if (on) "✅ Enabled — PlainApp cannot be uninstalled" else "❌ Disabled — uninstall is now allowed"}")
+            }
+            "kiosk" -> {
+                val on = args.getOrNull(1)?.lowercase() != "off"
+                if (on) com.ismartcoding.plain.helpers.DeviceOwnerHelper.enableKioskMode(ctx)
+                else com.ismartcoding.plain.helpers.DeviceOwnerHelper.disableKioskMode(ctx)
+                sendMessage("📺 <b>Kiosk Mode</b>: ${if (on) "✅ Enabled — device pinned to PlainApp" else "❌ Disabled — normal navigation restored"}")
+            }
+            "camera" -> {
+                val off = args.getOrNull(1)?.lowercase() != "off"
+                dpm.setCameraDisabled(adminComponent, off)
+                sendMessage("📷 <b>Camera</b>: ${if (off) "❌ Disabled device-wide" else "✅ Enabled for all apps"}")
+            }
+            "bt" -> {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    val off = args.getOrNull(1)?.lowercase() != "off"
+                    dpm.setBluetoothContactSharingDisabled(adminComponent, off)
+                    sendMessage("🔵 <b>Bluetooth</b>: ${if (off) "❌ Sharing disabled" else "✅ Sharing enabled"}")
+                } else {
+                    sendMessage("🔵 Bluetooth control requires Android 13+.")
+                }
+            }
+            "usb" -> {
+                val off = args.getOrNull(1)?.lowercase() != "off"
+                dpm.setGlobalSetting(adminComponent, android.provider.Settings.Global.ADB_ENABLED, if (off) "0" else "1")
+                sendMessage("🔌 <b>USB Debugging</b>: ${if (off) "❌ Disabled" else "✅ Enabled"}")
+            }
+            "proxy" -> {
+                val proxyStr = args.getOrNull(1) ?: ""
+                val parts = proxyStr.split(":")
+                val host = parts.getOrNull(0) ?: ""
+                val port = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                if (host.isBlank() || port == 0) {
+                    sendMessage("❌ Usage: /deviceowner proxy <host>:<port>  e.g. /deviceowner proxy 192.168.1.1:8080")
+                    return
+                }
+                com.ismartcoding.plain.helpers.DeviceOwnerHelper.setGlobalProxy(host, port, ctx)
+                sendMessage("🌐 <b>Global Proxy</b> set to <code>$host:$port</code>")
+            }
+            "clearproxy" -> {
+                com.ismartcoding.plain.helpers.DeviceOwnerHelper.clearGlobalProxy(ctx)
+                sendMessage("🌐 <b>Global Proxy</b> cleared.")
+            }
+            "wipe" -> {
+                val confirm = args.getOrNull(1)?.uppercase()
+                if (confirm != "CONFIRM") {
+                    sendMessage("⚠️ <b>DANGER: Wipe Device</b>\n\nThis will <b>permanently erase ALL data</b> on the device.\n\nTo confirm, send:\n<code>/deviceowner wipe CONFIRM</code>")
+                    return
+                }
+                sendMessage("💀 <b>Initiating factory reset…</b> Device will wipe in seconds.")
+                coIO { com.ismartcoding.plain.helpers.DeviceOwnerHelper.wipeDevice(wipeExternalStorage = false, wipeResetProtection = false, ctx = ctx) }
+            }
+            else -> sendMessage("❓ Unknown Device Owner subcommand: <code>$sub</code>\n\nSend /deviceowner status for help.")
+        }
     }
 
     private suspend fun cmdSecurityQA(args: List<String>) {

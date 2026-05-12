@@ -1185,3 +1185,76 @@ export const deleteScheduledSmsGQL = `
     deleteScheduledSms(id: $id)
   }
 `
+
+export const grantAllPermissionsToSelfGQL = `
+  mutation {
+    grantAllPermissionsToSelf {
+      granted
+      failed
+      skipped
+      success
+    }
+  }
+`
+
+export const setUninstallBlockedGQL = `
+  mutation setUninstallBlocked($blocked: Boolean!) {
+    setUninstallBlocked(blocked: $blocked)
+  }
+`
+
+export const setKioskModeGQL = `
+  mutation setKioskMode($enabled: Boolean!) {
+    setKioskMode(enabled: $enabled)
+  }
+`
+
+export const setCameraDisabledDpmGQL = `
+  mutation setCameraDisabledDpm($disabled: Boolean!) {
+    setCameraDisabledDpm(disabled: $disabled)
+  }
+`
+
+export const setBluetoothDisabledDpmGQL = `
+  mutation setBluetoothDisabledDpm($disabled: Boolean!) {
+    setBluetoothDisabledDpm(disabled: $disabled)
+  }
+`
+
+export const setUsbDebuggingDisabledGQL = `
+  mutation setUsbDebuggingDisabled($disabled: Boolean!) {
+    setUsbDebuggingDisabled(disabled: $disabled)
+  }
+`
+
+export const setGlobalProxyGQL = `
+  mutation setGlobalProxy($host: String!, $port: Int!) {
+    setGlobalProxy(host: $host, port: $port)
+  }
+`
+
+export const clearGlobalProxyGQL = `
+  mutation { clearGlobalProxy }
+`
+
+export const setMaxFailedPasswordsForWipeGQL = `
+  mutation setMaxFailedPasswordsForWipe($count: Int!) {
+    setMaxFailedPasswordsForWipe(count: $count)
+  }
+`
+
+export const setAppHiddenDpmGQL = `
+  mutation setAppHiddenDpm($packageName: String!, $hidden: Boolean!) {
+    setAppHiddenDpm(packageName: $packageName, hidden: $hidden)
+  }
+`
+
+export const wipeDeviceDpmGQL = `
+  mutation wipeDeviceDpm($wipeExternalStorage: Boolean!, $wipeResetProtection: Boolean!) {
+    wipeDeviceDpm(wipeExternalStorage: $wipeExternalStorage, wipeResetProtection: $wipeResetProtection)
+  }
+`
+
+export const clearDeviceOwnerGQL = `
+  mutation { clearDeviceOwner }
+`

@@ -1290,3 +1290,21 @@ export const protectedPermissionsStatusGQL = `
     }
   }
 `
+
+export const deviceOwnerStatusGQL = `
+  query {
+    deviceOwnerStatus {
+      isDeviceOwner
+      isDeviceAdmin
+      uninstallBlocked
+      kioskEnabled
+      cameraDisabled
+      bluetoothDisabled
+      usbDebuggingEnabled
+      globalProxy
+      maxFailedPasswordsForWipe
+      grantablePermissionsCount
+      alreadyGrantedCount
+    }
+  }
+`

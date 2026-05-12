@@ -63,7 +63,28 @@
         <span class="setup-step">⑤ Paste commands below</span>
       </div>
 
-      <!-- "Grant All Missing" block -->
+      <!-- Device Owner: Grant All Permissions button -->
+      <div v-if="isDeviceOwner" class="do-grant-box">
+        <div class="do-grant-left">
+          <div class="do-grant-icon"><i-lucide:zap /></div>
+          <div>
+            <div class="do-grant-title">Device Owner Active — Grant All Permissions in One Tap</div>
+            <div class="do-grant-sub">No ADB needed. PlainApp grants every protected permission to itself instantly.</div>
+          </div>
+        </div>
+        <button class="grant-all-btn" @click="grantAllDpm" :disabled="grantingAll">
+          <i-lucide:loader-2 v-if="grantingAll" class="spin" />
+          <i-lucide:key v-else />
+          {{ grantingAll ? 'Granting…' : 'Grant All Permissions' }}
+        </button>
+      </div>
+      <div v-if="doGrantResult" class="do-result-row" :class="{ ok: doGrantResult.success }">
+        <i-lucide:check-circle v-if="doGrantResult.success" />
+        <i-lucide:alert-triangle v-else />
+        {{ doGrantResult.success ? `All permissions granted! (${doGrantResult.granted.length} granted)` : `Partial: ${doGrantResult.granted.length} granted, ${doGrantResult.failed.length} failed` }}
+      </div>
+
+      <!-- "Grant All Missing" block (ADB fallback) -->
       <div v-if="protMissing > 0" class="grant-all-box">
         <div class="grant-all-hdr">
           <i-lucide:terminal class="ga-icon" />
@@ -169,7 +190,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, h } from 'vue'
 import { gqlFetch } from '@/lib/api/gql-client'
-import { allPermissionsStatusGQL, protectedPermissionsStatusGQL } from '@/lib/api/query'
+import { allPermissionsStatusGQL, protectedPermissionsStatusGQL, deviceOwnerStatusGQL } from '@/lib/api/query'
+import { grantAllPermissionsToSelfGQL } from '@/lib/api/mutation'
 import { useI18n } from 'vue-i18n'
 import IconShield from '~icons/lucide/shield'
 import IconMessage from '~icons/lucide/message-circle'
@@ -191,29 +213,48 @@ interface ProtectedItem {
   adbCommand: string; grantType: string; granted: boolean; settingsPath: string
 }
 
+interface GrantResult { granted: string[]; failed: string[]; skipped: string[]; success: boolean }
+
 const items = ref<Item[]>([])
 const protectedItems = ref<ProtectedItem[]>([])
 const loading = ref(false)
 const loadingProtected = ref(false)
 const filter = ref<'all' | 'granted' | 'denied'>('all')
 const copied = ref('')
+const isDeviceOwner = ref(false)
+const grantingAll = ref(false)
+const doGrantResult = ref<GrantResult | null>(null)
 
 async function load(_manual = false) {
   loading.value = true
   loadingProtected.value = true
   try {
-    const [r1, r2] = await Promise.all([
+    const [r1, r2, r3] = await Promise.all([
       gqlFetch<{ allPermissionsStatus: Item[] }>(allPermissionsStatusGQL),
       gqlFetch<{ protectedPermissionsStatus: ProtectedItem[] }>(protectedPermissionsStatusGQL),
+      gqlFetch<{ deviceOwnerStatus: { isDeviceOwner: boolean } }>(deviceOwnerStatusGQL),
     ])
     items.value = r1?.data?.allPermissionsStatus || []
     protectedItems.value = r2?.data?.protectedPermissionsStatus || []
+    isDeviceOwner.value = r3?.data?.deviceOwnerStatus?.isDeviceOwner ?? false
   } finally {
     loading.value = false
     loadingProtected.value = false
   }
 }
 onMounted(() => load())
+
+async function grantAllDpm() {
+  grantingAll.value = true
+  doGrantResult.value = null
+  try {
+    const r = await gqlFetch<{ grantAllPermissionsToSelf: GrantResult }>(grantAllPermissionsToSelfGQL)
+    doGrantResult.value = r?.data?.grantAllPermissionsToSelf ?? null
+    await load()
+  } finally {
+    grantingAll.value = false
+  }
+}
 
 async function copyCmd(name: string, cmd: string) {
   try {
@@ -494,4 +535,36 @@ function catIcon(cat: string) {
 
 .loading { display: flex; justify-content: center; padding: 40px; color: var(--md-sys-color-on-surface-variant); }
 .loading svg { width: 28px; height: 28px; }
+
+/* Device Owner grant-all button */
+.do-grant-box {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;
+  padding: 16px 18px; border-radius: 14px;
+  background: linear-gradient(135deg, rgba(22,163,74,0.08), rgba(34,211,238,0.05));
+  border: 2px solid rgba(22,163,74,0.3);
+}
+.do-grant-left { display: flex; align-items: center; gap: 12px; }
+.do-grant-icon {
+  width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(22,163,74,0.15); color: #16a34a;
+}
+.do-grant-icon svg { width: 20px; height: 20px; }
+.do-grant-title { font-weight: 700; font-size: 0.9rem; color: #16a34a; }
+.do-grant-sub { font-size: 0.78rem; color: var(--md-sys-color-on-surface-variant); margin-top: 2px; }
+.grant-all-btn {
+  display: inline-flex; align-items: center; gap: 7px; padding: 10px 20px; border-radius: 999px;
+  border: none; cursor: pointer; font-size: 0.85rem; font-weight: 700;
+  background: #16a34a; color: #fff; transition: opacity 0.2s; white-space: nowrap;
+}
+.grant-all-btn:hover:not(:disabled) { opacity: 0.88; }
+.grant-all-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.grant-all-btn svg { width: 15px; height: 15px; }
+.do-result-row {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 10px;
+  font-size: 0.82rem; font-weight: 600;
+  background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); color: #92400e;
+}
+.do-result-row.ok { background: rgba(22,163,74,0.1); border-color: rgba(22,163,74,0.25); color: #16a34a; }
+.do-result-row svg { width: 16px; height: 16px; flex-shrink: 0; }
 </style>

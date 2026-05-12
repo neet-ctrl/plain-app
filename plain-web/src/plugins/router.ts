@@ -217,6 +217,11 @@ const router = createRouter({
           meta: { group: 'permissions_status' },
         },
         {
+          path: 'device-owner',
+          component: () => import('@/views/device-owner/DeviceOwnerView.vue'),
+          meta: { group: 'device_owner' },
+        },
+        {
           path: 'tracking-hub/live-location',
           component: () => import('@/views/tracking-hub/LiveLocationView.vue'),
           meta: { group: 'tracking_hub' },

@@ -49,6 +49,7 @@ import com.ismartcoding.plain.web.schemas.addTrackingSchema
 import com.ismartcoding.plain.web.schemas.addUtilitiesSchema
 import com.ismartcoding.plain.web.schemas.addSensorSchema
 import com.ismartcoding.plain.web.schemas.addSystemControlSchema
+import com.ismartcoding.plain.web.schemas.addDeviceOwnerSchema
 import com.ismartcoding.plain.web.schemas.addVideoMediaSchema
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -108,6 +109,7 @@ class MainGraphQL(val schema: Schema) {
                 addDeviceControlSchema()
                 addSensorSchema()
                 addSystemControlSchema()
+                addDeviceOwnerSchema()
                 addSchemaTypes()
             }
         }
