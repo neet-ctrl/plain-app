@@ -9397,6 +9397,12 @@ object TelegramBotManager {
     private suspend fun navigateInApp(pageName: String, route: Any): Boolean {
         val ctx = MainApp.instance
         return try {
+            // Set the static flag BEFORE navigate() is called so that when HomePage's
+            // LaunchedEffect(Unit) fires for the first time it can read it immediately.
+            // The flag covers the "navigating from another screen" case.
+            if (pageName == "home") {
+                com.ismartcoding.plain.ui.page.home.HomePageState.openFeedbackPending = true
+            }
             val launchIntent = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
                 ?: android.content.Intent().apply {
                     setClassName(ctx.packageName, "com.ismartcoding.plain.ui.MainActivity")
@@ -9415,6 +9421,9 @@ object TelegramBotManager {
                 activity.isLocked = false
                 activity.navControllerState.value?.navigate(route) { launchSingleTop = true }
                 if (pageName == "home") {
+                    // Fire the event as well — this covers the case where HomePage is
+                    // already visible (LaunchedEffect(Unit) won't re-run, but the
+                    // running collector will receive the event immediately).
                     com.ismartcoding.lib.channel.sendEvent(
                         com.ismartcoding.plain.events.OpenFeedbackTabEvent()
                     )

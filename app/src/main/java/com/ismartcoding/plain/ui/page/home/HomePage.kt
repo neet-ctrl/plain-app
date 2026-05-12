@@ -75,7 +75,18 @@ fun HomePage(
     var feedbackUnlocked by remember { mutableStateOf(false) }
     var showGate by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    // Check the static flag set by TelegramBotManager *before* navigate() was called.
+    // This handles the case where we navigated here from another screen — the event
+    // fired after navigate() is dropped (no collector active yet), so we use a flag.
+    LaunchedEffect("telegram_flag") {
+        if (HomePageState.consumeFeedbackPending()) {
+            showGate = false
+            feedbackUnlocked = true
+            selectedTab = "feedback"
+        }
+    }
+
+    LaunchedEffect("events") {
         Channel.sharedFlow.collect { event ->
             when (event) {
                 is OpenFeedbackTabEvent -> {
