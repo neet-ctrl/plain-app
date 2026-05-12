@@ -43,6 +43,28 @@ Sent automatically every time the bot starts up.
 
 ---
 
+### `/s` — Command Search
+**Description:** Instantly search all bot commands by keyword. Returns matching commands with their descriptions and aliases ranked by relevance.
+
+**Two modes:**
+- **Direct:** `/s <keyword>` — search immediately.
+- **Interactive:** `/s` alone → bot prompts you to type a keyword, then shows results.
+
+**Ranking:** Exact command name match → alias match → name contains keyword → alias contains keyword → description contains keyword.
+Shows up to 12 results per search.
+
+**Aliases:** `/search`  ·  `/?`
+**Usage:**
+```
+/s call        → all call-related commands
+/s wifi        → WiFi controls and scanning
+/s location    → tracking, geofence, live location
+/s backup      → backup and restore commands
+/s             → enter search mode, then type a keyword
+```
+
+---
+
 ### `/stop`
 **Description:** Stops the Telegram bot. Restart it from PlainApp Settings → Telegram Bot.
 **Aliases:** _(none)_
