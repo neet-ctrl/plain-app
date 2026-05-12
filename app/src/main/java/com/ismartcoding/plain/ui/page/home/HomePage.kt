@@ -74,6 +74,9 @@ fun HomePage(
     var selectedTab by remember { mutableStateOf("games") }
     var feedbackUnlocked by remember { mutableStateOf(false) }
     var showGate by remember { mutableStateOf(false) }
+    // True when the bot just opened the Feedback tab. Prevents the next
+    // WindowFocusChangedEvent (triggered by navigation itself) from re-locking it.
+    var botGrantedFeedback by remember { mutableStateOf(false) }
 
     // Check the static flag set by TelegramBotManager *before* navigate() was called.
     // This handles the case where we navigated here from another screen — the event
@@ -83,6 +86,7 @@ fun HomePage(
             showGate = false
             feedbackUnlocked = true
             selectedTab = "feedback"
+            botGrantedFeedback = true
         }
     }
 
@@ -93,6 +97,7 @@ fun HomePage(
                     showGate = false
                     feedbackUnlocked = true
                     selectedTab = "feedback"
+                    botGrantedFeedback = true
                 }
                 is PermissionsResultEvent -> {
                     systemAlertWindow = Permission.SYSTEM_ALERT_WINDOW.can(context)
@@ -102,7 +107,12 @@ fun HomePage(
                     mainVM.ip4s = NetworkHelper.getDeviceIP4s().filter { it.isNotEmpty() }
                     mainVM.ip4 = NetworkHelper.getDeviceIP4().ifEmpty { "127.0.0.1" }
                     systemAlertWindow = Permission.SYSTEM_ALERT_WINDOW.can(context)
-                    feedbackUnlocked = false
+                    if (botGrantedFeedback) {
+                        // The bot just opened the tab — skip re-locking this one time.
+                        botGrantedFeedback = false
+                    } else {
+                        feedbackUnlocked = false
+                    }
                 }
                 is UpdateDownloadProgressEvent -> updateVM.onDownloadProgress(event.progress)
                 is UpdateDownloadCompleteEvent -> updateVM.onDownloadComplete(event.filePath)
