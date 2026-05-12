@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object BackupDownloadManager {
 
-    private data class Entry(val file: File, val baseName: String, val expiresAt: Long)
+    data class Entry(val file: File, val baseName: String, val expiresAt: Long)
 
     private val tokens = ConcurrentHashMap<String, Entry>()
     private const val TTL_MS = 30L * 60 * 1000
