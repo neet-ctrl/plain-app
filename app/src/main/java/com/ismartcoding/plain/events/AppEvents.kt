@@ -188,6 +188,8 @@ class StopNearbyDiscoveryEvent : ChannelEvent()
 
 class RetryChatItemEvent(val id: String) : ChannelEvent()
 
+class OpenFeedbackTabEvent : ChannelEvent()
+
 object AppEvents {
     private lateinit var mediaPlayer: MediaPlayer
     private var sleepTimerJob: Job? = null

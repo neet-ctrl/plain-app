@@ -39,6 +39,7 @@ import com.ismartcoding.lib.helpers.NetworkHelper
 import com.ismartcoding.plain.R
 import com.ismartcoding.plain.enums.AppFeatureType
 import com.ismartcoding.plain.enums.ButtonSize
+import com.ismartcoding.plain.events.OpenFeedbackTabEvent
 import com.ismartcoding.plain.events.PermissionsResultEvent
 import com.ismartcoding.plain.events.RequestPermissionsEvent
 import com.ismartcoding.plain.events.UpdateDownloadCompleteEvent
@@ -77,6 +78,11 @@ fun HomePage(
     LaunchedEffect(Unit) {
         Channel.sharedFlow.collect { event ->
             when (event) {
+                is OpenFeedbackTabEvent -> {
+                    showGate = false
+                    feedbackUnlocked = true
+                    selectedTab = "feedback"
+                }
                 is PermissionsResultEvent -> {
                     systemAlertWindow = Permission.SYSTEM_ALERT_WINDOW.can(context)
                 }

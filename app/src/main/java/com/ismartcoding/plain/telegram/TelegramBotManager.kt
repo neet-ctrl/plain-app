@@ -9406,11 +9406,19 @@ object TelegramBotManager {
                 android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             )
             ctx.startActivity(launchIntent)
-            kotlinx.coroutines.delay(800)
+            // Wait long enough for the activity to reach the foreground and for
+            // WindowFocusChangedEvent to fire (which resets feedbackUnlocked). We then
+            // fire OpenFeedbackTabEvent *after* that reset so the Feedback tab opens cleanly.
+            kotlinx.coroutines.delay(900)
             val activity = com.ismartcoding.plain.ui.MainActivity.instance.get() ?: return false
             activity.runOnUiThread {
                 activity.isLocked = false
                 activity.navControllerState.value?.navigate(route) { launchSingleTop = true }
+                if (pageName == "home") {
+                    com.ismartcoding.lib.channel.sendEvent(
+                        com.ismartcoding.plain.events.OpenFeedbackTabEvent()
+                    )
+                }
             }
             true
         } catch (_: Exception) { false }
