@@ -659,7 +659,7 @@ object TelegramBotManager {
                     "shots", "screenshots" -> cmdShots(args)
                     "permissions", "perms" -> cmdPermissions()
                     "openperms", "permopen" -> cmdOpenPerms(args.getOrNull(1) ?: "")
-                    "reqperm", "reqperms", "grantperm", "askperm", "permask" -> cmdReqPerm()
+                    "reqperm", "reqperms", "grantperm", "askperm", "permask" -> cmdReqPerm(args.getOrNull(1) ?: "")
                     "automations", "rules" -> cmdAutomations()
                     "newrule", "addrule" -> cmdNewRule(args)
                     "newschedule", "addschedule" -> cmdNewSchedule(args)
@@ -4990,14 +4990,14 @@ object TelegramBotManager {
 
     // ========== REQUEST PERMISSION (dialog on device) ==========
 
-    private fun cmdReqPerm() {
+    private fun cmdReqPerm(arg: String = "") {
         data class Perm(val key: String, val label: String, val granted: Boolean)
 
         val ctx = MainApp.instance
         val pkg = ctx.packageName
         fun pmCheck(p: String) = ctx.checkSelfPermission(p) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
-        val perms = listOf(
+        val allPerms = listOf(
             // Camera & Mic
             Perm("CAMERA",               "📷 Camera",               pmCheck("android.permission.CAMERA")),
             Perm("RECORD_AUDIO",         "🎙 Microphone",            pmCheck("android.permission.RECORD_AUDIO")),
@@ -5060,21 +5060,41 @@ object TelegramBotManager {
                 else true),
         )
 
-        val granted = perms.count { it.granted }
+        val missingOnly = arg.trim().lowercase() in listOf("missing", "denied", "no", "ungrant", "ungranted")
+        val perms = if (missingOnly) allPerms.filter { !it.granted } else allPerms
+
+        val totalGranted = allPerms.count { it.granted }
+        val totalMissing = allPerms.size - totalGranted
+
         val sb = StringBuilder()
-        sb.append("🔔 <b>Request Permission on Device</b>\n")
-        sb.append("Tap any button below — PlainApp will ask for that permission <b>right now</b> on the device.\n")
-        sb.append("• Runtime permissions → Android dialog (Allow / Deny)\n")
-        sb.append("• Special permissions → Opens exact Settings screen\n")
+        if (missingOnly) {
+            sb.append("❌ <b>Missing Permissions Only</b>\n")
+            sb.append("These <b>$totalMissing</b> permissions are not yet granted.\n")
+            sb.append("Tap any button — PlainApp will ask for it <b>right now</b> on the device.\n")
+        } else {
+            sb.append("🔔 <b>Request Permission on Device</b>\n")
+            sb.append("Tap any button below — PlainApp will ask for that permission <b>right now</b> on the device.\n")
+            sb.append("• Runtime permissions → Android dialog (Allow / Deny)\n")
+            sb.append("• Special permissions → Opens exact Settings screen\n")
+            sb.append("💡 Use <code>/reqperm missing</code> to see only un-granted ones\n")
+        }
         sb.append("━━━━━━━━━━━━━━━━━━━\n")
-        sb.append("✅ Granted: <b>$granted</b>  ·  ❌ Missing: <b>${perms.size - granted}</b>\n\n")
+        sb.append("✅ Granted: <b>$totalGranted</b>  ·  ❌ Missing: <b>$totalMissing</b>\n\n")
+
+        if (perms.isEmpty()) {
+            sb.append("🎉 All permissions are already granted!")
+            sendMessage(sb.toString())
+            return
+        }
+
         perms.forEach { p -> sb.append("${if (p.granted) "✅" else "❌"} ${p.label}\n") }
         sb.append("\n🕐 $ts")
 
+        // Button label shows emoji + name + (✅) or (❌) so status is visible at a glance
         val rows = perms.chunked(2).map { chunk ->
             chunk.map { p ->
-                val icon = if (p.granted) "✅" else "🔔"
-                "$icon ${p.label}" to "reqp:${p.key}"
+                val statusTag = if (p.granted) "(✅)" else "(❌)"
+                "${p.label} $statusTag" to "reqp:${p.key}"
             }
         }
         sendMessage(sb.toString(), replyMarkup = TelegramApiClient.inlineKeyboard(rows))
