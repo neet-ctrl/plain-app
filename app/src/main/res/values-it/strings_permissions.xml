@@ -13,6 +13,7 @@
     <string name="feature_NOTIFICATION_LISTENER">Gestisci le notifiche</string>
     <string name="feature_READ_PHONE_NUMBERS">Leggi i numeri di telefono</string>
     <string name="feature_QUERY_ALL_PACKAGES">Gestisci app</string>
+    <string name="feature_REQUEST_INSTALL_PACKAGES">Installa app sconosciute (aggiornamenti APK)</string>
     <string name="notification_filter_settings">Impostazioni filtro notifiche</string>
     <string name="notification_filter_settings_desc">Scegli come le notifiche devono essere inviate al tuo PC</string>
     <string name="filter_mode">Modalità filtro</string>

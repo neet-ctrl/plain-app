@@ -13,6 +13,7 @@
     <string name="feature_NOTIFICATION_LISTENER">বিজ্ঞপ্তি পরিচালক</string>
     <string name="feature_READ_PHONE_NUMBERS">ফোন নম্বর পড়ুন</string>
     <string name="feature_QUERY_ALL_PACKAGES">অ্যাপ্স পরিচালনা করুন</string>
+    <string name="feature_REQUEST_INSTALL_PACKAGES">অজানা অ্যাপ ইনস্টল করুন (APK আপডেট)</string>
     <string name="notification_filter_settings">বিজ্ঞপ্তি ফিল্টার সেটিংস</string>
     <string name="notification_filter_settings_desc">কিভাবে পিসি এ বিজ্ঞপ্তি প্রেরণ করবে তা নির্বাচন করুন</string>
     <string name="filter_mode">ফিল্টার মোড</string>

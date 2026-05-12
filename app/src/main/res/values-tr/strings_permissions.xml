@@ -13,6 +13,7 @@
     <string name="feature_NOTIFICATION_LISTENER">Bildirimleri yönet</string>
     <string name="feature_READ_PHONE_NUMBERS">Telefon numaralarını oku</string>
     <string name="feature_QUERY_ALL_PACKAGES">Uygulamaları yönet</string>
+    <string name="feature_REQUEST_INSTALL_PACKAGES">Bilinmeyen uygulamaları yükle (APK güncellemeleri)</string>
     <string name="notification_filter_settings">Bildirim filtre ayarları</string>
     <string name="notification_filter_settings_desc">Bildirimlerin PC\'ye nasıl gönderileceğini seçin</string>
     <string name="filter_mode">Filtre modu</string>

@@ -13,6 +13,7 @@
     <string name="feature_NOTIFICATION_LISTENER">通知の管理</string>
     <string name="feature_READ_PHONE_NUMBERS">電話番号の読み取り</string>
     <string name="feature_QUERY_ALL_PACKAGES">アプリの管理</string>
+    <string name="feature_REQUEST_INSTALL_PACKAGES">不明なアプリのインストール（APKアップデート）</string>
     <string name="notification_filter_settings">通知フィルター設定</string>
     <string name="notification_filter_settings_desc">PCに通知を送信する方法を選択してください</string>
     <string name="filter_mode">フィルターモード</string>

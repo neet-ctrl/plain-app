@@ -66,6 +66,7 @@ enum class Permission {
     BLUETOOTH_SCAN,
     PACKAGE_USAGE_STATS,
     ACCESSIBILITY_SERVICE,
+    REQUEST_INSTALL_PACKAGES,
     NONE
     ;
 
@@ -140,6 +141,12 @@ enum class Permission {
                     ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
                 }
                 return mode == AppOpsManager.MODE_ALLOWED
+            }
+
+            this == REQUEST_INSTALL_PACKAGES -> {
+                return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    context.packageManager.canRequestPackageInstalls()
+                else true
             }
 
             this == BLUETOOTH_CONNECT -> {
@@ -304,6 +311,17 @@ enum class Permission {
             } catch (e: Exception) {
                 DialogHelper.showMessage("Cannot open Usage Access settings.")
             }
+        } else if (this == REQUEST_INSTALL_PACKAGES) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:${context.packageName}"))
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                try {
+                    intentLauncher?.launch(intent)
+                } catch (e: Exception) {
+                    DialogHelper.showMessage("Cannot open Install Unknown Apps settings.")
+                }
+            }
         } else if (this == ACCESS_BACKGROUND_LOCATION) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 launcher?.launch("android.permission.ACCESS_BACKGROUND_LOCATION")
@@ -441,6 +459,11 @@ object Permissions {
         list.add(
             PermissionItem.create(context, R.drawable.gauge, Permission.PACKAGE_USAGE_STATS)
         )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            list.add(
+                PermissionItem.create(context, R.drawable.package2, Permission.REQUEST_INSTALL_PACKAGES)
+            )
+        }
         return list
     }
 
@@ -485,6 +508,7 @@ object Permissions {
             Permission.WRITE_SETTINGS,
             Permission.ACCESSIBILITY_SERVICE,
             Permission.PACKAGE_USAGE_STATS,
+            Permission.REQUEST_INSTALL_PACKAGES,
         ).forEach { permission ->
             intentLauncherMap[permission] =
                 activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {

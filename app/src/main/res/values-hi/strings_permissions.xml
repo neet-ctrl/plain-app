@@ -13,6 +13,7 @@
     <string name="feature_NOTIFICATION_LISTENER">सूचना सुनने वाला</string>
     <string name="feature_READ_PHONE_NUMBERS">फ़ोन नंबर पढ़ें</string>
     <string name="feature_QUERY_ALL_PACKAGES">ऐप्स प्रबंधित करें</string>
+    <string name="feature_REQUEST_INSTALL_PACKAGES">अज्ञात ऐप्स इंस्टॉल करें (APK अपडेट)</string>
     <string name="notification_filter_settings">सूचना फ़िल्टर सेटिंग्स</string>
     <string name="notification_filter_settings_desc">आपके कंप्यूटर को सूचना कैसे भेजा जाए उसे चुनें</string>
     <string name="filter_mode">फ़िल्टर मोड</string>

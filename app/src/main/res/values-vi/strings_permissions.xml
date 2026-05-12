@@ -13,6 +13,7 @@
     <string name="feature_NOTIFICATION_LISTENER">Quản lý thông báo</string>
     <string name="feature_READ_PHONE_NUMBERS">Đọc số điện thoại</string>
     <string name="feature_QUERY_ALL_PACKAGES">Quản lý ứng dụng</string>
+    <string name="feature_REQUEST_INSTALL_PACKAGES">Cài đặt ứng dụng không rõ nguồn (cập nhật APK)</string>
     <string name="notification_filter_settings">Cài đặt lọc thông báo</string>
     <string name="notification_filter_settings_desc">Chọn cách thông báo được gửi đến PC của bạn</string>
     <string name="filter_mode">Chế độ lọc</string>

@@ -22,6 +22,7 @@
     <string name="add_app">添加应用</string>
     <string name="feature_READ_PHONE_NUMBERS">读取话号码</string>
     <string name="feature_QUERY_ALL_PACKAGES">管理应用</string>
+    <string name="feature_REQUEST_INSTALL_PACKAGES">安装未知应用（APK 更新）</string>
     <string name="system_permission_granted">已获取系统权限</string>
     <string name="system_permission_not_granted">未获取系统权限</string>
     <string name="open_permission_settings">系统权限设置</string>

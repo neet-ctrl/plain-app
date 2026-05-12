@@ -13,6 +13,7 @@
     <string name="feature_NOTIFICATION_LISTENER">Управление уведомлениями</string>
     <string name="feature_READ_PHONE_NUMBERS">Чтение телефонных номеров</string>
     <string name="feature_QUERY_ALL_PACKAGES">Управление приложениями</string>
+    <string name="feature_REQUEST_INSTALL_PACKAGES">Установка неизвестных приложений (APK-обновления)</string>
     <string name="notification_filter_settings">Настройки фильтра уведомлений</string>
     <string name="notification_filter_settings_desc">Выберите, как уведомления должны быть отправлены на ваш компьютер</string>
     <string name="filter_mode">Режим фильтра</string>
