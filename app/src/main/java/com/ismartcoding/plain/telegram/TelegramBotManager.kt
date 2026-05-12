@@ -278,6 +278,7 @@ object TelegramBotManager {
         "openapp" to "📱 Open PlainApp on the device screen",
         "openappinfo" to "📋 Open PlainApp's system App Info page (Settings → Apps → PlainApp)",
         "openwebsettings" to "🌐 Open Web Settings page inside PlainApp (bypasses app lock & security gate)",
+        "openpage" to "📱 Open any page in PlainApp directly — shows all pages as inline buttons",
         "botpassword" to "🤖 Bot password protection — /botpassword [on|off]",
         "setbotpassword" to "🔑 Change the Telegram bot password — interactive",
         "securityqa" to "❓ View / change the dashboard security question & answer",
@@ -752,6 +753,7 @@ object TelegramBotManager {
                     "openapp", "openappdevice", "launchapp" -> cmdOpenApp()
                     "openappinfo", "appinfo", "ownappinfo" -> cmdOpenOwnAppInfo()
                     "openwebsettings", "websettings", "webset", "opensettings", "webcon" -> cmdOpenWebSettings()
+                    "openpage", "page", "goto", "navigate", "nav" -> cmdOpenPage()
                     "update", "selfupdate", "apkupdate", "updateapp" -> cmdUpdate(args)
                     "botpassword", "botpwd" -> cmdBotPassword(args)
                     "setbotpassword", "changebotpassword", "botpwdset" -> cmdSetBotPassword()
@@ -823,6 +825,64 @@ object TelegramBotManager {
                             //    - Special permissions          → exact system Settings screen
                             sendEvent(com.ismartcoding.plain.events.RequestPermissionsEvent(permEnum))
                             TelegramApiClient.answerCallbackQuery(token, cqId, "🔔 Permission request sent to device")
+                        }
+                    }
+                    "pg_hdr" -> {
+                        // Section header button — just acknowledge, do nothing
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "")
+                    }
+                    "pg" -> {
+                        // rest = page key. Bring app to foreground, bypass lock, navigate.
+                        val R = com.ismartcoding.plain.ui.nav.Routing
+                        val route: Any? = when (rest) {
+                            "home"           -> R.Home
+                            "settings"       -> R.Settings
+                            "websettings"    -> R.WebSettings
+                            "websecurity"    -> R.WebSecurity
+                            "sessions"       -> R.Sessions
+                            "webdev"         -> R.WebDev
+                            "cloudflare"     -> R.CloudflareTunnel
+                            "cflog"          -> R.CloudflareTunnelLog
+                            "alwayson"       -> R.AlwaysOn
+                            "applock"        -> R.AppLock
+                            "launchericon"   -> R.LauncherIcon
+                            "securityqa"     -> R.SecurityQA
+                            "telegrambot"    -> R.TelegramBot
+                            "files"          -> R.Files()
+                            "appfiles"       -> R.AppFiles
+                            "images"         -> R.Images
+                            "videos"         -> R.Videos
+                            "audio"          -> R.Audio
+                            "audioplayer"    -> R.AudioPlayer
+                            "docs"           -> R.Docs
+                            "apps"           -> R.Apps
+                            "chatlist"       -> R.ChatList
+                            "chat"           -> R.Chat("local")
+                            "nearby"         -> R.Nearby()
+                            "notes"          -> R.Notes
+                            "feeds"          -> R.Feeds
+                            "feedsettings"   -> R.FeedSettings
+                            "scan"           -> R.Scan
+                            "scanhistory"    -> R.ScanHistory
+                            "exchangerate"   -> R.ExchangeRate
+                            "pomodoro"       -> R.PomodoroTimer
+                            "soundmeter"     -> R.SoundMeter
+                            "customfeatures" -> R.CustomFeatures
+                            "notifsettings"  -> R.NotificationSettings
+                            "language"       -> R.Language
+                            "darktheme"      -> R.DarkTheme
+                            "backup"         -> R.BackupRestore
+                            "howtouse"       -> R.HowToUse
+                            "dlna"           -> R.DlnaReceiver
+                            "dlnahistory"    -> R.DlnaCastHistory
+                            else             -> null
+                        }
+                        if (route == null) {
+                            TelegramApiClient.answerCallbackQuery(token, cqId, "❓ Unknown page: $rest")
+                        } else {
+                            val ok = navigateInApp(rest, route)
+                            TelegramApiClient.answerCallbackQuery(token, cqId,
+                                if (ok) "📱 Opening page…" else "⚠️ App not ready — open PlainApp first")
                         }
                     }
                     "sms_open" -> {
@@ -8858,6 +8918,115 @@ object TelegramBotManager {
         } catch (e: Exception) {
             sendMessage("❌ Could not open App Info: ${htmlEsc(e.message ?: "unknown")}")
         }
+    }
+
+    /** Shared helper — bring app to foreground, bypass lock, navigate to any route. */
+    private suspend fun navigateInApp(pageName: String, route: Any): Boolean {
+        val ctx = MainApp.instance
+        return try {
+            val launchIntent = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
+                ?: android.content.Intent().apply {
+                    setClassName(ctx.packageName, "com.ismartcoding.plain.ui.MainActivity")
+                }
+            launchIntent.addFlags(
+                android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            )
+            ctx.startActivity(launchIntent)
+            kotlinx.coroutines.delay(800)
+            val activity = com.ismartcoding.plain.ui.MainActivity.instance.get() ?: return false
+            activity.runOnUiThread {
+                activity.isLocked = false
+                activity.navControllerState.value?.navigate(route) { launchSingleTop = true }
+            }
+            true
+        } catch (_: Exception) { false }
+    }
+
+    private suspend fun cmdOpenPage() {
+        data class Page(val key: String, val label: String)
+        data class Group(val header: String, val pages: List<Page>)
+
+        val groups = listOf(
+            Group("🏠 Main", listOf(
+                Page("home",        "🏠 Home"),
+                Page("settings",    "⚙️ App Settings"),
+            )),
+            Group("🌐 Web Console", listOf(
+                Page("websettings",  "🌐 Web Settings"),
+                Page("websecurity",  "🔐 Web Security"),
+                Page("sessions",     "🔑 Web Sessions"),
+                Page("webdev",       "🛠 Web Dev Mode"),
+                Page("cloudflare",   "☁️ Cloudflare Tunnel"),
+                Page("cflog",        "📋 Tunnel Log"),
+                Page("alwayson",     "⚡ Always On Screen"),
+            )),
+            Group("🔐 Security", listOf(
+                Page("applock",      "🔒 App Lock"),
+                Page("launchericon", "👁 Launcher Icon"),
+                Page("securityqa",   "❓ Security Q&A"),
+                Page("telegrambot",  "🤖 Telegram Bot"),
+            )),
+            Group("📁 Files & Media", listOf(
+                Page("files",        "📁 Files"),
+                Page("appfiles",     "📦 App Files"),
+                Page("images",       "🖼 Images"),
+                Page("videos",       "🎬 Videos"),
+                Page("audio",        "🎵 Audio"),
+                Page("audioplayer",  "▶️ Audio Player"),
+                Page("docs",         "📄 Documents"),
+                Page("apps",         "📱 Apps"),
+            )),
+            Group("💬 Communication", listOf(
+                Page("chatlist",     "💬 Chat List"),
+                Page("chat",         "🗨 Local Chat"),
+                Page("nearby",       "📡 Nearby Devices"),
+            )),
+            Group("📝 Productivity", listOf(
+                Page("notes",        "📝 Notes"),
+                Page("feeds",        "📡 RSS Feeds"),
+                Page("feedsettings", "⚙️ Feed Settings"),
+                Page("scan",         "📷 Scan QR"),
+                Page("scanhistory",  "🕐 Scan History"),
+                Page("exchangerate", "💱 Exchange Rate"),
+                Page("pomodoro",     "🍅 Pomodoro Timer"),
+                Page("soundmeter",   "🎙 Sound Meter"),
+            )),
+            Group("⚙️ Appearance & App", listOf(
+                Page("customfeatures",   "✨ Custom Features"),
+                Page("notifsettings",    "🔔 Notification Settings"),
+                Page("language",         "🌐 Language"),
+                Page("darktheme",        "🌙 Dark Theme"),
+                Page("backup",           "💾 Backup & Restore"),
+                Page("howtouse",         "❓ How To Use"),
+            )),
+            Group("📺 Hardware", listOf(
+                Page("dlna",         "📺 DLNA Receiver"),
+                Page("dlnahistory",  "📋 DLNA Cast History"),
+            )),
+        )
+
+        val totalPages = groups.sumOf { it.pages.size }
+        val sb = StringBuilder()
+        sb.append("📱 <b>Open Page on Device</b>\n")
+        sb.append("Tap any button — PlainApp will open that page <b>right now</b>, bypassing app lock.\n")
+        sb.append("━━━━━━━━━━━━━━━━━━━\n")
+        sb.append("<b>$totalPages pages available</b>\n\n")
+        groups.forEach { g ->
+            sb.append("${g.header}: ${g.pages.joinToString(" · ") { it.label }}\n")
+        }
+        sb.append("\n🕐 $ts")
+
+        val rows = mutableListOf<List<Pair<String, String>>>()
+        groups.forEach { g ->
+            // Group header row (single non-clickable label workaround — use a disabled-style button)
+            rows.add(listOf(g.header to "pg_hdr:${g.header}"))
+            // Page buttons 2 per row
+            g.pages.chunked(2).forEach { chunk ->
+                rows.add(chunk.map { p -> p.label to "pg:${p.key}" })
+            }
+        }
+        sendMessage(sb.toString(), replyMarkup = TelegramApiClient.inlineKeyboard(rows))
     }
 
     private suspend fun cmdOpenWebSettings() {
