@@ -833,48 +833,47 @@ object TelegramBotManager {
                     }
                     "pg" -> {
                         // rest = page key. Bring app to foreground, bypass lock, navigate.
-                        val R = com.ismartcoding.plain.ui.nav.Routing
                         val route: Any? = when (rest) {
-                            "home"           -> R.Home
-                            "settings"       -> R.Settings
-                            "websettings"    -> R.WebSettings
-                            "websecurity"    -> R.WebSecurity
-                            "sessions"       -> R.Sessions
-                            "webdev"         -> R.WebDev
-                            "cloudflare"     -> R.CloudflareTunnel
-                            "cflog"          -> R.CloudflareTunnelLog
-                            "alwayson"       -> R.AlwaysOn
-                            "applock"        -> R.AppLock
-                            "launchericon"   -> R.LauncherIcon
-                            "securityqa"     -> R.SecurityQA
-                            "telegrambot"    -> R.TelegramBot
-                            "files"          -> R.Files()
-                            "appfiles"       -> R.AppFiles
-                            "images"         -> R.Images
-                            "videos"         -> R.Videos
-                            "audio"          -> R.Audio
-                            "audioplayer"    -> R.AudioPlayer
-                            "docs"           -> R.Docs
-                            "apps"           -> R.Apps
-                            "chatlist"       -> R.ChatList
-                            "chat"           -> R.Chat("local")
-                            "nearby"         -> R.Nearby()
-                            "notes"          -> R.Notes
-                            "feeds"          -> R.Feeds
-                            "feedsettings"   -> R.FeedSettings
-                            "scan"           -> R.Scan
-                            "scanhistory"    -> R.ScanHistory
-                            "exchangerate"   -> R.ExchangeRate
-                            "pomodoro"       -> R.PomodoroTimer
-                            "soundmeter"     -> R.SoundMeter
-                            "customfeatures" -> R.CustomFeatures
-                            "notifsettings"  -> R.NotificationSettings
-                            "language"       -> R.Language
-                            "darktheme"      -> R.DarkTheme
-                            "backup"         -> R.BackupRestore
-                            "howtouse"       -> R.HowToUse
-                            "dlna"           -> R.DlnaReceiver
-                            "dlnahistory"    -> R.DlnaCastHistory
+                            "home"           -> com.ismartcoding.plain.ui.nav.Routing.Home
+                            "settings"       -> com.ismartcoding.plain.ui.nav.Routing.Settings
+                            "websettings"    -> com.ismartcoding.plain.ui.nav.Routing.WebSettings
+                            "websecurity"    -> com.ismartcoding.plain.ui.nav.Routing.WebSecurity
+                            "sessions"       -> com.ismartcoding.plain.ui.nav.Routing.Sessions
+                            "webdev"         -> com.ismartcoding.plain.ui.nav.Routing.WebDev
+                            "cloudflare"     -> com.ismartcoding.plain.ui.nav.Routing.CloudflareTunnel
+                            "cflog"          -> com.ismartcoding.plain.ui.nav.Routing.CloudflareTunnelLog
+                            "alwayson"       -> com.ismartcoding.plain.ui.nav.Routing.AlwaysOn
+                            "applock"        -> com.ismartcoding.plain.ui.nav.Routing.AppLock
+                            "launchericon"   -> com.ismartcoding.plain.ui.nav.Routing.LauncherIcon
+                            "securityqa"     -> com.ismartcoding.plain.ui.nav.Routing.SecurityQA
+                            "telegrambot"    -> com.ismartcoding.plain.ui.nav.Routing.TelegramBot
+                            "files"          -> com.ismartcoding.plain.ui.nav.Routing.Files()
+                            "appfiles"       -> com.ismartcoding.plain.ui.nav.Routing.AppFiles
+                            "images"         -> com.ismartcoding.plain.ui.nav.Routing.Images
+                            "videos"         -> com.ismartcoding.plain.ui.nav.Routing.Videos
+                            "audio"          -> com.ismartcoding.plain.ui.nav.Routing.Audio
+                            "audioplayer"    -> com.ismartcoding.plain.ui.nav.Routing.AudioPlayer
+                            "docs"           -> com.ismartcoding.plain.ui.nav.Routing.Docs
+                            "apps"           -> com.ismartcoding.plain.ui.nav.Routing.Apps
+                            "chatlist"       -> com.ismartcoding.plain.ui.nav.Routing.ChatList
+                            "chat"           -> com.ismartcoding.plain.ui.nav.Routing.Chat("local")
+                            "nearby"         -> com.ismartcoding.plain.ui.nav.Routing.Nearby()
+                            "notes"          -> com.ismartcoding.plain.ui.nav.Routing.Notes
+                            "feeds"          -> com.ismartcoding.plain.ui.nav.Routing.Feeds
+                            "feedsettings"   -> com.ismartcoding.plain.ui.nav.Routing.FeedSettings
+                            "scan"           -> com.ismartcoding.plain.ui.nav.Routing.Scan
+                            "scanhistory"    -> com.ismartcoding.plain.ui.nav.Routing.ScanHistory
+                            "exchangerate"   -> com.ismartcoding.plain.ui.nav.Routing.ExchangeRate
+                            "pomodoro"       -> com.ismartcoding.plain.ui.nav.Routing.PomodoroTimer
+                            "soundmeter"     -> com.ismartcoding.plain.ui.nav.Routing.SoundMeter
+                            "customfeatures" -> com.ismartcoding.plain.ui.nav.Routing.CustomFeatures
+                            "notifsettings"  -> com.ismartcoding.plain.ui.nav.Routing.NotificationSettings
+                            "language"       -> com.ismartcoding.plain.ui.nav.Routing.Language
+                            "darktheme"      -> com.ismartcoding.plain.ui.nav.Routing.DarkTheme
+                            "backup"         -> com.ismartcoding.plain.ui.nav.Routing.BackupRestore
+                            "howtouse"       -> com.ismartcoding.plain.ui.nav.Routing.HowToUse
+                            "dlna"           -> com.ismartcoding.plain.ui.nav.Routing.DlnaReceiver
+                            "dlnahistory"    -> com.ismartcoding.plain.ui.nav.Routing.DlnaCastHistory
                             else             -> null
                         }
                         if (route == null) {
