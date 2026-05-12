@@ -5610,6 +5610,7 @@ object TelegramBotManager {
                 append("• /openapp — Open PlainApp on the device screen\n")
                 append("• /openappinfo — Open PlainApp's own App info page\n")
                 append("• /openwebsettings — Open Web Settings page directly (bypasses app lock & security gate)\n")
+                append("• /openpage — Open any page in PlainApp on device — shows all pages as inline buttons\n")
                 append("• /permissions — Status of every app permission\n")
                 append("• /openperms [name] — Open a permission's settings screen directly on device\n")
                 append("• /reqperm — List all permissions as buttons — tap to trigger the grant dialog on device\n")

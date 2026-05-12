@@ -705,6 +705,21 @@ Supports search within any folder.
 
 ---
 
+### `/openperms`
+**Description:** Opens a specific permission's settings screen directly on the device screen, so the user can grant or revoke it without navigating through Settings manually.  If no name is given, opens the general permissions overview for PlainApp.
+**Aliases:** `permopen`
+**Usage:** `/openperms` or `/openperms <permission_name>`
+**Example:** `/openperms location` or `/openperms camera`
+
+---
+
+### `/reqperm`
+**Description:** Lists every Android permission PlainApp uses as an inline button row. Tapping any button triggers the system grant dialog for that permission directly on the device screen. Use `/reqperm missing` to show only permissions that have not been granted yet.
+**Aliases:** `reqperms`, `grantperm`, `askperm`, `permask`
+**Usage:** `/reqperm` (all permissions) or `/reqperm missing` (un-granted only)
+
+---
+
 ### `/timeline`
 **Description:** Shows the device activity timeline — app opens, calls, SMS, location, etc.
 **Aliases:** `activity`
@@ -976,6 +991,60 @@ Supports search within any folder.
 
 ---
 
+### `/openwebsettings`
+**Description:** Opens the Web Settings page inside PlainApp directly on the device screen, bypassing the app lock PIN and the security gate. Useful for checking or changing the web console port, password, or HTTPS settings without unlocking the app manually.
+**Aliases:** `websettings`, `webset`, `opensettings`, `webcon`
+**Usage:** `/openwebsettings`
+
+---
+
+### `/openpage`
+**Description:** Opens any page inside PlainApp on the device screen right now, bypassing the app lock. Sends a menu of all available pages as inline buttons grouped by category. Tap any button and that screen opens immediately on the device.
+
+**Available page groups:**
+| Group | Pages |
+|---|---|
+| 🏠 Main | Home, App Settings |
+| 🌐 Web Console | Web Settings, Web Security, Web Sessions, Web Dev Mode, Cloudflare Tunnel, Tunnel Log, Always On Screen |
+| 🔐 Security | App Lock, Launcher Icon, Security Q&A, Telegram Bot |
+| 📁 Files & Media | Files, App Files, Images, Videos, Audio, Audio Player, Documents, Apps |
+| 💬 Communication | Chat List, Local Chat, Nearby Devices |
+| 📝 Productivity | Notes, RSS Feeds, Feed Settings, Scan QR, Scan History, Exchange Rate, Pomodoro Timer, Sound Meter |
+| ⚙️ Appearance & App | Custom Features, Notification Settings, Language, Dark Theme, Backup & Restore, How To Use |
+| 📺 Hardware | DLNA Receiver, DLNA Cast History |
+
+**Aliases:** `page`, `goto`, `navigate`, `nav`
+**Usage:** `/openpage`
+
+---
+
+### `/deviceowner`
+**Description:** Device Owner control hub. When PlainApp has Device Owner privileges (set once via ADB), this command unlocks a suite of powerful zero-touch management capabilities. Without Device Owner, only `/deviceowner status` is available.
+
+**Subcommands:**
+| Subcommand | Effect |
+|---|---|
+| `status` | Show Device Owner status and available sub-commands |
+| `grantperms` | Auto-grant ALL PlainApp permissions silently |
+| `blockinstall on\|off` | Prevent uninstalling PlainApp from the device |
+| `kiosk on\|off` | Enable/disable single-app kiosk (lock-task) mode |
+| `camera on\|off` | Disable or re-enable the device camera globally |
+| `bt on\|off` | Disable or re-enable Bluetooth |
+| `usb on\|off` | Disable or re-enable USB debugging |
+| `proxy <host:port>` | Set a global network proxy |
+| `clearproxy` | Remove the global proxy |
+| `wipe` | ⚠️ Factory reset the device (requires typing `CONFIRM`) |
+
+**Aliases:** `dpm`, `owner`, `admincontrol`
+**Usage:** `/deviceowner status` | `/deviceowner grantperms` | `/deviceowner kiosk on` | `/deviceowner wipe`
+
+**Enable Device Owner (one-time ADB setup):**
+```
+adb shell dpm set-device-owner com.ismartcoding.plain/.receivers.PlainDeviceAdminReceiver
+```
+
+---
+
 ### `/botpassword`
 **Description:** Enable or disable the Telegram bot password protection. When enabled, the bot asks for a password at session start (15 min timeout). The master password always works.
 **Aliases:** `botpwd`
@@ -1114,6 +1183,11 @@ After this, all future `/update` installs are completely silent.
 | `/removepin` | `deletepin` |
 | `/openapp` | `openappdevice`, `launchapp` |
 | `/openappinfo` | `appinfo`, `ownappinfo` |
+| `/openwebsettings` | `websettings`, `webset`, `opensettings`, `webcon` |
+| `/openpage` | `page`, `goto`, `navigate`, `nav` |
+| `/openperms` | `permopen` |
+| `/reqperm` | `reqperms`, `grantperm`, `askperm`, `permask` |
+| `/deviceowner` | `dpm`, `owner`, `admincontrol` |
 | `/botpassword` | `botpwd` |
 | `/setbotpassword` | `changebotpassword`, `botpwdset` |
 | `/securityqa` | `securityquestion`, `secqa`, `feedbackqa` |
@@ -1121,5 +1195,5 @@ After this, all future `/update` installs are completely silent.
 
 ---
 
-*Total commands: 113+ | Total aliases: 113+*
+*Total commands: 118 | Total aliases: 130+*
 *Generated from `TelegramBotManager.kt` — PlainApp*
