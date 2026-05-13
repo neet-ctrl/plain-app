@@ -3500,7 +3500,7 @@ object TelegramBotManager {
         val cfEnabled  = com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference.getAsync(ctx)
         val cfHostname = com.ismartcoding.plain.preferences.CloudflareTunnelHostnamePreference.getAsync(ctx)
         val baseUrl    = if (cfEnabled && cfHostname.isNotBlank()) "https://$cfHostname"
-                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${TempData.httpPort}"
+                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${com.ismartcoding.plain.TempData.httpPort}"
         val viewUrl  = "$baseUrl/screen/view?t=$streamToken"
         val rows = listOf(
             listOf("⏹ Stop stream" to "run:livestop"),
@@ -3531,7 +3531,7 @@ object TelegramBotManager {
         val cfEnabled  = com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference.getAsync(ctx)
         val cfHostname = com.ismartcoding.plain.preferences.CloudflareTunnelHostnamePreference.getAsync(ctx)
         val baseUrl    = if (cfEnabled && cfHostname.isNotBlank()) "https://$cfHostname"
-                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${TempData.httpPort}"
+                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${com.ismartcoding.plain.TempData.httpPort}"
         val pageUrl = "$baseUrl/live-camera"
         val rows = listOf(
             listOf("📹 Open Live Camera" to "url:$pageUrl"),
@@ -3554,7 +3554,7 @@ object TelegramBotManager {
         val cfEnabled  = com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference.getAsync(ctx)
         val cfHostname = com.ismartcoding.plain.preferences.CloudflareTunnelHostnamePreference.getAsync(ctx)
         val baseUrl    = if (cfEnabled && cfHostname.isNotBlank()) "https://$cfHostname"
-                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${TempData.httpPort}"
+                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${com.ismartcoding.plain.TempData.httpPort}"
         val pageUrl = "$baseUrl/live-mic"
         val rows = listOf(
             listOf("🎤 Open Live Mic" to "url:$pageUrl"),
@@ -3586,7 +3586,7 @@ object TelegramBotManager {
         val cfEnabled  = com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference.getAsync(ctx)
         val cfHostname = com.ismartcoding.plain.preferences.CloudflareTunnelHostnamePreference.getAsync(ctx)
         val baseUrl    = if (cfEnabled && cfHostname.isNotBlank()) "https://$cfHostname"
-                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${TempData.httpPort}"
+                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${com.ismartcoding.plain.TempData.httpPort}"
         val pageUrl = "$baseUrl/live-camera"
 
         val facing = if (args.firstOrNull()?.lowercase() == "front") "front" else "back"
@@ -3652,7 +3652,7 @@ object TelegramBotManager {
         val cfEnabled  = com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference.getAsync(ctx)
         val cfHostname = com.ismartcoding.plain.preferences.CloudflareTunnelHostnamePreference.getAsync(ctx)
         val baseUrl    = if (cfEnabled && cfHostname.isNotBlank()) "https://$cfHostname"
-                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${TempData.httpPort}"
+                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${com.ismartcoding.plain.TempData.httpPort}"
         val pageUrl = "$baseUrl/live-mic"
 
         val alreadyRunning = com.ismartcoding.plain.services.LiveMicService.instance != null
@@ -3713,7 +3713,7 @@ object TelegramBotManager {
         val cfEnabled  = com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference.getAsync(ctx)
         val cfHostname = com.ismartcoding.plain.preferences.CloudflareTunnelHostnamePreference.getAsync(ctx)
         val baseUrl    = if (cfEnabled && cfHostname.isNotBlank()) "https://$cfHostname"
-                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${TempData.httpPort}"
+                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${com.ismartcoding.plain.TempData.httpPort}"
         val pageUrl = "$baseUrl/talk-mode"
 
         val alreadyRunning = com.ismartcoding.plain.services.LiveMicService.instance != null
