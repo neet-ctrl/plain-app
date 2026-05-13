@@ -18,11 +18,16 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.provider.MediaStore
+import com.ismartcoding.lib.helpers.NetworkHelper
 import com.ismartcoding.lib.logcat.LogCat
+import com.ismartcoding.plain.TempData
+import com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference
+import com.ismartcoding.plain.preferences.CloudflareTunnelHostnamePreference
 import com.ismartcoding.plain.preferences.TelegramBotEnabledPreference
 import com.ismartcoding.plain.preferences.TelegramBotTokenPreference
 import com.ismartcoding.plain.preferences.TelegramChatIdPreference
 import com.ismartcoding.plain.preferences.TelegramFileForwardEnabledPreference
+import com.ismartcoding.plain.web.routes.BackupDownloadManager
 import com.ismartcoding.plain.workers.FileForwardScanWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -462,10 +467,18 @@ class FileForwardService : Service() {
         val f = File(entry.path)
         if (!f.exists()) return true
         if (f.length() > FileForwardQueue.MAX_UPLOAD_BYTES) {
-            val msg = "⚠️ <b>Large File — Not Uploaded</b>\n" +
-                "📁 [${entry.tag}] ${htmlEsc(f.name)}\n" +
-                "📏 Size: ${FileForwardQueue.formatSize(f.length())} (exceeds 49 MB)\n" +
-                "📂 ${htmlEsc(truncatePath(f.absolutePath, 90))}"
+            val dlToken = java.util.UUID.randomUUID().toString().replace("-", "").take(24)
+            BackupDownloadManager.register(dlToken, f, f.name)
+            val ctx = applicationContext
+            val cfEnabled  = runBlocking { CloudflareTunnelEnabledPreference.getAsync(ctx) }
+            val cfHostname = runBlocking { CloudflareTunnelHostnamePreference.getAsync(ctx) }
+            val baseUrl = if (cfEnabled && cfHostname.isNotBlank()) "https://$cfHostname"
+                          else "http://${NetworkHelper.getDeviceIP4()}:${TempData.httpPort}"
+            val msg = "📁 <b>[${entry.tag}]</b> ${htmlEsc(f.name)}\n" +
+                "📏 ${FileForwardQueue.formatSize(f.length())} — too large for Telegram (49 MB limit)\n" +
+                "📂 ${htmlEsc(truncatePath(f.absolutePath, 80))}\n" +
+                "⏰ Link valid for <b>30 minutes</b>\n\n" +
+                "🔗 <b>Download link:</b>\n<code>$baseUrl/backup/dl?t=$dlToken</code>"
             return TelegramApiClient.sendMessage(token, chatId, msg)
         }
         val caption = buildCaption(entry, f)
