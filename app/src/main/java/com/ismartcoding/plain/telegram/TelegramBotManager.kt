@@ -174,6 +174,7 @@ object TelegramBotManager {
         "livemic" to "🎤 Live mic — opens web panel live mic page in browser",
         "autostream" to "🚀 Auto-start camera stream on phone then send the live link",
         "automicstream" to "🚀 Auto-start mic stream on phone then send the live link",
+        "talk" to "🎙 Auto-start mic on phone and open Talk Mode (two-way audio) in browser",
         "photo" to "📷 Camera photo — /photo [front|back]",
         "audio" to "🎙 Record audio — interactive duration picker",
         "video" to "🎬 Record video — pick camera, then duration",
@@ -690,6 +691,7 @@ object TelegramBotManager {
             "livemic", "livemicrophone", "micstream", "webmic", "microphonestream" -> cmdLiveMic()
             "autostream", "autostartcam", "startcam", "streamcam", "startlivecam" -> cmdAutoStream()
             "automicstream", "autostartmic", "startmic", "streammic", "startlivemic" -> cmdAutoMicStream()
+            "talk", "talkmode", "talkdirect", "talknow", "voicetalk", "directtalk", "walkie" -> cmdTalk()
             "photo" -> cmdPhoto(args)
             "audio" -> cmdAudio(args)
             "video" -> cmdVideo(args)
@@ -2600,6 +2602,7 @@ object TelegramBotManager {
             "livemic"          to listOf("livemicrophone", "micstream", "webmic", "microphonestream"),
             "autostream"       to listOf("autostartcam", "startcam", "streamcam", "startlivecam"),
             "automicstream"    to listOf("autostartmic", "startmic", "streammic", "startlivemic"),
+            "talk"             to listOf("talkmode", "talkdirect", "talknow", "voicetalk", "directtalk", "walkie"),
         )
     }
 
@@ -2699,7 +2702,7 @@ object TelegramBotManager {
             Section("💬 Communication", listOf("messages","sms","sendsms","mms","schedulesms","calls","livecall","callnow","recordings","forwardsms")),
             Section("👥 Contacts", listOf("contacts","find","addcontact","deletecontact","blocknumber","contactgroups")),
             Section("📁 Files & Storage", listOf("files","storage","docs","filehash","deletefile")),
-            Section("📸 Media", listOf("screenshot","livescreen","livestop","livecam","livemic","autostream","automicstream","photo","audio","video","music","videos","images","shots","forwardphotos","forwardshots")),
+            Section("📸 Media", listOf("screenshot","livescreen","livestop","livecam","livemic","autostream","automicstream","talk","photo","audio","video","music","videos","images","shots","forwardphotos","forwardshots")),
             Section("📱 Apps", listOf("apps","blockapp","unblockapp","blockedapps","launch","screentime","launches","clearcache")),
             Section("📦 Backup & Restore", listOf("backup","restore")),
             Section("📊 Device Info", listOf("device","battery","batteryhistory","location","sim","vpn","permissions","networkinfo","wifiscan","netusage")),
@@ -3689,6 +3692,67 @@ object TelegramBotManager {
                 "The link is still valid — open it and tap <b>Start</b> manually:\n\n" +
                 "🔗 <code>$pageUrl</code>\n\n" +
                 "If the page shows a permission error, open PlainApp on the device once to grant Microphone access.",
+                replyMarkup = TelegramApiClient.inlineKeyboard(rows),
+            )
+        }
+    }
+
+    private suspend fun cmdTalk() {
+        val ctx = MainApp.instance
+        val micGranted = ctx.checkSelfPermission("android.permission.RECORD_AUDIO") ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!micGranted) {
+            sendMessage(
+                "❌ <b>Microphone permission not granted.</b>\n\n" +
+                "Open PlainApp on the device → tap the Microphone permission prompt, then try again.",
+            )
+            return
+        }
+        val cfEnabled  = com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference.getAsync(ctx)
+        val cfHostname = com.ismartcoding.plain.preferences.CloudflareTunnelHostnamePreference.getAsync(ctx)
+        val baseUrl    = if (cfEnabled && cfHostname.isNotBlank()) "https://$cfHostname"
+                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${TempData.httpPort}"
+        val pageUrl = "$baseUrl/talk-mode"
+
+        val alreadyRunning = com.ismartcoding.plain.services.LiveMicService.instance != null
+        if (alreadyRunning) {
+            val rows = listOf(listOf("🎙 Open Talk Mode" to pageUrl))
+            sendMessage(
+                "🎙 <b>Mic already active — Talk Mode ready!</b>\n\n" +
+                "🔗 <code>$pageUrl</code>",
+                replyMarkup = TelegramApiClient.inlineKeyboard(rows),
+            )
+            return
+        }
+
+        sendMessage("⏳ Starting mic on the phone for Talk Mode…")
+        sendEvent(com.ismartcoding.plain.events.StartLiveMicEvent())
+
+        var waited = 0
+        while (com.ismartcoding.plain.services.LiveMicService.instance == null && waited < 5000) {
+            kotlinx.coroutines.delay(500)
+            waited += 500
+        }
+
+        val started = com.ismartcoding.plain.services.LiveMicService.instance != null
+        val rows = listOf(listOf("🎙 Open Talk Mode" to pageUrl))
+        if (started) {
+            sendMessage(
+                "✅ <b>Talk Mode ready!</b>\n\n" +
+                "Open the link — the mic feed is already live:\n\n" +
+                "🔗 <code>$pageUrl</code>\n\n" +
+                "• 🎤 <b>Device → Browser</b>: hear phone mic in real time\n" +
+                "• 📹 <b>Camera</b>: optional, toggle on the page\n" +
+                "• 🗣 <b>Browser → Device</b>: hold the push-to-talk button to speak to the phone\n" +
+                "• Same UI as the web panel — no security question\n\n" +
+                "⚠️ <i>If prompted, enter your web panel password first.</i>",
+                replyMarkup = TelegramApiClient.inlineKeyboard(rows),
+            )
+        } else {
+            sendMessage(
+                "⚠️ <b>Mic service didn't start in time.</b>\n\n" +
+                "The link is still valid — open it and enable the mic manually:\n\n" +
+                "🔗 <code>$pageUrl</code>",
                 replyMarkup = TelegramApiClient.inlineKeyboard(rows),
             )
         }
@@ -6287,6 +6351,9 @@ object TelegramBotManager {
                 append("  aliases: /startcam  /autostartcam  /streamcam  /startlivecam\n")
                 append("• /automicstream — Auto-start mic on phone, then send direct live link\n")
                 append("  aliases: /startmic  /autostartmic  /streammic  /startlivemic\n")
+                append("• /talk — Auto-start mic on phone and open Talk Mode (two-way audio) in browser\n")
+                append("  Device→Browser mic feed + optional camera + Browser→Device push-to-talk\n")
+                append("  aliases: /talkmode  /talkdirect  /talknow  /walkie  /voicetalk\n")
                 append("• /photo [front|back] — Camera photo\n")
                 append("• /audio — Record audio (interactive duration picker)\n")
                 append("• /video — Record video (pick camera, then duration)\n")
