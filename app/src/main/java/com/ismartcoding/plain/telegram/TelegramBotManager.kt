@@ -448,7 +448,11 @@ object TelegramBotManager {
                     append("⏱ <i>$dur</i>  📦 ${meta.sizeBytes / 1024} KB\n")
                     append("🕐 <i>${ts}</i>")
                 }
-                TelegramApiClient.sendAudio(token, chatId, file, caption, durSec)
+                if (file.length() > UPLOAD_LIMIT_BYTES) {
+                    sendFileOrDownloadLink(file, caption)
+                } else {
+                    TelegramApiClient.sendAudio(token, chatId, file, caption, durSec)
+                }
             } catch (e: Exception) {
                 LogCat.e("TelegramBot forwardCallRecording failed: ${e.message}")
             }
@@ -3552,7 +3556,12 @@ object TelegramBotManager {
         sendUploadVideo()
         val file = recordVideo(MainApp.instance, seconds, useFront)
         if (file != null && file.exists() && file.length() > 0) {
-            TelegramApiClient.sendVideo(token, chatId, file, "🎬 Video · ${seconds}s · ${if (useFront) "front" else "back"} camera · ${ts}", seconds)
+            val caption = "🎬 Video · ${seconds}s · ${if (useFront) "front" else "back"} camera · ${ts}"
+            if (file.length() > UPLOAD_LIMIT_BYTES) {
+                sendFileOrDownloadLink(file, caption)
+            } else {
+                TelegramApiClient.sendVideo(token, chatId, file, caption, seconds)
+            }
             file.delete()
         } else {
             sendMessage("❌ Video recording failed. Ensure Camera & Microphone permissions are granted.")
