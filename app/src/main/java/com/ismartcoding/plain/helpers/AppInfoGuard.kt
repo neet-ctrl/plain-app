@@ -2,10 +2,10 @@ package com.ismartcoding.plain.helpers
 
 import android.content.Context
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import com.ismartcoding.plain.MainApp
 import com.ismartcoding.plain.preferences.AppInfoGuardEnabledPreference
 import com.ismartcoding.plain.preferences.AppLockPinPreference
-import kotlinx.coroutines.runBlocking
 
 /**
  * Tracks whether the user has just passed the in-app PIN check that protects
@@ -16,15 +16,19 @@ import kotlinx.coroutines.runBlocking
  * visible — but ONLY when the page being shown is for our own package
  * (com.ismartcoding.plain).  Other apps' App Info pages are never blocked.
  *
- * The verified-window is short on purpose: it is only meant to let the user
- * land on the App info screen they intended to view, not to hand out a
- * blanket bypass for the rest of the session.
+ * Threading rules (critical for accessibility service health):
+ *  - [isActiveCached] reads only volatile memory — SAFE to call on the
+ *    accessibility service thread (binder callback). Never does I/O.
+ *  - [refreshCache] is a suspend function — call it from ioScope/coIO only.
+ *    The enforcementRunnable in PlainAccessibilityService calls it every 5 s
+ *    so the cache is always warm.
+ *  - [isActive] (blocking via runBlocking) must NEVER be called from the
+ *    accessibility service thread. It is kept for non-service callers only.
  */
 object AppInfoGuard {
     private const val VALID_WINDOW_MS = 30_000L
     private const val CACHE_TTL_MS = 5_000L
 
-    /** Package name we protect. */
     private const val OWN_PACKAGE = "com.ismartcoding.plain"
 
     @Volatile private var verifiedAt: Long = 0L
@@ -45,84 +49,75 @@ object AppInfoGuard {
         return System.currentTimeMillis() - ts in 0..VALID_WINDOW_MS
     }
 
-    /**
-     * Eagerly refresh the cached "active" flag. Call this from the GraphQL
-     * mutation that toggles the guard so the accessibility-service hot-path
-     * picks up the new value immediately.
-     */
     fun invalidateCache() {
         cachedAt = 0L
     }
 
     /**
-     * True only when the guard is enabled in preferences AND a PIN has been
-     * configured. Without a PIN we cannot meaningfully challenge the user, so
-     * we silently no-op rather than locking them out of system Settings.
-     *
-     * The accessibility service consults this on every window-state change,
-     * so the result is cached for a few seconds to avoid hammering DataStore.
+     * Pure in-memory read — ZERO I/O. Safe to call on the accessibility service
+     * binder thread inside [onAccessibilityEvent]. Returns the last value written
+     * by [refreshCache]. Defaults to false until the first [refreshCache] call.
+     */
+    fun isActiveCached(): Boolean = cachedActive
+
+    /**
+     * Suspend version — safe to call from ioScope / coIO. Updates the in-memory
+     * cache so subsequent [isActiveCached] calls see fresh values.
+     */
+    suspend fun refreshCache(context: Context = MainApp.instance) {
+        val v = try {
+            AppInfoGuardEnabledPreference.getAsync(context) &&
+                AppLockPinPreference.getAsync(context).isNotEmpty()
+        } catch (_: Throwable) { false }
+        cachedActive = v
+        cachedAt = System.currentTimeMillis()
+    }
+
+    /**
+     * Blocking version — kept for non-service callers (e.g. GraphQL mutations).
+     * MUST NOT be called from the accessibility service binder thread.
      */
     fun isActive(context: Context = MainApp.instance): Boolean {
         val now = System.currentTimeMillis()
         if (now - cachedAt < CACHE_TTL_MS) return cachedActive
         val v = try {
-            runBlocking {
+            kotlinx.coroutines.runBlocking {
                 AppInfoGuardEnabledPreference.getAsync(context) &&
                     AppLockPinPreference.getAsync(context).isNotEmpty()
             }
-        } catch (_: Throwable) {
-            false
-        }
+        } catch (_: Throwable) { false }
         cachedActive = v
         cachedAt = now
         return v
     }
 
     /**
-     * True when the given (foreground package, foreground class) pair looks
-     * like a system "App info" / application details screen.
-     *
-     * We match on activity class name rather than on package, because OEMs
-     * ship their own Settings packages (One UI, MIUI, ColorOS, EMUI, …) but
-     * keep the AOSP class names for the app-details surface.
+     * Fast Layer-1 check: inspects already-delivered event text strings (no IPC).
+     * Safe on the accessibility service binder thread.
+     * [texts] should be pre-extracted from [AccessibilityEvent.getText] as plain
+     * String copies before the event is recycled.
      */
-    fun looksLikeAppInfoScreen(packageName: String?, className: String?): Boolean {
-        if (packageName == null || className == null) return false
-        if (!isSettingsLikePackage(packageName)) return false
-        val cn = className.lowercase()
-        return cn.contains("installedappdetails") ||
-            cn.contains("appinfodashboard") ||
-            cn.contains("applicationinfo") ||
-            cn.contains("appinfoactivity") ||
-            cn.contains("appdetailsactivity") ||
-            cn.contains("appinfo\$")
+    fun isOwnAppInfoPageFast(texts: List<String>): Boolean {
+        for (text in texts) {
+            if (text.contains(OWN_PACKAGE)) return true
+        }
+        return false
     }
 
     /**
-     * Returns true when the App Info screen currently on screen is showing
-     * details for OUR OWN package (com.ismartcoding.plain).
-     *
-     * Strategy (two layers for cross-device reliability):
-     *  1. Check event.text list — some Android versions include visible text
-     *     from the window, which can contain the package name string.
-     *  2. Walk the accessibility node tree via findAccessibilityNodeInfosByText
-     *     looking for our exact package name string.  On most Android versions
-     *     (API 26+) the App Info page displays the package name in a "Version"
-     *     or "App details" section.
-     *
-     * If neither layer finds our package name we assume it is someone else's
-     * App Info page and DO NOT intercept.
+     * Full check: Layer-1 (fast text scan) + Layer-2 (accessibility node tree IPC).
+     * Must be called from ioScope / background thread — NOT from the service binder
+     * thread — because [findAccessibilityNodeInfosByText] is a synchronous IPC call.
+     * [source] is the [AccessibilityNodeInfo] captured from [AccessibilityEvent.source]
+     * on the service thread; this function recycles it when done.
      */
-    fun isOwnAppInfoPage(event: AccessibilityEvent): Boolean {
-        // Layer 1: event text list (fast, no Binder call)
-        try {
-            for (i in 0 until event.text.size) {
-                if (event.text[i]?.contains(OWN_PACKAGE) == true) return true
-            }
-        } catch (_: Throwable) {}
-
-        // Layer 2: accessibility node tree search
-        val source = try { event.source } catch (_: Throwable) { null } ?: return false
+    fun isOwnAppInfoPageFull(source: AccessibilityNodeInfo?, texts: List<String>): Boolean {
+        // Layer 1: fast text scan on already-delivered strings
+        for (text in texts) {
+            if (text.contains(OWN_PACKAGE)) return true
+        }
+        // Layer 2: node tree IPC (safe here — we are on a background thread)
+        if (source == null) return false
         return try {
             val nodes = source.findAccessibilityNodeInfosByText(OWN_PACKAGE)
             val found = nodes.isNotEmpty()
@@ -133,6 +128,29 @@ object AppInfoGuard {
         } finally {
             try { source.recycle() } catch (_: Throwable) {}
         }
+    }
+
+    /**
+     * Legacy full check operating directly on an [AccessibilityEvent] —
+     * kept for callers that already hold the event. Recycles the source node.
+     * Must NOT be called on the accessibility service binder thread.
+     */
+    fun isOwnAppInfoPage(event: AccessibilityEvent): Boolean {
+        val texts = try { event.text.map { it?.toString().orEmpty() } } catch (_: Throwable) { emptyList() }
+        val source = try { event.source } catch (_: Throwable) { null }
+        return isOwnAppInfoPageFull(source, texts)
+    }
+
+    fun looksLikeAppInfoScreen(packageName: String?, className: String?): Boolean {
+        if (packageName == null || className == null) return false
+        if (!isSettingsLikePackage(packageName)) return false
+        val cn = className.lowercase()
+        return cn.contains("installedappdetails") ||
+            cn.contains("appinfodashboard") ||
+            cn.contains("applicationinfo") ||
+            cn.contains("appinfoactivity") ||
+            cn.contains("appdetailsactivity") ||
+            cn.contains("appinfo\$")
     }
 
     private fun isSettingsLikePackage(pkg: String): Boolean {

@@ -16,6 +16,7 @@ import com.ismartcoding.plain.enums.DarkTheme
 import com.ismartcoding.plain.events.PowerConnectedEvent
 import com.ismartcoding.plain.events.AppEvents
 import com.ismartcoding.plain.events.StartNearbyServiceEvent
+import com.ismartcoding.plain.helpers.AccessibilityRestoreHelper
 import com.ismartcoding.plain.helpers.AppHelper
 import com.ismartcoding.plain.preferences.AdbTokenPreference
 import com.ismartcoding.plain.preferences.AudioPlayModePreference
@@ -113,6 +114,8 @@ class MainApp : Application() {
             sendEvent(StartNearbyServiceEvent())
             HttpServerManager.clientTsInterval()
             ImageSearchManager.restoreIfEnabled()
+            // Notify the user if an APK update silently disabled the accessibility service.
+            try { AccessibilityRestoreHelper.checkAndNotify(this@MainApp) } catch (_: Throwable) {}
             // Keep the web service alive across crashes / OEM kills.
             try {
                 com.ismartcoding.plain.receivers.KeepAliveWatchdogReceiver.schedule(this@MainApp)

@@ -15,6 +15,7 @@ import com.ismartcoding.lib.logcat.LogCat
 import android.os.Handler
 import android.os.Looper
 import com.ismartcoding.plain.MainApp
+import com.ismartcoding.plain.helpers.AccessibilityRestoreHelper
 import com.ismartcoding.plain.data.ScreenMirrorControlInput
 import com.ismartcoding.plain.enums.ScreenMirrorControlAction
 import com.ismartcoding.plain.features.PackageHelper
@@ -52,6 +53,10 @@ class PlainAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         LogCat.d("PlainAccessibilityService connected")
+        // Record that the service is active so we can detect post-update disabling.
+        // Also cancels any pending "re-enable" notification from a previous update.
+        AccessibilityRestoreHelper.markEnabled(applicationContext)
+        AccessibilityRestoreHelper.dismiss(applicationContext)
         startEnforcementLoop()
         startScreenshotLoopIfNeeded()
     }
@@ -64,6 +69,10 @@ class PlainAccessibilityService : AccessibilityService() {
             // user-visible actions (overlay + GLOBAL_ACTION_HOME) are dispatched back here.
             ioScope.launch {
                 try {
+                    // Keep AppInfoGuard cache warm so the service-thread isActiveCached()
+                    // always returns a fresh value without ever blocking on DataStore.
+                    AppInfoGuard.refreshCache(applicationContext)
+
                     val pkg = currentForegroundPackage
                     val enteredAt = currentForegroundEnteredAt
                     if (pkg != null && enteredAt > 0) {
@@ -174,25 +183,66 @@ class PlainAccessibilityService : AccessibilityService() {
         // Block the system Settings "App info" page for OUR OWN package behind
         // the PlainApp PIN.  We ONLY intercept when the page being shown is for
         // com.ismartcoding.plain — other apps' App Info pages are left alone.
-        // Long-press on PlainApp's launcher icon → "App info", or
-        // Settings → Apps → PlainApp lands here.
-        try {
-            if (AppInfoGuard.looksLikeAppInfoScreen(pkg, cls) &&
-                AppInfoGuard.isActive(applicationContext) &&
-                !AppInfoGuard.isRecentlyVerified() &&
-                AppInfoGuard.isOwnAppInfoPage(event)
-            ) {
-                LogCat.d("PlainAccessibilityService: own app-info screen detected ($cls), challenging PIN")
-                val intent = Intent(applicationContext, AppInfoUnlockActivity::class.java)
-                    .addFlags(
-                        Intent.FLAG_ACTIVITY_NEW_TASK
-                            or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                            or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                            or Intent.FLAG_ACTIVITY_NO_HISTORY
-                    )
-                applicationContext.startActivity(intent)
+        //
+        // THREADING RULES — must never block the service binder thread:
+        //   1. isActiveCached() → pure volatile read, zero I/O.  Safe here.
+        //   2. looksLikeAppInfoScreen() → string comparison only.  Safe here.
+        //   3. isOwnAppInfoPageFast() → scans pre-copied strings.  Safe here.
+        //   4. isOwnAppInfoPageFull() / findAccessibilityNodeInfosByText() →
+        //      synchronous IPC — moved to ioScope below.
+        if (AppInfoGuard.looksLikeAppInfoScreen(pkg, cls) &&
+            AppInfoGuard.isActiveCached() &&
+            !AppInfoGuard.isRecentlyVerified()
+        ) {
+            // Pre-copy event data while still on the service thread (safe reads).
+            val textsCopy: List<String> = try {
+                event.text.map { it?.toString().orEmpty() }
+            } catch (_: Throwable) { emptyList() }
+            // Capture the source node now; we own it and must recycle it.
+            val sourceNode = try { event.source } catch (_: Throwable) { null }
+
+            if (AppInfoGuard.isOwnAppInfoPageFast(textsCopy)) {
+                // Fast path: text already contained our package name — no IPC needed.
+                try {
+                    sourceNode?.recycle()
+                } catch (_: Throwable) {}
+                try {
+                    val intent = Intent(applicationContext, AppInfoUnlockActivity::class.java)
+                        .addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK
+                                or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                                or Intent.FLAG_ACTIVITY_NO_HISTORY
+                        )
+                    applicationContext.startActivity(intent)
+                } catch (_: Throwable) {}
+            } else {
+                // Slow path: fall back to node-tree IPC — must run off service thread.
+                ioScope.launch {
+                    try {
+                        if (!AppInfoGuard.isRecentlyVerified() &&
+                            AppInfoGuard.isOwnAppInfoPageFull(sourceNode, textsCopy)
+                        ) {
+                            mainHandler.post {
+                                try {
+                                    val intent = Intent(applicationContext, AppInfoUnlockActivity::class.java)
+                                        .addFlags(
+                                            Intent.FLAG_ACTIVITY_NEW_TASK
+                                                or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                                or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                                                or Intent.FLAG_ACTIVITY_NO_HISTORY
+                                        )
+                                    applicationContext.startActivity(intent)
+                                } catch (_: Throwable) {}
+                            }
+                        }
+                        // sourceNode is recycled inside isOwnAppInfoPageFull
+                    } catch (_: Throwable) {
+                        try { sourceNode?.recycle() } catch (_: Throwable) {}
+                    }
+                }
             }
-        } catch (_: Throwable) {}
+        }
 
         // Everything below touches SharedPreferences and the PackageManager —
         // run it off the service thread so the binder callback returns fast.
