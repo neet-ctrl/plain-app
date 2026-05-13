@@ -30,21 +30,21 @@ Sent automatically every time the bot starts up.
 ---
 
 ### `/help`
-**Description:** Displays the full list of available commands with short descriptions.
+**Description:** Displays the full list of available commands with short descriptions, grouped by category. Each section has inline tap-to-run buttons.
 **Aliases:** _(none)_
 **Usage:** `/help`
 
 ---
 
 ### `/commands`
-**Description:** Lists all commands with full details (longer version of /help).
+**Description:** Lists all commands with full details — longer version of `/help`.
 **Aliases:** _(none)_
 **Usage:** `/commands`
 
 ---
 
 ### `/s` — Command Search
-**Description:** Instantly search all bot commands by keyword. Returns matching commands with their descriptions and aliases ranked by relevance.
+**Description:** Instantly search all bot commands by keyword. Returns matching commands with their descriptions and aliases ranked by relevance. Results include inline tap-to-run buttons.
 
 **Two modes:**
 - **Direct:** `/s <keyword>` — search immediately.
@@ -261,6 +261,7 @@ Supports search within any folder.
 
 ### `/docs`
 **Description:** Browses document library (PDF, DOCX, XLS, etc.). Tap to download.
+Files larger than the Telegram limit get a one-time 30-min download link instead.
 **Aliases:** `documents`, `document`
 **Usage:** `/docs` or `/docs <search_keyword>`
 **Example:** `/docs invoice`
@@ -511,21 +512,32 @@ The `.plain` file is a ZIP archive — rename it to `.zip` on your PC to browse 
 
 **Notes:**
 - Telegram Bot API max file size is 50 MB. Larger backups get a one-time download link (valid 30 min) served by the on-device Ktor server. If Cloudflare Tunnel is active, the link uses your public domain; otherwise it uses the local LAN IP.
-- Restore: use the Backup & Restore page in the app (accepts both `.plain` and `.zip`).
+- Restore: use `/restore` or the Backup & Restore page in the app (accepts both `.plain` and `.zip`).
 
 ---
 
 ### `/restore`
-**Description:** Puts the bot into "restore mode" for 5 minutes, then waits for you to send a `.plain` or `.zip` PlainApp backup file directly to this chat.  
-Once received the bot will:
-1. Download the file from Telegram
-2. Unpack and scan the backup contents
-3. Restore all data to the device (overwrites current data)
-4. Send a detailed per-category count of what was restored
-5. Automatically restart the app (no tap needed)
+**Description:** Restores a PlainApp backup. Three options:
+
+**Option 1 — Send file directly (≤ 20 MB)**
+After `/restore`, send a `.plain` or `.zip` file as a Telegram document within 5 minutes.
+
+**Option 2 — URL download (any size)**
+`/restore <url>` — the phone downloads the backup file from a direct HTTPS URL. No size limit.
+
+**Option 3 — Browser upload (any size)**
+Tap the **📤 Upload from browser** inline button. The bot sends a one-time link (valid 30 min) to a browser upload form. Drag-and-drop any size file from your PC — no Telegram limit applies.
+
+After receiving the backup file (any method), the bot will:
+1. Unpack and scan the backup contents
+2. Restore all data to the device (overwrites current data)
+3. Send a detailed per-category count of what was restored
+4. Automatically restart the app (no tap needed)
 
 **Aliases:** `restoredata`, `restorebackup`, `importbackup`
-**Usage:** `/restore` → then send the `.plain` or `.zip` file as a Telegram document
+**Usage:**
+- `/restore` → tap option button or send file directly
+- `/restore https://example.com/my-backup.plain` → download from URL
 
 **Per-category status shown after restore:**
 - 🗄 Database files (notes, bookmarks, feeds, books, chats, tags, sessions)
@@ -542,7 +554,8 @@ Once received the bot will:
 - 📦 Total files restored
 
 **Important notes:**
-- **20 MB limit:** Telegram Bot API only accepts files up to 20 MB. Larger backup files must be restored via the in-app Backup & Restore page.
+- Option 1 is limited to 20 MB (Telegram Bot API file receive limit).
+- Options 2 and 3 have no size limit — use them for large backups.
 - Sending any command while the bot is waiting cancels the restore mode.
 - Data is **overwritten** — ensure you have the right backup before confirming.
 - App restarts automatically 3 seconds after restore completes.
@@ -622,6 +635,27 @@ Once received the bot will:
 **Description:** Gets or sets Do Not Disturb mode.
 **Aliases:** `donotdisturb`
 **Usage:** `/dnd` (show status) or `/dnd on` / `/dnd off` / `/dnd toggle`
+
+---
+
+### `/setalarm`
+**Description:** Sets a system alarm at the specified time with an optional label.
+**Aliases:** `alarm`, `addalarm`
+**Usage:** `/setalarm HH:MM [label]`
+**Example:** `/setalarm 07:30 Wake up`
+
+---
+
+### `/bedtime`
+**Description:** Views or sets the parental bedtime window — the time range during which the device is restricted. During bedtime, apps on the scope list are blocked. The app allow-list is managed from the web panel.
+**Aliases:** _(none)_
+**Usage:**
+- `/bedtime` — show current state, window, and inline control buttons
+- `/bedtime on` — enable bedtime (keeps existing window)
+- `/bedtime off` — disable bedtime
+- `/bedtime set HH:MM HH:MM` — set start and end time (e.g. `/bedtime set 22:00 06:30`)
+
+**Example:** `/bedtime set 23:00 07:00`
 
 ---
 
@@ -758,14 +792,6 @@ Once received the bot will:
 
 ---
 
-### `/setalarm`
-**Description:** Sets a system alarm at the specified time with an optional label.
-**Aliases:** `alarm`, `addalarm`
-**Usage:** `/setalarm HH:MM [label]`
-**Example:** `/setalarm 07:30 Wake up`
-
----
-
 ## Clipboard
 
 ### `/clipboard`
@@ -808,7 +834,7 @@ Once received the bot will:
 ---
 
 ### `/openperms`
-**Description:** Opens a specific permission's settings screen directly on the device screen, so the user can grant or revoke it without navigating through Settings manually.  If no name is given, opens the general permissions overview for PlainApp.
+**Description:** Opens a specific permission's settings screen directly on the device screen, so the user can grant or revoke it without navigating through Settings manually. If no name is given, opens the general permissions overview for PlainApp.
 **Aliases:** `permopen`
 **Usage:** `/openperms` or `/openperms <permission_name>`
 **Example:** `/openperms location` or `/openperms camera`
@@ -919,19 +945,6 @@ Once received the bot will:
 
 ---
 
-### `/bedtime`
-**Description:** Views or sets the parental bedtime window — the time range during which the device is restricted. During bedtime, apps on the scope list are blocked. The app allow-list is managed from the web panel.
-**Aliases:** _(none)_
-**Usage:**
-- `/bedtime` — show current state, window, and inline control buttons
-- `/bedtime on` — enable bedtime (keeps existing window)
-- `/bedtime off` — disable bedtime
-- `/bedtime set HH:MM HH:MM` — set start and end time (e.g. `/bedtime set 22:00 06:30`)
-
-**Example:** `/bedtime set 23:00 07:00`
-
----
-
 ## Notes & Bookmarks
 
 ### `/notes`
@@ -991,6 +1004,7 @@ Once received the bot will:
 
 ### `/music`
 **Description:** Browses the music/audio library. Tap any track to download it.
+Files larger than the Telegram limit get a one-time 30-min download link instead.
 **Aliases:** `audios`
 **Usage:** `/music` or `/music <search_keyword>`
 
@@ -998,6 +1012,7 @@ Once received the bot will:
 
 ### `/videos`
 **Description:** Browses the video library. Tap any video to download it.
+Files larger than the Telegram limit get a one-time 30-min download link instead.
 **Aliases:** `vidlib`
 **Usage:** `/videos` or `/videos <search_keyword>`
 
@@ -1034,7 +1049,7 @@ Once received the bot will:
 
 ---
 
-## App Settings
+## App Settings & Security
 
 ### `/appsettings`
 **Description:** Shows a full overview of all app security settings with inline toggle buttons. The single hub for everything below.
@@ -1065,7 +1080,7 @@ Once received the bot will:
 ---
 
 ### `/appinfog`
-**Description:** Enable or disable the App info guard — blocks Android's system "App info" page **for PlainApp only** (long-press PlainApp's icon → App info, or Settings → Apps → PlainApp) behind the PlainApp PIN. Other apps' App Info pages are never interrupted. Requires a PIN to be set first.
+**Description:** Enable or disable the App info guard — blocks Android's system "App info" page for PlainApp (long-press launcher icon → App info, or Settings → Apps → PlainApp) behind the PlainApp PIN. Requires a PIN to be set first.
 **Aliases:** `appinfoguard`
 **Usage:** `/appinfog` (show status) | `/appinfog on` | `/appinfog off`
 
@@ -1208,84 +1223,91 @@ After this, all future `/update` installs are completely silent.
 
 | Primary Command | Alternative Aliases |
 |---|---|
+| `/s` | `search`, `?` |
 | `/find` | `findcontact`, `lookup`, `whois` |
 | `/mutenotifs` | `mutenotif`, `mutenotifications`, `shutup`, `silence` |
+| `/contactgroups` | `groups`, `cgroups` |
+| `/storage` | `disk` |
+| `/deletefile` | `delfile`, `rmfile` |
+| `/filehash` | `hash`, `sha256` |
+| `/docs` | `documents`, `document` |
+| `/forwardfiles` | `filesfwd`, `autofiles`, `allfiles` |
+| `/fwdfiles` | `forwardedfiles`, `sentfiles` |
+| `/filestats` | `filequeue`, `uploadstats` |
+| `/retryfailed` | `retryfiles`, `retryuploads` |
+| `/shots` | `screenshots` |
+| `/forwardshots` | `shotsfwd`, `autoshare` |
+| `/forwardphotos` | `autophotos`, `photofwd` |
+| `/intruders` | `captures`, `intrudercaptures` |
+| `/applocker` | `lockapps`, `perapplock` |
+| `/launch` | `open` |
+| `/launches` | `launchhistory` |
+| `/screentime` | `usagestats`, `usage` |
+| `/clearcache` | `cacheclean` |
 | `/livelocation` | `live` |
 | `/tracklocation` | `trackloc` |
-| `/keystrokes` | `keys` |
-| `/shots` | `screenshots` |
-| `/permissions` | `perms` |
-| `/automations` | `rules` |
-| `/newrule` | `addrule` |
-| `/newschedule` | `addschedule` |
-| `/delrule` | `deleterule` |
-| `/feedentries` | `feedentry` |
-| `/music` | `audios` |
-| `/videos` | `vidlib` |
-| `/images` | `gallery` |
-| `/pomodoro` | `pom` |
+| `/geofence` | `gf`, `geofences` |
+| `/forwardgeofence` | `geofencefwd`, `gffwd` |
+| `/backup` | `bak`, `backupdata`, `exportdata` |
+| `/restore` | `restoredata`, `restorebackup`, `importbackup` |
+| `/batteryhistory` | `bathistory`, `bathist` |
+| `/batteryalert` | `batalert`, `lowbattery` |
+| `/lockscreen` | `lock` |
+| `/wake` | `wakescreen` |
+| `/brightness` | `bright` |
+| `/volume` | `vol` |
 | `/torch` | `flashlight` |
+| `/dnd` | `donotdisturb` |
+| `/setalarm` | `alarm`, `addalarm` |
+| `/wifi` | _(none)_ |
+| `/wifiscan` | `wifilist`, `scanwifi` |
+| `/mobiledata` | `mobile`, `data` |
+| `/bluetooth` | `bt` |
+| `/hotspot` | `tethering`, `wifiap` |
+| `/airplane` | `airplanemode`, `aeroplane` |
+| `/vpn` | _(none)_ |
+| `/sim` | `siminfo`, `carrier` |
+| `/networkinfo` | `netinfo`, `wifiinfo` |
+| `/netusage` | `datausage` |
+| `/reboot` | `restart`, `rebootdevice` |
 | `/speak` | `tts` |
 | `/stopspeak` | `shutup`, `ttsstop` |
 | `/findphone` | `ringphone` |
 | `/show` | `banner` |
-| `/wake` | `wakescreen` |
-| `/brightness` | `bright` |
-| `/volume` | `vol` |
-| `/launch` | `open` |
-| `/launches` | `launchhistory` |
-| `/livecall` | `calltracker` |
-| `/netusage` | `datausage` |
-| `/storage` | `disk` |
-| `/sim` | `siminfo`, `carrier` |
-| `/dnd` | `donotdisturb` |
-| `/screentime` | `usagestats`, `usage` |
-| `/blocknumber` | `blocknum`, `blockcall` |
-| `/nowplaying` | `np`, `player` |
-| `/forwardsms` | `smsfwd` |
 | `/clipboard` | `clip` |
-| `/mobiledata` | `mobile`, `data` |
-| `/bluetooth` | `bt` |
-| `/lockscreen` | `lock` |
-| `/forwardphotos` | `autophotos`, `photofwd` |
-| `/airplane` | `airplanemode`, `aeroplane` |
-| `/schedulesms` | `schedsms` |
-| `/batteryhistory` | `bathistory`, `bathist` |
-| `/clearcache` | `cacheclean` |
-| `/geofence` | `gf`, `geofences` |
-| `/addcontact` | `newcontact` |
-| `/deletecontact` | `delcontact`, `rmcontact` |
 | `/forwardclipboard` | `clipfwd`, `clipmon` |
-| `/soundmeter` | `sound`, `noise`, `dblevel` |
-| `/qrcode` | `qr` |
-| `/docs` | `documents`, `document` |
-| `/filehash` | `hash`, `sha256` |
-| `/wifiscan` | `wifilist`, `scanwifi` |
+| `/keystrokes` | `keys` |
+| `/permissions` | `perms` |
+| `/openperms` | `permopen` |
+| `/reqperm` | `reqperms`, `grantperm`, `askperm`, `permask` |
 | `/timeline` | `activity` |
-| `/contactgroups` | `groups`, `cgroups` |
-| `/callnow` | `dial`, `makecall` |
-| `/deletefile` | `delfile`, `rmfile` |
-| `/networkinfo` | `netinfo`, `wifiinfo` |
-| `/reboot` | `restart`, `rebootdevice` |
+| `/soundmeter` | `sound`, `noise`, `dblevel` |
 | `/gyroscope` | `gyro`, `rotation` |
 | `/compass` | `heading`, `magnetic` |
 | `/barometer` | `pressure`, `altitude`, `baro` |
 | `/steps` | `pedometer`, `stepcount`, `stepcounter` |
 | `/proximity` | `prox`, `proxsensor` |
-| `/hotspot` | `tethering`, `wifiap` |
-| `/setalarm` | `alarm`, `addalarm` |
-| `/batteryalert` | `batalert`, `lowbattery` |
-| `/forwardgeofence` | `geofencefwd`, `gffwd` |
-| `/forwardshots` | `shotsfwd`, `autoshare` |
-| `/forwardfiles` | `filesfwd`, `autofiles`, `allfiles` |
-| `/fwdfiles` | `forwardedfiles`, `sentfiles` |
-| `/filestats` | `filequeue`, `uploadstats` |
-| `/retryfailed` | `retryfiles`, `retryuploads` |
-| `/applocker` | `lockapps`, `perapplock` |
-| `/intruders` | `captures`, `intrudercaptures` |
+| `/automations` | `rules` |
+| `/newrule` | `addrule` |
+| `/newschedule` | `addschedule` |
+| `/delrule` | `deleterule` |
+| `/forwardsms` | `smsfwd` |
+| `/schedulesms` | `schedsms` |
+| `/mms` | _(none)_ |
+| `/callnow` | `dial`, `makecall` |
+| `/blocknumber` | `blocknum`, `blockcall` |
+| `/livecall` | `calltracker` |
+| `/addcontact` | `newcontact` |
+| `/deletecontact` | `delcontact`, `rmcontact` |
+| `/feedentries` | `feedentry` |
+| `/music` | `audios` |
+| `/videos` | `vidlib` |
+| `/images` | `gallery` |
+| `/pomodoro` | `pom` |
+| `/nowplaying` | `np`, `player` |
+| `/qrcode` | `qr` |
 | `/appsettings` | `appsetting` |
 | `/hideicon` | `launchericon`, `iconhide` |
-| `/applock` | *(see `/applocker` for per-app locks)* |
 | `/appinfog` | `appinfoguard` |
 | `/setpin` | `changepin` |
 | `/removepin` | `deletepin` |
@@ -1293,8 +1315,6 @@ After this, all future `/update` installs are completely silent.
 | `/openappinfo` | `appinfo`, `ownappinfo` |
 | `/openwebsettings` | `websettings`, `webset`, `opensettings`, `webcon` |
 | `/openpage` | `page`, `goto`, `navigate`, `nav` |
-| `/openperms` | `permopen` |
-| `/reqperm` | `reqperms`, `grantperm`, `askperm`, `permask` |
 | `/deviceowner` | `dpm`, `owner`, `admincontrol` |
 | `/botpassword` | `botpwd` |
 | `/setbotpassword` | `changebotpassword`, `botpwdset` |
@@ -1303,5 +1323,5 @@ After this, all future `/update` installs are completely silent.
 
 ---
 
-*Total commands: 118 | Total aliases: 130+*
+*Total commands: 137 | Total aliases: 140+*
 *Generated from `TelegramBotManager.kt` — PlainApp*

