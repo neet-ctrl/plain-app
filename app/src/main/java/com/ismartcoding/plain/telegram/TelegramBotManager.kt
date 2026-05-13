@@ -170,6 +170,8 @@ object TelegramBotManager {
         "screenshot" to "📸 Take a screenshot",
         "livescreen" to "📺 Live screen stream — opens in browser, no screensharing needed",
         "livestop" to "⏹ Stop the live screen stream",
+        "livecam" to "📹 Live camera — opens web panel live camera page in browser",
+        "livemic" to "🎤 Live mic — opens web panel live mic page in browser",
         "photo" to "📷 Camera photo — /photo [front|back]",
         "audio" to "🎙 Record audio — interactive duration picker",
         "video" to "🎬 Record video — pick camera, then duration",
@@ -682,6 +684,8 @@ object TelegramBotManager {
             "screenshot" -> cmdScreenshot()
             "livescreen", "screenlive", "screenview", "liveview", "streamscreen" -> cmdLiveScreen()
             "livestop", "stoplive", "stopstream", "stopscreenstream" -> cmdLiveStop()
+            "livecam", "livecamera", "camstream", "webcam", "camerastream" -> cmdLiveCam()
+            "livemic", "livemicrophone", "micstream", "webmic", "microphonestream" -> cmdLiveMic()
             "photo" -> cmdPhoto(args)
             "audio" -> cmdAudio(args)
             "video" -> cmdVideo(args)
@@ -2685,7 +2689,7 @@ object TelegramBotManager {
             Section("💬 Communication", listOf("messages","sms","sendsms","mms","schedulesms","calls","livecall","callnow","recordings","forwardsms")),
             Section("👥 Contacts", listOf("contacts","find","addcontact","deletecontact","blocknumber","contactgroups")),
             Section("📁 Files & Storage", listOf("files","storage","docs","filehash","deletefile")),
-            Section("📸 Media", listOf("screenshot","livescreen","livestop","photo","audio","video","music","videos","images","shots","forwardphotos","forwardshots")),
+            Section("📸 Media", listOf("screenshot","livescreen","livestop","livecam","livemic","photo","audio","video","music","videos","images","shots","forwardphotos","forwardshots")),
             Section("📱 Apps", listOf("apps","blockapp","unblockapp","blockedapps","launch","screentime","launches","clearcache")),
             Section("📦 Backup & Restore", listOf("backup","restore")),
             Section("📊 Device Info", listOf("device","battery","batteryhistory","location","sim","vpn","permissions","networkinfo","wifiscan","netusage")),
@@ -3507,6 +3511,52 @@ object TelegramBotManager {
         com.ismartcoding.plain.services.LiveScreenCapturer.forceStop()
         com.ismartcoding.plain.web.routes.LiveStreamTokenManager.revokeAll()
         sendMessage("⏹ <b>Live screen stream stopped.</b>\nAll stream links have been revoked.")
+    }
+
+    private suspend fun cmdLiveCam() {
+        val ctx = MainApp.instance
+        val cfEnabled  = com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference.getAsync(ctx)
+        val cfHostname = com.ismartcoding.plain.preferences.CloudflareTunnelHostnamePreference.getAsync(ctx)
+        val baseUrl    = if (cfEnabled && cfHostname.isNotBlank()) "https://$cfHostname"
+                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${TempData.httpPort}"
+        val pageUrl = "$baseUrl/live-camera"
+        val rows = listOf(
+            listOf("📹 Open Live Camera" to pageUrl),
+            listOf("🎤 Open Live Mic" to "$baseUrl/live-mic"),
+        )
+        sendMessage(
+            "📹 <b>Live Camera</b>\n\n" +
+            "Opens the web panel live camera page — same UI as the browser panel.\n\n" +
+            "🔗 <code>$pageUrl</code>\n\n" +
+            "• Front / back camera switch built into the page\n" +
+            "• Take photos &amp; record video directly in browser\n" +
+            "• Requires PlainApp web panel to be open and camera started\n\n" +
+            "⚠️ <i>If prompted, enter your web panel password first.</i>",
+            replyMarkup = TelegramApiClient.inlineKeyboard(rows),
+        )
+    }
+
+    private suspend fun cmdLiveMic() {
+        val ctx = MainApp.instance
+        val cfEnabled  = com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference.getAsync(ctx)
+        val cfHostname = com.ismartcoding.plain.preferences.CloudflareTunnelHostnamePreference.getAsync(ctx)
+        val baseUrl    = if (cfEnabled && cfHostname.isNotBlank()) "https://$cfHostname"
+                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${TempData.httpPort}"
+        val pageUrl = "$baseUrl/live-mic"
+        val rows = listOf(
+            listOf("🎤 Open Live Mic" to pageUrl),
+            listOf("📹 Open Live Camera" to "$baseUrl/live-camera"),
+        )
+        sendMessage(
+            "🎤 <b>Live Mic</b>\n\n" +
+            "Opens the web panel live microphone page — same UI as the browser panel.\n\n" +
+            "🔗 <code>$pageUrl</code>\n\n" +
+            "• Mute toggle built into the page\n" +
+            "• Record audio directly in browser\n" +
+            "• Requires PlainApp web panel to be open and mic started\n\n" +
+            "⚠️ <i>If prompted, enter your web panel password first.</i>",
+            replyMarkup = TelegramApiClient.inlineKeyboard(rows),
+        )
     }
 
     @SuppressLint("MissingPermission")
