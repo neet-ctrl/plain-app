@@ -28,6 +28,13 @@ import kotlin.coroutines.resume
  *
  * Requires Android 11+ (API 30) — same as stealth screenshots.
  *
+ * Performance notes:
+ *  - [maxWidth]  scales the bitmap DOWN before JPEG compression. 720 → ~3–4× smaller JPEG,
+ *    ~2–3× faster compress. This is the single biggest latency reducer.
+ *  - [quality]   JPEG quality (1–95). 50 is visually fine for remote monitoring; 75 if you
+ *    want crisper text. Lower = faster network transfer.
+ *  - The [ByteArrayOutputStream] is reused across frames to avoid repeated GC.
+ *
  * Lifecycle:
  *   [connect]    — call when an HTTP viewer starts streaming. Starts the
  *                  capture loop on the first viewer.
@@ -43,18 +50,36 @@ object LiveScreenCapturer {
     /**
      * JPEG frames broadcast to all active subscribers.
      * replay=0 so late subscribers only get new frames, never stale ones.
-     * extraBufferCapacity=2 so the capture loop never blocks waiting for a slow reader.
+     * extraBufferCapacity=4 so the capture loop never blocks waiting for a slow reader.
      */
-    private val _frames = MutableSharedFlow<ByteArray>(replay = 0, extraBufferCapacity = 2)
+    private val _frames = MutableSharedFlow<ByteArray>(replay = 0, extraBufferCapacity = 4)
     val frames: SharedFlow<ByteArray> = _frames.asSharedFlow()
 
     private val viewerCount = AtomicInteger(0)
     private var captureJob: Job? = null
 
+    /** Reused output buffer — reset between frames to avoid repeated allocation. */
+    private val outBuf = ByteArrayOutputStream(64 * 1024)
+
     /** Frames per second. Clamped to [1, 15]. Default 5. */
-    @Volatile
-    var fps: Int = 5
+    @Volatile var fps: Int = 5
         set(value) { field = value.coerceIn(1, 15) }
+
+    /**
+     * Maximum width of the bitmap BEFORE JPEG compression (pixels).
+     * Height is scaled proportionally. 0 = use full device resolution.
+     * Default 720 — greatly reduces JPEG size and compression time.
+     * Supported presets: 1080 (full), 720 (HD), 540 (qHD), 360 (low).
+     */
+    @Volatile var maxWidth: Int = 720
+        set(value) { field = if (value <= 0) 0 else value.coerceAtLeast(180) }
+
+    /**
+     * JPEG quality (1–95). 50 is fine for monitoring; 70 gives crisper text.
+     * Lower = smaller frames = less lag on slow connections.
+     */
+    @Volatile var quality: Int = 55
+        set(value) { field = value.coerceIn(1, 95) }
 
     val isRunning: Boolean get() = captureJob?.isActive == true
     val activeViewers: Int get() = viewerCount.get()
@@ -83,7 +108,7 @@ object LiveScreenCapturer {
     private fun startIfNeeded() {
         if (captureJob?.isActive == true) return
         captureJob = scope.launch {
-            LogCat.d("LiveScreenCapturer: starting @ ${fps} FPS")
+            LogCat.d("LiveScreenCapturer: starting @ ${fps} FPS, maxWidth=$maxWidth, quality=$quality")
             while (isActive && viewerCount.get() > 0) {
                 val t0 = System.currentTimeMillis()
                 try {
@@ -106,13 +131,33 @@ object LiveScreenCapturer {
     private suspend fun captureJpeg(): ByteArray? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
         val svc = PlainAccessibilityService.instance ?: return null
-        val bitmap = takeBitmap(svc) ?: return null
+        val raw = takeBitmap(svc) ?: return null
+        val bitmap = scaledBitmap(raw)
         return try {
-            val out = ByteArrayOutputStream(bitmap.byteCount / 8)
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 60, out)
-            out.toByteArray()
+            synchronized(outBuf) {
+                outBuf.reset()
+                bitmap.compress(Bitmap.CompressFormat.JPEG, quality, outBuf)
+                outBuf.toByteArray()
+            }
         } catch (_: Throwable) { null }
-        finally { bitmap.recycle() }
+        finally {
+            if (bitmap !== raw) bitmap.recycle()
+            raw.recycle()
+        }
+    }
+
+    /**
+     * Returns a scaled-down copy of [src] if [maxWidth] > 0 and the bitmap is wider
+     * than [maxWidth]. Otherwise returns [src] unchanged (caller must recycle it).
+     * Uses BILINEAR filtering — fast and visually acceptable for UI content.
+     */
+    private fun scaledBitmap(src: Bitmap): Bitmap {
+        val mw = maxWidth
+        if (mw <= 0 || src.width <= mw) return src
+        val scale = mw.toFloat() / src.width
+        val dstW = mw
+        val dstH = (src.height * scale).toInt().coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(src, dstW, dstH, true)
     }
 
     @Suppress("DEPRECATION")
