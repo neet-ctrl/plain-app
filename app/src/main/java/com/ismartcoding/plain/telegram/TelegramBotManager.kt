@@ -179,7 +179,7 @@ object TelegramBotManager {
         "battery" to "🔋 Battery status",
         "device" to "📲 Device information",
         "backup" to "📦 Complete backup (.plain) — all data included",
-        "restore" to "📥 Restore from a .plain or .zip backup file — send the file to this chat",
+        "restore" to "📥 Restore backup — send file (≤20 MB) or /restore &lt;url&gt; for any size",
         "track" to "🛰 Tracking hub overview",
         "livelocation" to "🗺 Live location stream — /livelocation [n]",
         "tracklocation" to "🧭 Recent location points — /tracklocation [n]",
@@ -675,7 +675,7 @@ object TelegramBotManager {
                     "battery" -> cmdBattery()
                     "device" -> cmdDevice()
                     "backup", "bak", "backupdata", "exportdata" -> cmdBackup()
-                    "restore", "restoredata", "restorebackup", "importbackup" -> cmdRestore()
+                    "restore", "restoredata", "restorebackup", "importbackup" -> cmdRestore(args)
                     "track" -> cmdTrackHub()
                     "livelocation", "live" -> cmdLiveLocation(args)
                     "tracklocation", "trackloc" -> cmdTrackLocation(args)
@@ -4900,21 +4900,57 @@ object TelegramBotManager {
         }
     }
 
-    private fun cmdRestore() {
+    private suspend fun cmdRestore(args: List<String>) {
+        val url = args.firstOrNull()?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        if (url != null) {
+            cmdRestoreFromUrl(url)
+            return
+        }
         pendingRestoreUntil = System.currentTimeMillis() + 5 * 60 * 1000L
         sendMessage(
             "📥 <b>Restore from Backup</b>\n" +
             "━━━━━━━━━━━━━━━━━━━\n\n" +
-            "Send me a <code>.plain</code> or <code>.zip</code> backup file created by PlainApp.\n\n" +
+            "You have <b>two ways</b> to restore:\n\n" +
+            "1️⃣ <b>Send the file here</b>\n" +
+            "   Send me a <code>.plain</code> or <code>.zip</code> backup file directly in this chat.\n" +
+            "   ⚠️ Telegram only accepts files up to <b>20 MB</b> this way.\n\n" +
+            "2️⃣ <b>Give me a direct download link</b> (any size)\n" +
+            "   Upload your backup anywhere (Google Drive, Dropbox, your PC's local server, etc.)\n" +
+            "   and send:\n" +
+            "   <code>/restore https://your-direct-link-to-file.plain</code>\n" +
+            "   No size limit — the phone downloads it directly.\n\n" +
             "⚠️ <b>Before you proceed:</b>\n" +
             "• All current app data will be <b>overwritten</b> with the backup's data\n" +
             "• The app will <b>restart automatically</b> after restore completes\n" +
             "• File must be a valid PlainApp backup (made by /backup or in-app export)\n\n" +
-            "📏 <b>Size limit:</b> Telegram Bot API accepts files up to <b>20 MB</b>.\n" +
-            "For larger backups, use the <b>Backup &amp; Restore</b> page inside the app.\n\n" +
-            "⏰ Waiting for your file for <b>5 minutes</b>…\n" +
-            "Send any /command to cancel."
+            "⏰ Waiting for your file or URL for <b>5 minutes</b>…\n" +
+            "Send any other /command to cancel."
         )
+    }
+
+    /** Restore from a direct URL — no Telegram 20 MB limit applies. */
+    private suspend fun cmdRestoreFromUrl(url: String) {
+        val ctx = com.ismartcoding.plain.MainApp.instance
+        sendMessage(
+            "📥 <b>Restore from URL</b>\n" +
+            "━━━━━━━━━━━━━━━━━━━\n" +
+            "🔗 <code>${htmlEsc(url.take(120))}</code>\n\n" +
+            "⬇️ Downloading backup file…"
+        )
+        val destFile = java.io.File(ctx.cacheDir, "restore_incoming.plain")
+        val dlOk = withContext(Dispatchers.IO) {
+            TelegramApiClient.downloadFromUrl(url, destFile)
+        }
+        if (!dlOk || !destFile.exists() || destFile.length() == 0L) {
+            sendMessage(
+                "❌ Download failed.\n\n" +
+                "Make sure the URL is a <b>direct download link</b> (not a webpage or share page).\n" +
+                "The link must be publicly accessible without login."
+            )
+            return
+        }
+        val fileName = url.substringAfterLast('/').substringBefore('?').ifBlank { "restore.plain" }
+        performRestore(destFile, fileName)
     }
 
     private suspend fun handleRestoreDocument(document: org.json.JSONObject) {
@@ -4939,9 +4975,10 @@ object TelegramBotManager {
         }
         if (filePath.isNullOrBlank()) {
             sendMessage(
-                "❌ Failed to get download URL from Telegram.\n\n" +
-                "<i>Note: Telegram Bot API only supports files up to 20 MB.\n" +
-                "For larger backups, use the Backup &amp; Restore page inside the app.</i>"
+                "❌ Telegram couldn't serve this file — it is likely over <b>20 MB</b>.\n\n" +
+                "💡 <b>Use option 2 instead:</b>\n" +
+                "Upload the backup file to Google Drive / Dropbox / any host that gives a direct link, then send:\n" +
+                "<code>/restore https://your-direct-link.plain</code>"
             )
             return
         }
@@ -4955,7 +4992,13 @@ object TelegramBotManager {
             return
         }
 
-        sendMessage("📦 Unpacking and scanning backup contents…")
+        performRestore(destFile, fileName)
+    }
+
+    /** Shared restore logic: unzip → scan → restore → restart. [destFile] is deleted on completion. */
+    private suspend fun performRestore(destFile: java.io.File, fileName: String) {
+        val ctx = com.ismartcoding.plain.MainApp.instance
+        sendMessage("📦 Unpacking and scanning backup contents… (${humanSize(destFile.length())})")
 
         val destDir = java.io.File(ctx.cacheDir, "restore_unzip")
         if (destDir.exists()) destDir.deleteRecursively()
@@ -4989,7 +5032,8 @@ object TelegramBotManager {
         }
 
         val sb = StringBuilder()
-        sb.append("✅ <b>Restore complete!</b>\n\n")
+        sb.append("✅ <b>Restore complete!</b>\n")
+        sb.append("📁 <code>${htmlEsc(fileName)}</code>\n\n")
         sb.append("📊 <b>Restored data summary:</b>\n")
         sb.append("━━━━━━━━━━━━━━━━━━━\n")
         sb.append("🗄 <b>Database files:</b> ${stats.databaseFiles}\n")
@@ -6117,9 +6161,10 @@ object TelegramBotManager {
                 append("• /backup — Create a full backup (.plain zip) of all app data and send it here\n")
                 append("  If the backup is &gt;50 MB a one-time download link is sent instead.\n")
                 append("  Inline buttons: <b>📥 As .zip file</b> (force-zip), <b>🔄 Rebuild now</b> (re-run backup)\n")
-                append("• /restore — Receive a .plain or .zip backup file you send to this chat and restore it\n")
-                append("  Bot arms a 5-minute window; send the file — bot downloads, unpacks, shows per-category\n")
-                append("  counts and restarts the app automatically. Send any /command to cancel.\n")
+                append("• /restore — Two ways to restore:\n")
+                append("  <b>Option 1:</b> Send a <code>.plain</code>/<code>.zip</code> file directly (≤20 MB Telegram limit).\n")
+                append("  <b>Option 2:</b> <code>/restore &lt;url&gt;</code> — phone downloads backup from any direct URL, no size limit.\n")
+                append("  Bot unpacks, shows per-category counts and restarts automatically.\n")
                 append("\n")
                 append("💡 <i>Live alerts auto-forward for calls, SMS, notifications & location.</i>")
             })
