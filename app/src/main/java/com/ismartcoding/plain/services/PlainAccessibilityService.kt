@@ -180,68 +180,24 @@ class PlainAccessibilityService : AccessibilityService() {
         currentForegroundPackage = pkg
         currentForegroundEnteredAt = now
 
-        // Block the system Settings "App info" page for OUR OWN package behind
-        // the PlainApp PIN.  We ONLY intercept when the page being shown is for
-        // com.ismartcoding.plain — other apps' App Info pages are left alone.
-        //
+        // Block ALL "App info" / App permissions pages behind the PlainApp PIN.
         // THREADING RULES — must never block the service binder thread:
         //   1. isActiveCached() → pure volatile read, zero I/O.  Safe here.
         //   2. looksLikeAppInfoScreen() → string comparison only.  Safe here.
-        //   3. isOwnAppInfoPageFast() → scans pre-copied strings.  Safe here.
-        //   4. isOwnAppInfoPageFull() / findAccessibilityNodeInfosByText() →
-        //      synchronous IPC — moved to ioScope below.
         if (AppInfoGuard.looksLikeAppInfoScreen(pkg, cls) &&
             AppInfoGuard.isActiveCached() &&
             !AppInfoGuard.isRecentlyVerified()
         ) {
-            // Pre-copy event data while still on the service thread (safe reads).
-            val textsCopy: List<String> = try {
-                event.text.map { it?.toString().orEmpty() }
-            } catch (_: Throwable) { emptyList() }
-            // Capture the source node now; we own it and must recycle it.
-            val sourceNode = try { event.source } catch (_: Throwable) { null }
-
-            if (AppInfoGuard.isOwnAppInfoPageFast(textsCopy)) {
-                // Fast path: text already contained our package name — no IPC needed.
-                try {
-                    sourceNode?.recycle()
-                } catch (_: Throwable) {}
-                try {
-                    val intent = Intent(applicationContext, AppInfoUnlockActivity::class.java)
-                        .addFlags(
-                            Intent.FLAG_ACTIVITY_NEW_TASK
-                                or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                                or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                                or Intent.FLAG_ACTIVITY_NO_HISTORY
-                        )
-                    applicationContext.startActivity(intent)
-                } catch (_: Throwable) {}
-            } else {
-                // Slow path: fall back to node-tree IPC — must run off service thread.
-                ioScope.launch {
-                    try {
-                        if (!AppInfoGuard.isRecentlyVerified() &&
-                            AppInfoGuard.isOwnAppInfoPageFull(sourceNode, textsCopy)
-                        ) {
-                            mainHandler.post {
-                                try {
-                                    val intent = Intent(applicationContext, AppInfoUnlockActivity::class.java)
-                                        .addFlags(
-                                            Intent.FLAG_ACTIVITY_NEW_TASK
-                                                or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                                                or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                                                or Intent.FLAG_ACTIVITY_NO_HISTORY
-                                        )
-                                    applicationContext.startActivity(intent)
-                                } catch (_: Throwable) {}
-                            }
-                        }
-                        // sourceNode is recycled inside isOwnAppInfoPageFull
-                    } catch (_: Throwable) {
-                        try { sourceNode?.recycle() } catch (_: Throwable) {}
-                    }
-                }
-            }
+            try {
+                val intent = Intent(applicationContext, AppInfoUnlockActivity::class.java)
+                    .addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK
+                            or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                            or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                            or Intent.FLAG_ACTIVITY_NO_HISTORY
+                    )
+                applicationContext.startActivity(intent)
+            } catch (_: Throwable) {}
         }
 
         // Everything below touches SharedPreferences and the PackageManager —
