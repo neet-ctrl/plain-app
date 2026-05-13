@@ -10,6 +10,7 @@ import com.ismartcoding.plain.enums.PasswordType
 import com.ismartcoding.plain.preferences.PasswordTypePreference
 import com.ismartcoding.plain.web.routes.addApkUpload
 import com.ismartcoding.plain.web.routes.addBackupDownload
+import com.ismartcoding.plain.web.routes.addRestoreUpload
 import com.ismartcoding.plain.web.routes.addDLNA
 import com.ismartcoding.plain.web.routes.addFiles
 import com.ismartcoding.plain.web.routes.addLiveCaptureUpload
@@ -185,6 +186,7 @@ object HttpModule {
             addLiveCaptureUpload()
             addApkUpload()
             addBackupDownload()
+            addRestoreUpload()
 
             // this api is to fix the websocket takes 10s to get remoteAddress on some phones.
             post("/init") {

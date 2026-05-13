@@ -1868,6 +1868,12 @@ object TelegramBotManager {
                         TelegramApiClient.answerCallbackQuery(token, cqId, "🔄 Rebuilding backup…")
                         cmdBackup()
                     }
+                    // ---- Restore ----
+                    "rs_upload" -> {
+                        TelegramApiClient.answerCallbackQuery(token, cqId, "📤 Generating upload link…")
+                        pendingRestoreUntil = 0L
+                        cmdRestoreViaUpload()
+                    }
                     // ---- Bedtime ----
                     "bt_on" -> {
                         val cur = com.ismartcoding.plain.services.AppBlockHelper.getBedtime()
@@ -4907,25 +4913,59 @@ object TelegramBotManager {
             return
         }
         pendingRestoreUntil = System.currentTimeMillis() + 5 * 60 * 1000L
+        val rows = listOf(listOf("📤 Upload via browser (any size)" to "rs_upload"))
         sendMessage(
             "📥 <b>Restore from Backup</b>\n" +
             "━━━━━━━━━━━━━━━━━━━\n\n" +
-            "You have <b>two ways</b> to restore:\n\n" +
+            "Choose how to send your backup:\n\n" +
             "1️⃣ <b>Send the file here</b>\n" +
-            "   Send me a <code>.plain</code> or <code>.zip</code> backup file directly in this chat.\n" +
-            "   ⚠️ Telegram only accepts files up to <b>20 MB</b> this way.\n\n" +
+            "   Drop a <code>.plain</code> or <code>.zip</code> file in this chat.\n" +
+            "   ⚠️ Telegram limit: <b>20 MB max</b>.\n\n" +
             "2️⃣ <b>Give me a direct download link</b> (any size)\n" +
-            "   Upload your backup anywhere (Google Drive, Dropbox, your PC's local server, etc.)\n" +
-            "   and send:\n" +
-            "   <code>/restore https://your-direct-link-to-file.plain</code>\n" +
-            "   No size limit — the phone downloads it directly.\n\n" +
+            "   Send: <code>/restore https://direct-link-to-file.plain</code>\n\n" +
+            "3️⃣ <b>Upload via browser</b> (any size, easiest)\n" +
+            "   Tap the button below — I'll give you a link.\n" +
+            "   Open it in any browser, pick your file, tap Upload.\n" +
+            "   Works on same Wi-Fi or via Cloudflare Tunnel.\n\n" +
             "⚠️ <b>Before you proceed:</b>\n" +
-            "• All current app data will be <b>overwritten</b> with the backup's data\n" +
-            "• The app will <b>restart automatically</b> after restore completes\n" +
-            "• File must be a valid PlainApp backup (made by /backup or in-app export)\n\n" +
-            "⏰ Waiting for your file or URL for <b>5 minutes</b>…\n" +
-            "Send any other /command to cancel."
+            "• All current data will be <b>overwritten</b>\n" +
+            "• App <b>restarts automatically</b> when done\n\n" +
+            "⏰ Waiting for 5 minutes — send any /command to cancel.",
+            replyMarkup = TelegramApiClient.inlineKeyboard(rows)
         )
+    }
+
+    private suspend fun cmdRestoreViaUpload() {
+        val ctx = MainApp.instance
+        val dlToken = java.util.UUID.randomUUID().toString().replace("-", "").take(24)
+        val deferred = com.ismartcoding.plain.web.routes.RestoreUploadManager.register(dlToken)
+        val cfEnabled  = com.ismartcoding.plain.preferences.CloudflareTunnelEnabledPreference.getAsync(ctx)
+        val cfHostname = com.ismartcoding.plain.preferences.CloudflareTunnelHostnamePreference.getAsync(ctx)
+        val baseUrl    = if (cfEnabled && cfHostname.isNotBlank()) "https://$cfHostname"
+                         else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${com.ismartcoding.plain.TempData.httpPort}"
+        sendMessage(
+            "📤 <b>Upload Backup via Browser</b>\n" +
+            "━━━━━━━━━━━━━━━━━━━\n\n" +
+            "Open this link on any device (phone, PC, tablet):\n\n" +
+            "🔗 <code>$baseUrl/restore/upload?t=$dlToken</code>\n\n" +
+            "• Pick your <code>.plain</code> or <code>.zip</code> backup file\n" +
+            "• Tap <b>Upload &amp; Restore</b>\n" +
+            "• The phone will restore and restart automatically\n\n" +
+            "⏰ Link valid for <b>30 minutes</b>. Waiting for your upload…"
+        )
+        val file = try {
+            kotlinx.coroutines.withTimeout(30 * 60 * 1000L) { deferred.await() }
+        } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+            sendMessage("⏰ Upload link expired. Send /restore to get a new one.")
+            return
+        }
+        if (file == null || !file.exists() || file.length() == 0L) {
+            sendMessage("❌ Upload failed or was cancelled. Send /restore to try again.")
+            return
+        }
+        val fileName = file.name.ifBlank { "restore.plain" }
+        sendMessage("📦 File received (${humanSize(file.length())}). Starting restore…")
+        performRestore(file, fileName)
     }
 
     /** Restore from a direct URL — no Telegram 20 MB limit applies. */
