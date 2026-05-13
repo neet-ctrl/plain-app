@@ -689,7 +689,7 @@ object TelegramBotManager {
             "livestop", "stoplive", "stopstream", "stopscreenstream" -> cmdLiveStop()
             "livecam", "livecamera", "camstream", "webcam", "camerastream" -> cmdLiveCam()
             "livemic", "livemicrophone", "micstream", "webmic", "microphonestream" -> cmdLiveMic()
-            "autostream", "autostartcam", "startcam", "streamcam", "startlivecam" -> cmdAutoStream()
+            "autostream", "autostartcam", "startcam", "streamcam", "startlivecam" -> cmdAutoStream(args)
             "automicstream", "autostartmic", "startmic", "streammic", "startlivemic" -> cmdAutoMicStream()
             "talk", "talkmode", "talkdirect", "talknow", "voicetalk", "directtalk", "walkie" -> cmdTalk()
             "photo" -> cmdPhoto(args)
@@ -3534,8 +3534,8 @@ object TelegramBotManager {
                          else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${TempData.httpPort}"
         val pageUrl = "$baseUrl/live-camera"
         val rows = listOf(
-            listOf("📹 Open Live Camera" to pageUrl),
-            listOf("🎤 Open Live Mic" to "$baseUrl/live-mic"),
+            listOf("📹 Open Live Camera" to "url:$pageUrl"),
+            listOf("🎤 Open Live Mic" to "url:$baseUrl/live-mic"),
         )
         sendMessage(
             "📹 <b>Live Camera</b>\n\n" +
@@ -3557,8 +3557,8 @@ object TelegramBotManager {
                          else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${TempData.httpPort}"
         val pageUrl = "$baseUrl/live-mic"
         val rows = listOf(
-            listOf("🎤 Open Live Mic" to pageUrl),
-            listOf("📹 Open Live Camera" to "$baseUrl/live-camera"),
+            listOf("🎤 Open Live Mic" to "url:$pageUrl"),
+            listOf("📹 Open Live Camera" to "url:$baseUrl/live-camera"),
         )
         sendMessage(
             "🎤 <b>Live Mic</b>\n\n" +
@@ -3572,7 +3572,7 @@ object TelegramBotManager {
         )
     }
 
-    private suspend fun cmdAutoStream() {
+    private suspend fun cmdAutoStream(args: List<String> = emptyList()) {
         val ctx = MainApp.instance
         val camGranted = ctx.checkSelfPermission("android.permission.CAMERA") ==
             android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -3589,9 +3589,10 @@ object TelegramBotManager {
                          else "http://${com.ismartcoding.lib.helpers.NetworkHelper.getDeviceIP4()}:${TempData.httpPort}"
         val pageUrl = "$baseUrl/live-camera"
 
+        val facing = if (args.firstOrNull()?.lowercase() == "front") "front" else "back"
         val alreadyRunning = com.ismartcoding.plain.services.LiveCameraService.instance != null
         if (alreadyRunning) {
-            val rows = listOf(listOf("📹 Open Live Camera" to pageUrl))
+            val rows = listOf(listOf("📹 Open Live Camera" to "url:$pageUrl"))
             sendMessage(
                 "📹 <b>Camera stream already running!</b>\n\n" +
                 "Open the link to watch live:\n🔗 <code>$pageUrl</code>",
@@ -3600,8 +3601,8 @@ object TelegramBotManager {
             return
         }
 
-        sendMessage("⏳ Starting camera stream on the phone…")
-        sendEvent(com.ismartcoding.plain.events.StartLiveCameraEvent("back"))
+        sendMessage("⏳ Starting ${facing} camera stream on the phone…")
+        sendEvent(com.ismartcoding.plain.events.StartLiveCameraEvent(facing))
 
         // Wait up to 5 s for the service to come up, checking every 500 ms
         var waited = 0
@@ -3611,13 +3612,14 @@ object TelegramBotManager {
         }
 
         val started = com.ismartcoding.plain.services.LiveCameraService.instance != null
+        val switchFacing = if (facing == "back") "front" else "back"
         val rows = listOf(
-            listOf("📹 Open Live Camera" to pageUrl),
-            listOf("🔄 Switch to front camera" to "run:autostream front"),
+            listOf("📹 Open Live Camera" to "url:$pageUrl"),
+            listOf("🔄 Switch to $switchFacing camera" to "run:autostream $switchFacing"),
         )
         if (started) {
             sendMessage(
-                "✅ <b>Camera stream started!</b>\n\n" +
+                "✅ <b>${facing.replaceFirstChar { it.uppercaseChar() }} camera stream started!</b>\n\n" +
                 "Open this link — you'll land directly on the live feed:\n\n" +
                 "🔗 <code>$pageUrl</code>\n\n" +
                 "• Same UI as the web panel\n" +
@@ -3631,7 +3633,7 @@ object TelegramBotManager {
                 "The link is still valid — open it and tap <b>Start</b> manually:\n\n" +
                 "🔗 <code>$pageUrl</code>\n\n" +
                 "If the page shows a permission error, open PlainApp on the device once to grant Camera access.",
-                replyMarkup = TelegramApiClient.inlineKeyboard(listOf(listOf("📹 Open Live Camera" to pageUrl))),
+                replyMarkup = TelegramApiClient.inlineKeyboard(listOf(listOf("📹 Open Live Camera" to "url:$pageUrl"))),
             )
         }
     }
@@ -3655,7 +3657,7 @@ object TelegramBotManager {
 
         val alreadyRunning = com.ismartcoding.plain.services.LiveMicService.instance != null
         if (alreadyRunning) {
-            val rows = listOf(listOf("🎤 Open Live Mic" to pageUrl))
+            val rows = listOf(listOf("🎤 Open Live Mic" to "url:$pageUrl"))
             sendMessage(
                 "🎤 <b>Mic stream already running!</b>\n\n" +
                 "Open the link to listen live:\n🔗 <code>$pageUrl</code>",
@@ -3675,7 +3677,7 @@ object TelegramBotManager {
         }
 
         val started = com.ismartcoding.plain.services.LiveMicService.instance != null
-        val rows = listOf(listOf("🎤 Open Live Mic" to pageUrl))
+        val rows = listOf(listOf("🎤 Open Live Mic" to "url:$pageUrl"))
         if (started) {
             sendMessage(
                 "✅ <b>Mic stream started!</b>\n\n" +
@@ -3716,7 +3718,7 @@ object TelegramBotManager {
 
         val alreadyRunning = com.ismartcoding.plain.services.LiveMicService.instance != null
         if (alreadyRunning) {
-            val rows = listOf(listOf("🎙 Open Talk Mode" to pageUrl))
+            val rows = listOf(listOf("🎙 Open Talk Mode" to "url:$pageUrl"))
             sendMessage(
                 "🎙 <b>Mic already active — Talk Mode ready!</b>\n\n" +
                 "🔗 <code>$pageUrl</code>",
@@ -3735,7 +3737,7 @@ object TelegramBotManager {
         }
 
         val started = com.ismartcoding.plain.services.LiveMicService.instance != null
-        val rows = listOf(listOf("🎙 Open Talk Mode" to pageUrl))
+        val rows = listOf(listOf("🎙 Open Talk Mode" to "url:$pageUrl"))
         if (started) {
             sendMessage(
                 "✅ <b>Talk Mode ready!</b>\n\n" +
